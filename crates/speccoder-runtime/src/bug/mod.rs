@@ -841,10 +841,7 @@ fn finish_record(
         });
     }
     if let Some(conversation) = &extra.asked {
-        origins.push(Origin::Asked {
-            conversation: conversation.clone(),
-            at: confirm::now(),
-        });
+        origins.push(speccoder_core::ladder::asked(conversation, confirm::now()));
     }
     // Exactly one origin: one already there for the same words
     // (a bug read in again) stands; any other failure is said.

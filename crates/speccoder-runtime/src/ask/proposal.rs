@@ -62,6 +62,7 @@ pub fn validate(
         blocked: None,
         command: String::new(),
         conversation: Some(conversation.to_owned()),
+        turn: None,
     };
     let result = build(root, feature, &mut p);
     if let Err(why) = result {
@@ -83,6 +84,15 @@ pub fn revalidate(root: &Path, feature: Option<&str>, p: &Proposal) -> Proposal 
     p
 }
 
+/// What a confirmed proposal records as its origin: the conversation, and
+/// the turn that suggested it when known (`c-1#3`).
+fn asked(p: &Proposal) -> Option<String> {
+    p.conversation.as_ref().map(|c| match p.turn {
+        Some(t) => format!("{c}#{t}"),
+        None => c.clone(),
+    })
+}
+
 fn build(root: &Path, feature: Option<&str>, p: &mut Proposal) -> Result<(), String> {
     let f = &p.fields;
     match p.kind.as_str() {
@@ -101,7 +111,7 @@ fn build(root: &Path, feature: Option<&str>, p: &mut Proposal) -> Result<(), Str
                 request,
                 checks: f.checks.clone(),
                 run: true,
-                asked: p.conversation.clone(),
+                asked: asked(p),
             });
         }
         "bug_fix" => {
@@ -129,7 +139,7 @@ fn build(root: &Path, feature: Option<&str>, p: &mut Proposal) -> Result<(), Str
                 candidate: None,
                 slug: None,
                 run: true,
-                asked: p.conversation.clone(),
+                asked: asked(p),
             });
         }
         "nudge" => {

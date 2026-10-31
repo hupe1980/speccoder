@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "a domain event's public projection: ids, digests and counts",
+  "description": "`unit.promoted`, as published: ids and digests, never the words.",
+  "type": "object",
+  "properties": {
+    "unit": {
+      "description": "The new unit.",
+      "type": "string"
+    },
+    "from_unit": {
+      "description": "The unit it came from.",
+      "type": "string"
+    },
+    "requirement": {
+      "description": "The requirement promoted.",
+      "type": "string"
+    },
+    "task": {
+      "description": "The task it came from.",
+      "type": "string"
+    },
+    "requirement_sha256": {
+      "description": "The requirement's words' digest.",
+      "type": "string"
+    },
+    "conversation_sha256": {
+      "description": "The digests of the conversations carried.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "signals": {
+      "description": "The signals that held.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "by": {
+      "description": "Who.",
+      "type": "string"
+    },
+    "via": {
+      "description": "Through what.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "unit",
+    "from_unit",
+    "requirement",
+    "task",
+    "requirement_sha256",
+    "conversation_sha256",
+    "signals",
+    "by",
+    "via"
+  ],
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/unit.promoted.json"
+}

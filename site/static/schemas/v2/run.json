@@ -4993,6 +4993,11 @@
           "description": "The test layout speccoder detected from the checkout.",
           "type": "string",
           "const": "test_layout"
+        },
+        {
+          "description": "What a person added to an Ask question (untrusted).",
+          "type": "string",
+          "const": "chip"
         }
       ]
     }

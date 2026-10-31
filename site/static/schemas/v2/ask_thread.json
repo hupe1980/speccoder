@@ -28,6 +28,13 @@
         "string",
         "null"
       ]
+    },
+    "results": {
+      "description": "What its confirmed proposals created, read from their origins.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AskResult"
+      }
     }
   },
   "required": [
@@ -148,6 +155,17 @@
             "string",
             "null"
           ]
+        },
+        "context": {
+          "description": "What the question was handed: one `chip` entry per chip, journaled\nwith the message.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContextManifest"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -230,7 +248,7 @@
           ]
         },
         "start": {
-          "description": "The first line it returned.",
+          "description": "The first line it returned (a run's account: its first turn).",
           "type": [
             "integer",
             "null"
@@ -239,7 +257,7 @@
           "minimum": 0
         },
         "end": {
-          "description": "The last line it returned.",
+          "description": "The last line it returned (a run's account: its last turn).",
           "type": [
             "integer",
             "null"
@@ -380,6 +398,15 @@
             "string",
             "null"
           ]
+        },
+        "turn": {
+          "description": "The turn that suggested it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
         }
       },
       "required": [
@@ -2036,6 +2063,173 @@
         "input",
         "output",
         "cache_read"
+      ]
+    },
+    "ContextManifest": {
+      "description": "Every part of one call, sorted by kind and reference.",
+      "type": "object",
+      "properties": {
+        "entries": {
+          "description": "The parts.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextEntry"
+          }
+        },
+        "digest": {
+          "description": "Hex SHA-256 of [`ContextManifest::canonical`].",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entries",
+        "digest"
+      ]
+    },
+    "ContextEntry": {
+      "description": "One part handed to a call.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "What it is.",
+          "$ref": "#/$defs/ContextKind"
+        },
+        "source": {
+          "description": "Where it came from: `person`, `worktree`, `speccoder://<producer>/<name>`,\n`github:<owner>/<repo>#<n>`.",
+          "type": "string"
+        },
+        "reference": {
+          "description": "A path, an id or a part pointer (`/bundle/plan`).",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "Hex SHA-256 of the exact bytes given.",
+          "type": "string"
+        },
+        "bytes": {
+          "description": "Their size.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cut": {
+          "description": "Cut to a budget.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "source",
+        "reference",
+        "sha256",
+        "bytes",
+        "cut"
+      ]
+    },
+    "ContextKind": {
+      "description": "What a part is. A new kind is a new variant, never a free string.",
+      "oneOf": [
+        {
+          "description": "The project's rules.",
+          "type": "string",
+          "const": "constitution"
+        },
+        {
+          "description": "The unit's plan.",
+          "type": "string",
+          "const": "plan"
+        },
+        {
+          "description": "The requirement's text (a bug's triad).",
+          "type": "string",
+          "const": "story"
+        },
+        {
+          "description": "The task.",
+          "type": "string",
+          "const": "task"
+        },
+        {
+          "description": "A person's rejection reason.",
+          "type": "string",
+          "const": "rejection"
+        },
+        {
+          "description": "The verifier's digest of an earlier attempt.",
+          "type": "string",
+          "const": "retry_digest"
+        },
+        {
+          "description": "A GitHub issue's title and body (untrusted).",
+          "type": "string",
+          "const": "issue"
+        },
+        {
+          "description": "A requirement's acceptance scenario.",
+          "type": "string",
+          "const": "scenario"
+        },
+        {
+          "description": "A person's note to an author call (*Ask Again*, a reading).",
+          "type": "string",
+          "const": "note"
+        },
+        {
+          "description": "A person's review comment, with its anchor's quote.",
+          "type": "string",
+          "const": "comment"
+        },
+        {
+          "description": "The test layout speccoder detected from the checkout.",
+          "type": "string",
+          "const": "test_layout"
+        },
+        {
+          "description": "What a person added to an Ask question (untrusted).",
+          "type": "string",
+          "const": "chip"
+        }
+      ]
+    },
+    "AskResult": {
+      "description": "What a proposal confirmed from a conversation created.",
+      "type": "object",
+      "properties": {
+        "turn": {
+          "description": "The turn that proposed it, when known.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "`change` (a quick change or bug fix) or `spec` (a promoted unit).",
+          "type": "string"
+        },
+        "unit": {
+          "description": "The unit it is in.",
+          "type": "string"
+        },
+        "requirement": {
+          "description": "The requirement it recorded.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "description": "The task that implements it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "unit"
       ]
     }
   },

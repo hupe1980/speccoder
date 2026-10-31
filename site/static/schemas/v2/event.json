@@ -1326,6 +1326,101 @@
       ]
     },
     {
+      "description": "A quick change or bug fix that grew is offered as a spec of its own.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ladder.offered"
+        },
+        "unit": {
+          "description": "Its unit.",
+          "type": "string"
+        },
+        "task": {
+          "description": "The task.",
+          "type": "string"
+        },
+        "signals": {
+          "description": "The signals that hold (`S1`…`S4`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "unit",
+        "task",
+        "signals"
+      ]
+    },
+    {
+      "description": "A unit was promoted from a quick change or bug fix.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "unit.promoted"
+        },
+        "unit": {
+          "description": "The new unit.",
+          "type": "string"
+        },
+        "from_unit": {
+          "description": "The unit it came from.",
+          "type": "string"
+        },
+        "requirement": {
+          "description": "The requirement promoted.",
+          "type": "string"
+        },
+        "task": {
+          "description": "The task it came from.",
+          "type": "string"
+        },
+        "requirement_sha256": {
+          "description": "The requirement's words' digest.",
+          "type": "string"
+        },
+        "conversation_sha256": {
+          "description": "The digests of the conversations carried.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "signals": {
+          "description": "The signals that held.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "by": {
+          "description": "Who.",
+          "type": "string"
+        },
+        "via": {
+          "description": "Through what.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "unit",
+        "from_unit",
+        "requirement",
+        "task",
+        "requirement_sha256",
+        "conversation_sha256",
+        "signals",
+        "by",
+        "via"
+      ]
+    },
+    {
       "description": "Plan through stopped where a person decides, at a failure or at the end.",
       "type": "object",
       "properties": {
@@ -8299,6 +8394,11 @@
           "description": "The test layout speccoder detected from the checkout.",
           "type": "string",
           "const": "test_layout"
+        },
+        {
+          "description": "What a person added to an Ask question (untrusted).",
+          "type": "string",
+          "const": "chip"
         }
       ]
     },
@@ -12896,6 +12996,17 @@
             "string",
             "null"
           ]
+        },
+        "context": {
+          "description": "What the question was handed: one `chip` entry per chip, journaled\nwith the message.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContextManifest"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -12978,7 +13089,7 @@
           ]
         },
         "start": {
-          "description": "The first line it returned.",
+          "description": "The first line it returned (a run's account: its first turn).",
           "type": [
             "integer",
             "null"
@@ -12987,7 +13098,7 @@
           "minimum": 0
         },
         "end": {
-          "description": "The last line it returned.",
+          "description": "The last line it returned (a run's account: its last turn).",
           "type": [
             "integer",
             "null"
@@ -13128,6 +13239,15 @@
             "string",
             "null"
           ]
+        },
+        "turn": {
+          "description": "The turn that suggested it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
         }
       },
       "required": [
@@ -13323,12 +13443,60 @@
             "string",
             "null"
           ]
+        },
+        "results": {
+          "description": "What its confirmed proposals created, read from their origins.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AskResult"
+          }
         }
       },
       "required": [
         "conversation",
         "turns",
         "segment"
+      ]
+    },
+    "AskResult": {
+      "description": "What a proposal confirmed from a conversation created.",
+      "type": "object",
+      "properties": {
+        "turn": {
+          "description": "The turn that proposed it, when known.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "`change` (a quick change or bug fix) or `spec` (a promoted unit).",
+          "type": "string"
+        },
+        "unit": {
+          "description": "The unit it is in.",
+          "type": "string"
+        },
+        "requirement": {
+          "description": "The requirement it recorded.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "description": "The task that implements it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "unit"
       ]
     },
     "ReviewReport": {

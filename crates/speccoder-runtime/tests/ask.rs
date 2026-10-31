@@ -511,4 +511,124 @@ fn a_cited_range_knows_when_its_file_changed() {
         &serde_json::json!({}),
     );
     assert_eq!(e.subject.as_deref(), Some("T004"));
+    let j = ask::read_of(
+        "r3",
+        "journal_account",
+        &serde_json::json!({ "run": "r-7", "from": 2, "to": 3 }),
+        &serde_json::json!({}),
+    );
+    assert_eq!(
+        (j.subject.as_deref(), j.start, j.end),
+        (Some("r-7"), Some(2), Some(3))
+    );
+}
+
+fn chip_ref(kind: &str, reference: serde_json::Value) -> ask::chips::ChipRef {
+    ask::chips::ChipRef {
+        kind: kind.to_owned(),
+        reference,
+        label: None,
+        text: None,
+        digest: None,
+        from_view: false,
+    }
+}
+
+/// Chips are read fresh by the engine, say when they changed since they
+/// were added, stay inside the project, and each is one entry of the
+/// question's context manifest; a ninth is refused.
+#[test]
+fn chips_are_read_fresh_bounded_and_listed_as_context() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let resolve = |c: &ask::chips::ChipRef| ask::chips::resolve(r.path(), "c1", c);
+
+    let (feature, _) = resolve(&chip_ref("feature", json!({ "feature": "001-graph" }))).unwrap();
+    assert_eq!(feature.kind, "feature");
+    let (_, words) = resolve(&chip_ref(
+        "task",
+        json!({ "feature": "001-graph", "task": "T001" }),
+    ))
+    .unwrap();
+    assert!(words.contains("Create project structure"), "{words}");
+    let range = chip_ref(
+        "file_range",
+        json!({ "path": "notes.txt", "start": 2, "end": 3 }),
+    );
+    let (file, words) = resolve(&range).unwrap();
+    assert!(words.contains("two") && !words.contains("four"), "{words}");
+    let mut said = chip_ref("selection", json!({}));
+    said.text = Some("the words on screen".to_owned());
+    assert_eq!(resolve(&said).unwrap().1, "the words on screen");
+    said.text = None;
+    assert!(
+        resolve(&said).is_err(),
+        "a chip the engine cannot read carries words"
+    );
+
+    // Changed since it was added: said, and the current content sent.
+    let mut again = range.clone();
+    again.digest = Some(file.digest.clone());
+    assert!(!resolve(&again).unwrap().0.changed);
+    fs::write(r.path().join("notes.txt"), "one\n2\nthree\nfour\n").unwrap();
+    assert!(resolve(&again).unwrap().0.changed);
+
+    // Only this project's files.
+    for path in ["../outside.txt", "/etc/hosts"] {
+        assert!(
+            resolve(&chip_ref("file_range", json!({ "path": path }))).is_err(),
+            "{path}"
+        );
+    }
+
+    // Each chip is one `chip` entry of the question's manifest.
+    let (f, d) = fake();
+    f.will_say("Noted.");
+    let request = Request {
+        text: "what do these say?".to_owned(),
+        chips: vec![
+            range.clone(),
+            chip_ref("feature", json!({ "feature": "001-graph" })),
+        ],
+        ..Request::default()
+    };
+    let res = ask::turn_with(
+        r.path(),
+        &request,
+        state.path(),
+        &Settings::default(),
+        &model(),
+        Arc::clone(&d),
+        None,
+    );
+    let Some(CommandData::Ask(t)) = res.data() else {
+        panic!("{}", res.message())
+    };
+    let context = t.context.as_ref().expect("a manifest");
+    assert_eq!(context.entries.len(), 2);
+    assert!(
+        context
+            .entries
+            .iter()
+            .all(|e| e.kind == speccoder_core::context::ContextKind::Chip
+                && e.source.starts_with("speccoder://ask/chip/")
+                && e.sha256.len() == 64)
+    );
+
+    // A ninth chip is refused before anything is asked.
+    let nine = Request {
+        text: "and these?".to_owned(),
+        chips: vec![range; 9],
+        ..Request::default()
+    };
+    let res = ask::turn_with(
+        r.path(),
+        &nine,
+        state.path(),
+        &Settings::default(),
+        &model(),
+        d,
+        None,
+    );
+    assert_eq!(res.status(), CommandStatus::UsageError, "{}", res.message());
 }

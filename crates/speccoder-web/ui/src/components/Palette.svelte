@@ -20,6 +20,7 @@
     ["view.sidebar", "toggle the sidebar"],
     ["view.statusbar", "toggle the status bar"],
     ["view.ask", "open Ask", "a read-only conversation about the project (⌘L)"],
+    ["view.askNew", "new Ask conversation", "a fresh conversation; the earlier ones stay in the list (⌥⌘N in Ask)"],
     ["edit.addToAsk", "add the selected task to Ask", "as context for the next question (⌘⇧L)"],
     ["file.bug", "report a bug", "reproduced, confirmed by you once, fixed on evidence"],
     ["file.new_feature", "new feature", "the spec tool writes the spec; you review it, then it is planned"],

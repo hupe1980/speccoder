@@ -44,8 +44,14 @@
   async function confirm() {
     if (!p.runnable || p.blocked || checking) return;
     const run = p.runnable;
+    const turn = ask.sheet!.turn;
     close();
     await app.perform(offer(run, { group: "work", label: title.toLowerCase(), why: "suggested in Ask, confirmed by you", command: p.command }), p.input ?? undefined);
+    // What it created shows under the turn: a recorded change from its
+    // origin, a nudge or an answer as confirmed here.
+    if (p.kind === "nudge") ask.confirmed = { ...ask.confirmed, [turn]: `Nudged ${p.fields.target ?? "the task"}` };
+    else if (p.kind === "answer") ask.confirmed = { ...ask.confirmed, [turn]: `Answered ${p.fields.target ?? "the question"}` };
+    else await ask.refresh();
   }
   function key(e: KeyboardEvent) {
     if (e.key === "Escape") {

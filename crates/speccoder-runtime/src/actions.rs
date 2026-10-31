@@ -333,26 +333,42 @@ pub fn available_with(
             t.state.as_str(),
             "verified" | "regression_only" | "attested"
         ) {
-            for (verb, why, prompt, run) in [
+            // Promoted while still open: it goes on as a spec of its own;
+            // skipping it here is the person's explicit step (FR-024).
+            let promoted = report.zip(crate::worktree::state_dir()).and_then(|(r, s)| {
+                crate::ladder::promoted_to(
+                    &crate::worktree::project_state_dir(&s, path),
+                    &format!("{}/{}", r.feature, t.id),
+                )
+            });
+            let skip_why = promoted.as_ref().map_or_else(
+                || "runs pass it by; what depends on it stays blocked".to_owned(),
+                |to| format!("it goes on as {to}; runs here pass it by"),
+            );
+            let mut verbs = [
                 (
                     "accept",
-                    "tick it on your word (attested, not verified)",
+                    "tick it on your word (attested, not verified)".to_owned(),
                     "Why it is done",
                     Runnable::Accept { task: t.id.clone() },
                 ),
                 (
                     "skip",
-                    "runs pass it by; what depends on it stays blocked",
+                    skip_why,
                     "Why it is skipped",
                     Runnable::Skip { task: t.id.clone() },
                 ),
                 (
                     "nudge",
-                    "a note its next attempts read",
+                    "a note its next attempts read".to_owned(),
                     "The note",
                     Runnable::Nudge { task: t.id.clone() },
                 ),
-            ] {
+            ];
+            if promoted.is_some() {
+                verbs.swap(0, 1);
+            }
+            for (verb, why, prompt, run) in verbs {
                 let flag = if verb == "nudge" {
                     "--note"
                 } else {
@@ -1069,7 +1085,15 @@ pub fn perform_in(
                     let Some(s) = state else { return no_state() };
                     let input = crate::ladder::promotion_input(root, s, description, conversations);
                     let made = plan_through(root, &input, source, *through, options);
-                    crate::ladder::promoted(root, s, &made, task, conversations, via);
+                    crate::ladder::promoted(
+                        root,
+                        s,
+                        &made,
+                        task,
+                        conversations,
+                        via,
+                        options.progress.as_ref(),
+                    );
                     made
                 }
                 _ => plan_through(root, description, source, *through, options),

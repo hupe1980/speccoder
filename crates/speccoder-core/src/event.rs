@@ -84,6 +84,8 @@ pub const REGISTRY: &[Name] = &[
     p("scaffold.started"),
     p("scaffold.finished"),
     p("planning.stopped"),
+    p("ladder.offered"),
+    d("unit.promoted"),
     p("ask.step"),
     p("ask.text"),
     p("ask.done"),

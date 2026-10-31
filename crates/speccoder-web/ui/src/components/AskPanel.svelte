@@ -9,7 +9,7 @@
   import { offer } from "../lib/actions";
   import { ask, stepWords, type ChipRef } from "../lib/ask.svelte";
   import { blocks, type Part } from "../lib/ask-text";
-  import type { AskReport, Citation, Proposal } from "../lib/schema.gen";
+  import type { AskReport, AskResult, Citation, Proposal } from "../lib/schema.gen";
   import Account from "./Account.svelte";
   import Icon from "./Icon.svelte";
   import PromoteOffer from "./PromoteOffer.svelte";
@@ -32,6 +32,14 @@
   $effect(() => {
     void ask.focus;
     void tick().then(() => box?.focus());
+  });
+  // What a confirmed proposal created is recorded by its job: read the
+  // results again when a job ends.
+  let jobRan = false;
+  $effect(() => {
+    const running = !!app.job?.running;
+    if (jobRan && !running) void ask.refresh();
+    jobRan = running;
   });
   // An empty panel offers the conversations to go back to.
   $effect(() => {
@@ -163,7 +171,10 @@
       return;
     }
     if (read?.tool === "task_evidence" && read.subject) return void app.selectTask(read.subject);
-    if (read?.tool === "journal_account" && read.subject) return void ask.peekAccount(read.subject);
+    if (read?.tool === "journal_account" && read.subject) {
+      const from = c.lines?.[0] ?? read.start ?? null;
+      return void ask.peekAccount(read.subject, from ? [from, c.lines?.[1] ?? read.end ?? from] : null);
+    }
     const task = (chip?.reference as { task?: string } | undefined)?.task;
     if (task) void app.selectTask(task);
   }
@@ -184,6 +195,14 @@
     }
     ask.sheet = { proposal: p, turn };
   }
+
+  /** What a proposal created, opened where it lives. */
+  async function openResult(r: AskResult) {
+    await app.selectFeature(r.unit);
+    app.view = "board";
+    if (r.task) await app.selectTask(r.task);
+  }
+  const made = (r: AskResult) => (r.kind === "spec" ? `Started ${r.unit}` : `Recorded ${r.task ?? r.requirement ?? "it"} in ${r.unit}`);
 
   /** Promote a task in context: the New feature sheet, with this
    * conversation among those it carries. */
@@ -334,8 +353,16 @@
               <button class="btn small" disabled={!!p.blocked} onclick={() => review(p, t.turn)}>Review…</button>
             </div>
           {/if}
+          {#each ask.results.filter((r) => r.turn === t.turn) as r, i (i)}
+            <button class="made" onclick={() => void openResult(r)}><Icon name="check" size={11} weight={2.6} /><span>{made(r)}</span>{" "}<span class="go">Open</span></button>
+          {/each}
+          {#if ask.confirmed[t.turn]}<p class="made"><Icon name="check" size={11} weight={2.6} /><span>{ask.confirmed[t.turn]}</span></p>{/if}
           <span class="meta">{t.usage.input + t.usage.output} tokens</span>
         </article>
+      {/each}
+
+      {#each ask.results.filter((r) => r.turn == null) as r, i (i)}
+        <button class="made spec" onclick={() => void openResult(r)}><Icon name="sparkle" size={11} weight={2.2} /><span>{made(r)} from this conversation</span>{" "}<span class="go">Open</span></button>
       {/each}
 
       {#if ask.pending}
@@ -370,7 +397,7 @@
         <button class="hbtn" aria-label="Close the account" onclick={() => (ask.peek = null)}><Icon name="xmark" size={12} weight={2.2} /></button>
       </div>
       <div class="pb">
-        {#if !ask.peek.turns}<span class="spinner"></span>{:else if ask.peek.error}<p class="quiet">{ask.peek.error}</p>{:else if !ask.peek.turns.length}<p class="quiet">This run kept no words of its own.</p>{:else}<Account turns={ask.peek.turns} />{/if}
+        {#if !ask.peek.turns}<span class="spinner"></span>{:else if ask.peek.error}<p class="quiet">{ask.peek.error}</p>{:else if !ask.peek.turns.length}<p class="quiet">This run kept no words of its own.</p>{:else}<Account turns={ask.peek.turns} marked={ask.peek.marked ?? null} />{/if}
       </div>
     </div>
   {/if}
@@ -521,6 +548,11 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .ring { animation: none; } }
   .q.queued { opacity: 0.6; }
+  .made { justify-self: start; display: inline-flex; align-items: center; gap: 0.4rem; margin: 0; padding: 0.3rem 0.6rem 0.3rem 0.45rem; border: 0; border-radius: 999px; font: inherit; font-size: 0.76rem; color: var(--text-2, var(--text)); background: var(--fill); }
+  button.made { cursor: pointer; }
+  .made.spec { color: #a646d8; background: color-mix(in srgb, #bf5af2 12%, transparent); }
+  .made .go { font-weight: 600; opacity: 0.75; }
+  button.made:hover .go { opacity: 1; text-decoration: underline; }
   .recent { display: grid; gap: 0.15rem; width: 100%; margin-top: 0.9rem; text-align: left; }
   .rh { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 0 0.5rem 0.2rem; }
   .recent .conv { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem; color: var(--muted); }

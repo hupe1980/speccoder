@@ -4,7 +4,7 @@
 // a proposal is performed only from its sheet.
 import { get, post, q } from "./api";
 import { app } from "./app.svelte";
-import type { AskReport, AskThread, Conversation, InboxItem, Proposal } from "./schema.gen";
+import type { AskReport, AskResult, AskThread, Conversation, InboxItem, Proposal } from "./schema.gen";
 import type { AccountTurn } from "./types";
 
 export type ChipRef = {
@@ -108,10 +108,14 @@ class AskState {
   failed = $state<{ question: string; message: string } | null>(null);
   /** The conversations list, when shown. */
   list = $state<Conversation[] | null>(null);
+  /** What this conversation's confirmed proposals created (their origins). */
+  results = $state<AskResult[]>([]);
+  /** Confirmed here, by turn: a nudge or an answer, which record no origin. */
+  confirmed = $state<Record<number, string>>({});
   /** The three most recent conversations, for the empty panel. */
   recent = $state<Conversation[]>([]);
   /** A run's account a citation names, shown in place. */
-  peek = $state<{ run: string; turns: AccountTurn[] | null; error?: string } | null>(null);
+  peek = $state<{ run: string; turns: AccountTurn[] | null; error?: string; marked?: [number, number] | null } | null>(null);
   /** The proposal sheet. */
   sheet = $state<{ proposal: Proposal; turn: number } | null>(null);
   /** Focus the composer (set by ⌘L, cleared by it). */
@@ -151,6 +155,17 @@ class AskState {
     return items.find((i) => i.kind === "promote" && this.tasks.some((t) => t.task === i.task && (!t.feature || t.feature === i.feature))) ?? null;
   }
 
+  /** Read again what the conversation's proposals created. */
+  async refresh() {
+    if (!this.conversation) return;
+    try {
+      const r = await get<{ data?: AskThread }>(`/api/ask/conversation${q({ id: this.conversation })}`);
+      this.results = r.data?.results ?? this.results;
+    } catch {
+      /* the line comes with the next read */
+    }
+  }
+
   async loadRecent() {
     try {
       const r = await get<{ data?: { conversations: Conversation[] } }>("/api/ask/conversations");
@@ -160,10 +175,10 @@ class AskState {
     }
   }
 
-  async peekAccount(run: string) {
-    this.peek = { run, turns: null };
+  async peekAccount(run: string, marked: [number, number] | null = null) {
+    this.peek = { run, turns: null, marked };
     const r = await get<{ turns?: AccountTurn[]; error?: string }>(`/api/account${q({ run })}`).catch((e) => ({ turns: undefined, error: String(e) }));
-    if (this.peek?.run === run) this.peek = { run, turns: r.turns ?? [], error: r.error };
+    if (this.peek?.run === run) this.peek = { run, turns: r.turns ?? [], error: r.error, marked };
   }
 
   /** Questions that fit the view; computed, never a model call. */
@@ -204,6 +219,8 @@ class AskState {
   fresh() {
     this.conversation = null;
     this.turns = [];
+    this.results = [];
+    this.confirmed = {};
     this.failed = null;
     this.list = null;
     this.viewDropped = false;
@@ -277,6 +294,8 @@ class AskState {
       if (!r.data) return;
       this.conversation = r.data.conversation.id;
       this.turns = r.data.turns;
+      this.results = r.data.results ?? [];
+      this.confirmed = {};
       this.list = null;
       this.focus++;
     } catch {

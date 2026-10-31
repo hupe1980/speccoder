@@ -3303,8 +3303,19 @@ fn run_task_once(
             result
         }
     };
+    // A quick change or bug fix that grew: its offer, said once it holds.
+    let offered = crate::ladder::offer_for(
+        path,
+        &worktree::project_state_dir(state, path),
+        &format!("{feature_name}/{task}"),
+    )
+    .map(|o| progress::Event::LadderOffered {
+        unit: o.unit,
+        task: o.task,
+        signals: o.signals.into_iter().map(|s| s.id).collect(),
+    });
     if let Some(fix) = bug_fix.as_mut() {
-        return refusal(super::bug::finished(
+        let done = refusal(super::bug::finished(
             &bug_ctx,
             fix,
             report,
@@ -3313,6 +3324,10 @@ fn run_task_once(
             status,
             redact(&message, secret),
         ));
+        if let Some(e) = &offered {
+            live.event(e);
+        }
+        return done;
     }
     live.event(&finished_event(
         task,
@@ -3321,6 +3336,9 @@ fn run_task_once(
         suspected,
         redact(&message, secret),
     ));
+    if let Some(e) = &offered {
+        live.event(e);
+    }
     let code = collection_code(&report, &attempt_status);
     let result = CommandResult::new("run", status, &redact(&message, secret));
     match code {

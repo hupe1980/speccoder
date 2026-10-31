@@ -52,10 +52,10 @@ pub fn change(
         let _ = crate::ladder::record_origin(
             &crate::worktree::project_state_dir(state, &root),
             &speccoder_core::ladder::subject(&rec.feature, &rec.requirement),
-            vec![speccoder_core::ladder::Origin::Asked {
-                conversation: conversation.to_owned(),
-                at: crate::bug::confirm::now(),
-            }],
+            vec![speccoder_core::ladder::asked(
+                conversation,
+                crate::bug::confirm::now(),
+            )],
         );
     }
     // A run reads committed files: exactly this unit's planning files.

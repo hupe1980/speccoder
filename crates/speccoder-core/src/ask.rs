@@ -35,6 +35,10 @@ pub struct AskReport {
     /// Why it ended so, when it did not answer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// What the question was handed: one `chip` entry per chip, journaled
+    /// with the message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<crate::context::ContextManifest>,
 }
 
 /// Tokens a turn used.
@@ -92,10 +96,10 @@ pub struct Read {
     /// The file it read, when it read one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
-    /// The first line it returned.
+    /// The first line it returned (a run's account: its first turn).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start: Option<u32>,
-    /// The last line it returned.
+    /// The last line it returned (a run's account: its last turn).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end: Option<u32>,
     /// The digest of what it returned.
@@ -151,6 +155,9 @@ pub struct Proposal {
     /// The conversation that suggested it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation: Option<String>,
+    /// The turn that suggested it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn: Option<u32>,
 }
 
 /// A proposal's words; which ones a kind uses is the kind's.
@@ -225,6 +232,27 @@ pub struct AskThread {
     /// The run that takes the next message.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<String>,
+    /// What its confirmed proposals created, read from their origins.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub results: Vec<AskResult>,
+}
+
+/// What a proposal confirmed from a conversation created.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AskResult {
+    /// The turn that proposed it, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn: Option<u32>,
+    /// `change` (a quick change or bug fix) or `spec` (a promoted unit).
+    pub kind: String,
+    /// The unit it is in.
+    pub unit: String,
+    /// The requirement it recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requirement: Option<String>,
+    /// The task that implements it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
 }
 
 /// A marker found in an answer.

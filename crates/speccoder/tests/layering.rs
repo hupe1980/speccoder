@@ -1048,3 +1048,59 @@ fn the_policy_writer_scan_finds_a_planted_one() {
     )]);
     assert_eq!(errors.len(), 1, "{errors:?}");
 }
+
+/// What decides a verdict, and what feeds a retry or an implementer: none
+/// of it may read a conversation (FR-015). A conversation reaches a model
+/// call only as words a person confirmed or chose to carry.
+const VERDICT_SIDE: &[&str] = &[
+    "speccoder-runtime/src/pipeline/",
+    "speccoder-runtime/src/verify/",
+    "speccoder-runtime/src/attest/",
+    "speccoder-runtime/src/drift.rs",
+    "speccoder-runtime/src/evidence.rs",
+    "speccoder-runtime/src/strength.rs",
+    "speccoder-runtime/src/context.rs",
+    "speccoder-runtime/src/convergence.rs",
+    "speccoder-runtime/src/substrate/converge.rs",
+    "speccoder-core/src/retry.rs",
+    "speccoder-core/src/verify.rs",
+    "speccoder-core/src/evidence.rs",
+];
+
+/// Lines of `code` that name the `ask` module as a path segment.
+fn reads_ask(code: &str) -> Vec<usize> {
+    code.lines()
+        .enumerate()
+        .filter(|(_, l)| {
+            l.match_indices("ask::").any(|(i, _)| {
+                l[..i]
+                    .chars()
+                    .last()
+                    .is_none_or(|c| !(c.is_alphanumeric() || c == '_'))
+            }) || l.contains("ask::{")
+        })
+        .map(|(i, _)| i + 1)
+        .collect()
+}
+
+#[test]
+fn nothing_that_decides_a_verdict_reads_a_conversation() {
+    let mut errors = Vec::new();
+    for (file, text) in sources() {
+        if !VERDICT_SIDE.iter().any(|p| file.starts_with(p)) {
+            continue;
+        }
+        for line in reads_ask(&code_of(&text)) {
+            errors.push(format!(
+                "layering: {file}:{line} reaches `ask`: verdicts, evidence, attestations, drift and retry context never read a conversation (FR-015)"
+            ));
+        }
+    }
+    assert!(errors.is_empty(), "\n{}", errors.join("\n"));
+}
+
+#[test]
+fn the_ask_scan_finds_a_planted_read() {
+    let code = "pub use task::*;\nuse crate::ask::words;\nlet t = speccoder_core::ask::AskThread::default();\nuse super::{ask::chips, x};\nlet task::y = 1;\n";
+    assert_eq!(reads_ask(code), [2, 3, 4]);
+}

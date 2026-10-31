@@ -187,9 +187,11 @@ With `--events` stdout carries only JSON Lines; stderr stays quiet (an approval 
 | `bug.reproduce_try`, `bug.reproduced`, `bug.confirm_waiting`, `bug.unchanged_selected`, `bug.discrimination` | A bug's progress |
 | `oracle.stage` | Writing tests at review went one step further |
 | `oracle.frozen`, `oracle.lapsed` | A requirement's tests were frozen by an approval, or lapsed with its wording |
+| `ladder.offered` | A quick change or bug fix that grew is offered as a spec: its unit, task and the signals that hold |
+| `unit.promoted` | A unit was promoted from a quick change or bug fix: ids and digests, never the words |
 | `result` | Last line, exactly once |
 
-Record events (`bug.recorded`, `bug.confirmed`, `bug.confirm_rejected`, `bug.outcome`, `oracle.frozen`, `oracle.lapsed`) have published schemas under `events/` (e.g. [`events/bug.outcome.json`](https://hupe1980.github.io/speccoder/schemas/v2/events/bug.outcome.json)).
+Record events (`bug.recorded`, `bug.confirmed`, `bug.confirm_rejected`, `bug.outcome`, `oracle.frozen`, `oracle.lapsed`, `unit.promoted`) have published schemas under `events/` (e.g. [`events/bug.outcome.json`](https://hupe1980.github.io/speccoder/schemas/v2/events/bug.outcome.json)).
 
 `seq` rises by one per line, so a gap means a lost line; a stream without `result` was interrupted. If the reader goes away, speccoder stops writing and finishes the command. `--events` with `--json` is a usage error (`USAGE-CONFLICT`).
 

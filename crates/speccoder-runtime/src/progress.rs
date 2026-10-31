@@ -275,6 +275,38 @@ pub enum Event {
         /// The skill a continuation runs next.
         next_skill: Option<String>,
     },
+    /// A quick change or bug fix that grew is offered as a spec of its own
+    /// (`ladder.offered`): the signals that hold, by id.
+    LadderOffered {
+        /// Its unit.
+        unit: String,
+        /// The task.
+        task: String,
+        /// `S1`…`S4`.
+        signals: Vec<String>,
+    },
+    /// A unit was promoted from a quick change or bug fix (`unit.promoted`):
+    /// ids and digests, never the words.
+    UnitPromoted {
+        /// The new unit.
+        unit: String,
+        /// Where it came from.
+        from_unit: String,
+        /// The requirement promoted.
+        requirement: String,
+        /// The task it came from.
+        task: String,
+        /// The requirement's words' digest.
+        requirement_sha256: String,
+        /// The digests of the conversations carried.
+        conversation_sha256: Vec<String>,
+        /// The signals that held.
+        signals: Vec<String>,
+        /// Who.
+        by: String,
+        /// Through what.
+        via: String,
+    },
     /// A new project's step, its creation or its undo (`scaffold.*`,
     /// `project.*`): step ids, argv, states, digests — never the idea,
     /// never the folder's path.
@@ -901,6 +933,8 @@ impl Progress for Live {
                 | Event::CollectionChecked { .. }
                 | Event::RegressionBisected { .. }
                 | Event::PlanningStopped { .. }
+                | Event::LadderOffered { .. }
+                | Event::UnitPromoted { .. }
                 | Event::Project { .. }
                 | Event::AskStep { .. }
                 | Event::AskText { .. }

@@ -303,6 +303,17 @@ pub fn offer_for(root: &Path, project_state: &Path, task: &str) -> Option<Offer>
         .find(|o| o.task == id)
 }
 
+/// The unit `task` (`<unit>/<task>`) was promoted to, if it was.
+#[must_use]
+pub fn promoted_to(project_state: &Path, task: &str) -> Option<String> {
+    let (unit, id) = task.rsplit_once('/')?;
+    origins(project_state).into_iter().find_map(|(to, o)| {
+        o.iter()
+            .any(|o| matches!(o, Origin::PromotedFrom { from_unit, task, .. } if from_unit == unit && task == id))
+            .then_some(to)
+    })
+}
+
 /// `speccoder spec promote --decline`: declines the offer for `task`
 /// (`<unit>/<task>`).
 #[must_use]
@@ -358,7 +369,8 @@ pub fn promotion_input(
     out
 }
 
-/// Once plan through made the new unit: its origin, written once.
+/// Once plan through made the new unit: its origin, written once, and
+/// `unit.promoted` said to `progress`.
 pub fn promoted(
     root: &Path,
     state: &Path,
@@ -366,6 +378,7 @@ pub fn promoted(
     task: &str,
     conversations: &[String],
     via: speccoder_core::actions::Via,
+    progress: Option<&std::sync::Arc<dyn crate::progress::Progress>>,
 ) {
     let Some(speccoder_core::CommandData::PlanningChain(r)) = made.data() else {
         return;
@@ -381,26 +394,43 @@ pub fn promoted(
         .as_ref()
         .and_then(|o| o.requirement.clone())
         .unwrap_or_default();
-    let _ = record_origin(
+    let carried: Vec<(String, String)> = conversations
+        .iter()
+        .filter_map(|c| crate::ask::words(root, state, c).map(|(_, d)| (c.clone(), d)))
+        .collect();
+    let signals: Vec<String> = offer
+        .map(|o| o.signals.into_iter().map(|s| s.id).collect())
+        .unwrap_or_default();
+    let requirement_sha256 = crate::integrity::sha256_hex(words.as_bytes());
+    let by = crate::approvals::who_in(root);
+    let written = record_origin(
         &plane,
         unit,
         vec![Origin::PromotedFrom {
             from_unit: from_unit.to_owned(),
-            requirement,
+            requirement: requirement.clone(),
             task: id.to_owned(),
-            requirement_sha256: crate::integrity::sha256_hex(words.as_bytes()),
-            conversations: conversations
-                .iter()
-                .filter_map(|c| crate::ask::words(root, state, c).map(|(_, d)| (c.clone(), d)))
-                .collect(),
-            signals: offer
-                .map(|o| o.signals.into_iter().map(|s| s.id).collect())
-                .unwrap_or_default(),
-            by: crate::approvals::who_in(root),
+            requirement_sha256: requirement_sha256.clone(),
+            conversations: carried.clone(),
+            signals: signals.clone(),
+            by: by.clone(),
             via,
             at: crate::bug::confirm::now(),
         }],
     );
+    if let (Ok(()), Some(p)) = (written, progress) {
+        p.event(&crate::progress::Event::UnitPromoted {
+            unit: unit.to_owned(),
+            from_unit: from_unit.to_owned(),
+            requirement,
+            task: id.to_owned(),
+            requirement_sha256,
+            conversation_sha256: carried.into_iter().map(|(_, d)| d).collect(),
+            signals,
+            by,
+            via: via.as_str().to_owned(),
+        });
+    }
 }
 
 #[cfg(test)]

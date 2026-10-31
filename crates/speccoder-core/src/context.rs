@@ -34,6 +34,8 @@ pub enum ContextKind {
     Comment,
     /// The test layout speccoder detected from the checkout.
     TestLayout,
+    /// What a person added to an Ask question (untrusted).
+    Chip,
 }
 
 /// One part handed to a call.

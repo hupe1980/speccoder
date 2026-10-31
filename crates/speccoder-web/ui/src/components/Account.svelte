@@ -3,7 +3,14 @@
   // summary the provider gave) and its words beside its calls. A claim,
   // shown as one: set apart from the evidence, never as a verdict.
   import type { AccountTurn } from "../lib/types";
-  let { turns }: { turns: AccountTurn[] } = $props();
+  import { tick } from "svelte";
+  // `marked`: the turns a citation names, scrolled to and marked.
+  let { turns, marked = null }: { turns: AccountTurn[]; marked?: [number, number] | null } = $props();
+  let list = $state<HTMLElement>();
+  const isMarked = (n: number) => !!marked && n >= marked[0] && n <= marked[1];
+  $effect(() => {
+    if (marked && turns.length) void tick().then(() => list?.querySelector(".marked")?.scrollIntoView({ block: "start" }));
+  });
   let open = $state<Record<number, boolean>>({});
 
   // A summary's last paragraph is where it lands: shown first.
@@ -12,9 +19,9 @@
   const longer = (t: string) => paragraphs(t).length > 1 || t.length > 280;
 </script>
 
-<ol class="timeline">
+<ol class="timeline" bind:this={list}>
   {#each turns as t (t.turn)}
-    <li>
+    <li class:marked={isMarked(t.turn)}>
       <span class="node mono" aria-label="Turn {t.turn}">{t.turn}</span>
       <div class="turn">
         {#if t.reasoning}
@@ -48,6 +55,8 @@
     content: ""; position: absolute; left: calc(0.75rem - 1px); top: 1.55rem; bottom: -0.85rem; width: 2px;
     background: linear-gradient(var(--fill-2), transparent); border-radius: 2px;
   }
+  li.marked .turn { margin: -0.3rem 0 -0.3rem -0.45rem; padding: 0.3rem 0.45rem; border-radius: 10px; background: color-mix(in srgb, #bf5af2 8%, transparent); }
+  li.marked .node { background: #bf5af2; color: #fff; border-color: transparent; }
   .node {
     width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center;
     font-size: 0.68rem; font-weight: 650; color: var(--muted); background: var(--fill); box-shadow: inset 0 0 0 1px var(--border);

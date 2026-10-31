@@ -61,9 +61,27 @@ pub enum Origin {
     Asked {
         /// The conversation (`c-…`).
         conversation: String,
+        /// The turn whose proposal it was, when known.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        turn: Option<u32>,
         /// Unix seconds.
         at: u64,
     },
+}
+
+/// The origin a proposal confirmed from Ask records: `asked` is the
+/// conversation, or `conversation#turn` for the turn that proposed it.
+#[must_use]
+pub fn asked(asked: &str, at: u64) -> Origin {
+    let (conversation, turn) = match asked.split_once('#') {
+        Some((c, t)) => (c, t.parse().ok()),
+        None => (asked, None),
+    };
+    Origin::Asked {
+        conversation: conversation.to_owned(),
+        turn,
+        at,
+    }
 }
 
 impl Origin {

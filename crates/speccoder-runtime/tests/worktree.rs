@@ -167,6 +167,36 @@ fn a_branch_whose_worktree_was_removed_is_reattached() {
     assert!(back.path.join("work.txt").exists());
 }
 
+/// A branch re-attached after its worktree went (a cleared state folder,
+/// another machine) still works from the checkout's spec: a task recorded
+/// there meanwhile — a second quick change — reaches it.
+#[test]
+fn a_reattached_branch_brings_in_the_checkouts_spec() {
+    let repo = spec_repo();
+    let state = tempfile::tempdir().unwrap();
+    let wt = ensure_worktree(repo.path(), state.path(), "001-x", &artifacts()).unwrap();
+    write(
+        &wt.path,
+        "specs/001-x/tasks.md",
+        "## Phase 1\n- [x] T001 a\n",
+    );
+    git(&wt.path, &["commit", "-qam", "tick T001"]);
+    fs::remove_dir_all(&wt.path).unwrap();
+    write(
+        repo.path(),
+        "specs/001-x/tasks.md",
+        "## Phase 1\n- [ ] T001 a\n\n## Phase 2\n\n- [ ] T002 b\n",
+    );
+    git(repo.path(), &["commit", "-qam", "record T002"]);
+
+    let back = ensure_worktree(repo.path(), state.path(), "001-x", &artifacts()).unwrap();
+    let tasks = fs::read_to_string(back.path.join("specs/001-x/tasks.md")).unwrap();
+    assert!(
+        tasks.contains("- [x] T001") && tasks.contains("- [ ] T002 b"),
+        "{tasks}"
+    );
+}
+
 // ── US2 ────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -344,4 +374,37 @@ fn restore_without_changes_is_a_no_op() {
     let tmp = tempfile::tempdir().unwrap();
     let c = checkpoint(repo.path(), tmp.path()).unwrap();
     assert!(restore(repo.path(), tmp.path(), &c).unwrap().is_empty());
+}
+
+#[test]
+fn ticks_carry_only_where_the_words_are_the_same() {
+    let ours = "## Phase 1\n- [x] T001 a\n- [X] T002 old words\n- [ ] T003 c\n";
+    let theirs = "## Phase 1\n- [ ] T001 a\n- [ ] T002 new words\n- [ ] T003 c\n- [ ] T004 d\n";
+    assert_eq!(
+        speccoder_runtime::worktree::keep_ticks(ours, theirs),
+        "## Phase 1\n- [x] T001 a\n- [ ] T002 new words\n- [ ] T003 c\n- [ ] T004 d\n"
+    );
+}
+
+/// A conflict outside the task lists stays the person's: nothing is
+/// half-merged.
+#[test]
+fn a_conflict_beyond_the_task_lists_is_refused() {
+    let repo = spec_repo();
+    let state = tempfile::tempdir().unwrap();
+    let wt = ensure_worktree(repo.path(), state.path(), "001-x", &artifacts()).unwrap();
+    write(&wt.path, "specs/001-x/spec.md", "# Spec\n\nbranch words\n");
+    git(&wt.path, &["commit", "-qam", "branch"]);
+    write(
+        repo.path(),
+        "specs/001-x/spec.md",
+        "# Spec\n\ncheckout words\n",
+    );
+    git(repo.path(), &["commit", "-qam", "checkout"]);
+    let refusal = ensure_worktree(repo.path(), state.path(), "001-x", &artifacts()).unwrap_err();
+    assert!(
+        refusal.message.contains("could not be merged"),
+        "{refusal:?}"
+    );
+    assert!(git(&wt.path, &["status", "--porcelain"]).trim().is_empty());
 }

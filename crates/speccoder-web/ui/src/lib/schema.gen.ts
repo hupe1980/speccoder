@@ -358,6 +358,25 @@ export interface AskReport {
   end: string;
   /** Why it ended so, when it did not answer. */
   reason?: string | null;
+  /**
+   * What the question was handed: one `chip` entry per chip, journaled
+   * with the message.
+   */
+  context?: ContextManifest | null;
+}
+
+/** What a proposal confirmed from a conversation created. */
+export interface AskResult {
+  /** The turn that proposed it, when known. */
+  turn?: number | null;
+  /** `change` (a quick change or bug fix) or `spec` (a promoted unit). */
+  kind: string;
+  /** The unit it is in. */
+  unit: string;
+  /** The requirement it recorded. */
+  requirement?: string | null;
+  /** The task that implements it. */
+  task?: string | null;
 }
 
 /** One conversation with its turns. */
@@ -370,6 +389,8 @@ export interface AskThread {
   segment: number;
   /** The run that takes the next message. */
   run?: string | null;
+  /** What its confirmed proposals created, read from their origins. */
+  results?: AskResult[];
 }
 
 /** Tokens a turn used. */
@@ -1140,7 +1161,7 @@ export interface ContextEntry {
 }
 
 /** What a part is. A new kind is a new variant, never a free string. */
-export type ContextKind = "constitution" | "plan" | "story" | "task" | "rejection" | "retry_digest" | "issue" | "scenario" | "note" | "comment" | "test_layout";
+export type ContextKind = "constitution" | "plan" | "story" | "task" | "rejection" | "retry_digest" | "issue" | "scenario" | "note" | "comment" | "test_layout" | "chip";
 
 /** Every part of one call, sorted by kind and reference. */
 export interface ContextManifest {
@@ -2061,6 +2082,38 @@ export type EventLine = {
     end: string;
     /** Citations to what this turn read. */
     sources: number;
+  }
+  /** A quick change or bug fix that grew is offered as a spec of its own. */
+  | {
+    type: "ladder.offered";
+    /** Its unit. */
+    unit: string;
+    /** The task. */
+    task: string;
+    /** The signals that hold (`S1`…`S4`). */
+    signals: string[];
+  }
+  /** A unit was promoted from a quick change or bug fix. */
+  | {
+    type: "unit.promoted";
+    /** The new unit. */
+    unit: string;
+    /** The unit it came from. */
+    from_unit: string;
+    /** The requirement promoted. */
+    requirement: string;
+    /** The task it came from. */
+    task: string;
+    /** The requirement's words' digest. */
+    requirement_sha256: string;
+    /** The digests of the conversations carried. */
+    conversation_sha256: string[];
+    /** The signals that held. */
+    signals: string[];
+    /** Who. */
+    by: string;
+    /** Through what. */
+    via: string;
   }
   /** Plan through stopped where a person decides, at a failure or at the end. */
   | {
@@ -3591,6 +3644,8 @@ export interface Proposal {
   command: string;
   /** The conversation that suggested it. */
   conversation?: string | null;
+  /** The turn that suggested it. */
+  turn?: number | null;
 }
 
 /** A proposal's words; which ones a kind uses is the kind's. */
@@ -3753,6 +3808,28 @@ export interface PublicProjectUndone {
   via: string;
 }
 
+/** `unit.promoted`, as published: ids and digests, never the words. */
+export interface PublicUnitPromoted {
+  /** The new unit. */
+  unit: string;
+  /** The unit it came from. */
+  from_unit: string;
+  /** The requirement promoted. */
+  requirement: string;
+  /** The task it came from. */
+  task: string;
+  /** The requirement's words' digest. */
+  requirement_sha256: string;
+  /** The digests of the conversations carried. */
+  conversation_sha256: string[];
+  /** The signals that held. */
+  signals: string[];
+  /** Who. */
+  by: string;
+  /** Through what. */
+  via: string;
+}
+
 /** A read the engine issued for a tool call. */
 export interface Read {
   /** `r1`, `r2`, … across the conversation. */
@@ -3763,9 +3840,9 @@ export interface Read {
   target: string;
   /** The file it read, when it read one. */
   path?: string | null;
-  /** The first line it returned. */
+  /** The first line it returned (a run's account: its first turn). */
   start?: number | null;
-  /** The last line it returned. */
+  /** The last line it returned (a run's account: its last turn). */
   end?: number | null;
   /** The digest of what it returned. */
   digest: string;

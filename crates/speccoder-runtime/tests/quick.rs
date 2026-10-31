@@ -217,7 +217,7 @@ fn a_quick_change_from_ask_records_its_conversation() {
         false,
         speccoder_core::actions::Via::Web,
         &speccoder_runtime::RunOptions::default(),
-        Some(("c-18f", state.path())),
+        Some(("c-18f#2", state.path())),
     );
     assert_eq!(
         res.status(),
@@ -237,4 +237,18 @@ fn a_quick_change_from_ask_records_its_conversation() {
         .collect();
     assert_eq!(asked.len(), 1, "{origins:?}");
     assert_eq!(asked[0].0, "002-quick-changes/FR-001");
+    // The conversation reads it back under the turn that proposed it,
+    // with the task that implements it (FR-011).
+    let made = speccoder_runtime::ask::results(r.path(), state.path(), "c-18f");
+    assert_eq!(made.len(), 1, "{made:?}");
+    assert_eq!(
+        (
+            made[0].turn,
+            made[0].kind.as_str(),
+            made[0].unit.as_str(),
+            made[0].task.as_deref()
+        ),
+        (Some(2), "change", "002-quick-changes", Some("T001"))
+    );
+    assert!(speccoder_runtime::ask::results(r.path(), state.path(), "c-other").is_empty());
 }

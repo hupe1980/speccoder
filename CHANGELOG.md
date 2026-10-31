@@ -33,6 +33,11 @@ adheres to [Semantic Versioning](https://semver.org/).
   its own. Its requirement is carried word for word with the
   conversations you keep; the earlier tick is inherited, never verified.
   The offer also shows in Ask when the task is in context.
+- What a proposal confirmed in Ask created shows under its turn and
+  opens where it lives, also when the conversation is reopened; a run's
+  account opens at the turns an answer cites. **New Ask Conversation**
+  (⌥⌘N, the palette). A promoted task still open offers *Skip* first in
+  its inspector. `--events` adds `ladder.offered` and `unit.promoted`.
 
 ### Changed
 
@@ -40,6 +45,14 @@ adheres to [Semantic Versioning](https://semver.org/).
   the spec's exact words, a frozen test or a question. A stop without it
   ("beyond the task's scope") is answered and the attempt goes on; a
   checked one is asked about once before it stands.
+
+### Fixed
+
+- A task recorded in the checkout while its unit's branch waited (a
+  second quick change before the first was handed off) reaches the run:
+  a branch re-attached after its worktree went brings in the checkout's
+  spec too, and task lists that conflict only beside ticked tasks merge
+  with the checkout's words and the branch's ticks.
 
 ## [0.6.1] - 2026-10-30
 

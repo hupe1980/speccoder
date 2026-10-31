@@ -19,7 +19,9 @@ use std::sync::{Arc, Mutex};
 use agentplane::model::ModelProvider;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use speccoder_core::ask::{AskConversations, AskReport, AskThread, AskUsage, Conversation, Read};
+use speccoder_core::ask::{
+    AskConversations, AskReport, AskResult, AskThread, AskUsage, Conversation, Read,
+};
 use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
 use crate::progress::{Event, Progress};
@@ -198,6 +200,8 @@ pub fn read_of(id: &str, tool: &str, arguments: &Value, output: &Value) -> Read 
             line(&output["end_line"]),
         ),
         "git_show" => (arguments["path"].as_str().map(str::to_owned), None, None),
+        // A run's account: the turns it read.
+        "journal_account" => (None, line(&arguments["from"]), line(&arguments["to"])),
         _ => (None, None, None),
     };
     let a = |k: &str| arguments[k].as_str().unwrap_or_default().to_owned();
@@ -244,6 +248,69 @@ pub fn read_of(id: &str, tool: &str, arguments: &Value, output: &Value) -> Read 
         content_sha256,
         subject,
     }
+}
+
+/// What conversation `id`'s confirmed proposals created, from the origins
+/// they recorded: a quick change or bug fix (`Asked`), a promoted spec that
+/// carried it (`PromotedFrom`). Oldest first.
+#[must_use]
+pub fn results(path: &Path, state: &Path, id: &str) -> Vec<AskResult> {
+    use speccoder_core::ladder::Origin;
+    let plane = crate::worktree::project_state_dir(state, path);
+    let mut out: Vec<(u64, AskResult)> = Vec::new();
+    for (subject, origins) in crate::ladder::origins(&plane) {
+        for o in origins {
+            match o {
+                Origin::Asked {
+                    conversation,
+                    turn,
+                    at,
+                } if conversation == id => {
+                    let (unit, requirement) = subject
+                        .rsplit_once('/')
+                        .map_or((subject.as_str(), None), |(u, r)| (u, Some(r)));
+                    let task = requirement.and_then(|r| task_of(path, unit, r));
+                    out.push((
+                        at,
+                        AskResult {
+                            turn,
+                            kind: "change".to_owned(),
+                            unit: unit.to_owned(),
+                            requirement: requirement.map(str::to_owned),
+                            task,
+                        },
+                    ));
+                }
+                Origin::PromotedFrom {
+                    conversations, at, ..
+                } if conversations.iter().any(|(c, _)| c == id) => out.push((
+                    at,
+                    AskResult {
+                        turn: None,
+                        kind: "spec".to_owned(),
+                        unit: subject.clone(),
+                        requirement: None,
+                        task: None,
+                    },
+                )),
+                _ => {}
+            }
+        }
+    }
+    out.sort_by_key(|(at, _)| *at);
+    out.into_iter().map(|(_, r)| r).collect()
+}
+
+/// The task that implements `requirement` in `unit`, from its trace.
+fn task_of(path: &Path, unit: &str, requirement: &str) -> Option<String> {
+    let r = crate::status::report(path, Some(unit));
+    let Some(CommandData::Report(s)) = r.data() else {
+        return None;
+    };
+    s.trace
+        .iter()
+        .find(|t| t.requirement == requirement && t.inherited.is_none())
+        .and_then(|t| t.task.clone())
 }
 
 /// Whether `path` lines `start`–`end` no longer say what a read returned
@@ -572,6 +639,7 @@ pub fn turn_with(
             turns: Vec::new(),
             segment: 0,
             run: None,
+            results: Vec::new(),
         },
     };
     let id = thread.conversation.id.clone();
@@ -605,6 +673,7 @@ pub fn turn_with(
         usage: AskUsage::default(),
         end: "answered".to_owned(),
         reason: None,
+        context: None,
     };
     let (_, used) = used_today(&dir);
     let left = ask.daily_tokens.saturating_sub(used);
@@ -651,6 +720,19 @@ pub fn turn_with(
         Err(e) => return refuse(CommandStatus::Error, "ERROR", &e),
     };
     let message = chips::message(text, &resolved);
+    // Each chip is an entry of the question's context manifest, journaled
+    // with the message it rides on.
+    let mut manifest = crate::context::Manifest::new();
+    for (chip, content) in &resolved {
+        manifest.push(
+            speccoder_core::context::ContextKind::Chip,
+            &format!("speccoder://ask/chip/{}", chip.id),
+            &chip.label,
+            content.as_bytes(),
+        );
+    }
+    let context = (!resolved.is_empty()).then(|| manifest.finish());
+    report.context.clone_from(&context);
     let payload = |carried: bool| {
         let text = if carried {
             format!("{}{message}", earlier(&thread.turns))
@@ -662,6 +744,7 @@ pub fn turn_with(
             "tag": turn_tag(&id, n),
             "limit": ask.max_turn_tokens.min(left),
             "reads": reads_from,
+            "context": context,
         })
     };
     let start = json!({
@@ -757,12 +840,9 @@ pub fn turn_with(
         .iter()
         .find(|e| e["tool"] == PROPOSE && e["decision"] == "proposed")
     {
-        report.proposal = Some(proposal::validate(
-            &root,
-            request.feature.as_deref(),
-            &id,
-            &p["arguments"],
-        ));
+        let mut p = proposal::validate(&root, request.feature.as_deref(), &id, &p["arguments"]);
+        p.turn = Some(n);
+        report.proposal = Some(proposal::revalidate(&root, request.feature.as_deref(), &p));
     }
     match output["status"].as_str() {
         Some("answered") => {
@@ -948,8 +1028,11 @@ pub fn thread(path: &Path, state: Option<&Path>, id: &str) -> CommandResult {
         Err(e) => return *e,
     };
     match load(&dir, id) {
-        Some(t) => CommandResult::new("ask", CommandStatus::Ok, &t.conversation.title.clone())
-            .with_data(CommandData::AskThread(Box::new(t))),
+        Some(mut t) => {
+            t.results = results(path, &state, id);
+            CommandResult::new("ask", CommandStatus::Ok, &t.conversation.title.clone())
+                .with_data(CommandData::AskThread(Box::new(t)))
+        }
         None => refuse(
             CommandStatus::NotFound,
             "NOT-FOUND",

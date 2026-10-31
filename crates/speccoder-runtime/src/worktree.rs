@@ -201,8 +201,16 @@ pub fn ensure_worktree(
     let path_str = path.to_string_lossy().into_owned();
     let branch_ref = format!("refs/heads/{branch}");
     if repo.succeeds(&["rev-parse", "--verify", "-q", &branch_ref])? {
-        // The branch survived its worktree: re-attach, keeping its history.
+        // The branch survived its worktree: re-attach, keeping its history,
+        // and bring in what the checkout's spec gained since (a task a
+        // quick change recorded meanwhile), as for a worktree that stayed.
         repo.run(&["worktree", "add", "--quiet", &path_str, &branch])?;
+        bring_spec_changes(
+            &repo,
+            &fs::canonicalize(&path).unwrap_or(path.clone()),
+            &branch,
+            artifacts,
+        )?;
     } else {
         repo.run(&[
             "worktree", "add", "--quiet", "-b", &branch, &path_str, "HEAD",
@@ -268,6 +276,10 @@ fn bring_spec_changes(
         "speccoder: bring in the spec and setup changes from the checkout",
         &head,
     ]);
+    // Only task lists in conflict, apart only by ticks (a task recorded
+    // beside one this branch ticked): the checkout's words, the branch's
+    // ticks kept.
+    let merged = merged.or_else(|e| resolve_task_lists(worktree).map_err(|()| e));
     if let Err(e) = merged {
         let _ = wt.run(&["merge", "--abort"]);
         return Err(Refusal::new(
@@ -282,6 +294,87 @@ fn bring_spec_changes(
         ));
     }
     Ok(())
+}
+
+/// Resolves a merge whose conflicted files differ only in ticks — the
+/// branch ticked tasks, the checkout added or reworded others: each takes
+/// the checkout's version with the branch's ticks kept where the words are
+/// the same. Anything else in conflict is the person's to resolve.
+fn resolve_task_lists(worktree: &Path) -> Result<Vec<u8>, ()> {
+    let wt = Git::at(worktree);
+    let conflicted = wt
+        .line(&["diff", "--name-only", "--diff-filter=U"])
+        .map_err(|_| ())?;
+    let files: Vec<&str> = conflicted.lines().filter(|l| !l.is_empty()).collect();
+    if files.is_empty() {
+        return Err(());
+    }
+    for f in files {
+        let side = |stage: u8| {
+            wt.run(&["show", &format!(":{stage}:{f}")])
+                .map(|b| String::from_utf8_lossy(&b).into_owned())
+                .map_err(|_| ())
+        };
+        let (ours, theirs) = (side(2)?, side(3)?);
+        if !only_ticks_apart(&ours, &theirs) {
+            return Err(());
+        }
+        let text = keep_ticks(&ours, &theirs);
+        fs::write(worktree.join(f), text).map_err(|_| ())?;
+        wt.run(&["add", "--", f]).map_err(|_| ())?;
+    }
+    wt.run(&[
+        "-c",
+        "user.name=speccoder",
+        "-c",
+        "user.email=speccoder@users.noreply.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "--no-edit",
+    ])
+    .map_err(|_| ())
+}
+
+/// Whether `ours` is `theirs` but for ticks and lines `theirs` added: each
+/// of its lines, unticked, is found in `theirs` in order.
+fn only_ticks_apart(ours: &str, theirs: &str) -> bool {
+    let untick = |l: &str| {
+        l.replacen("- [x] ", "- [ ] ", 1)
+            .replacen("- [X] ", "- [ ] ", 1)
+    };
+    let mut rest = theirs.lines().map(untick);
+    ours.lines().map(untick).all(|l| rest.any(|t| t == l))
+}
+
+/// `theirs` with every checkbox `ours` ticked ticked too, where the line's
+/// words are the same.
+#[must_use]
+pub fn keep_ticks(ours: &str, theirs: &str) -> String {
+    let words = |l: &str, ticked: bool| -> Option<String> {
+        let t = l.trim_start();
+        let rest = if ticked {
+            t.strip_prefix("- [x] ")
+                .or_else(|| t.strip_prefix("- [X] "))
+        } else {
+            t.strip_prefix("- [ ] ")
+        }?;
+        Some(rest.trim_end().to_owned())
+    };
+    let ticked: std::collections::BTreeSet<String> =
+        ours.lines().filter_map(|l| words(l, true)).collect();
+    let mut out: Vec<String> = theirs
+        .lines()
+        .map(|l| match words(l, false) {
+            Some(w) if ticked.contains(&w) => l.replacen("- [ ] ", "- [x] ", 1),
+            _ => l.to_owned(),
+        })
+        .collect();
+    if theirs.ends_with('\n') {
+        out.push(String::new());
+    }
+    out.join("\n")
 }
 
 /// The branch of a lane: one task of `feature` run in parallel.

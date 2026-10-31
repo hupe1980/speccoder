@@ -121,6 +121,7 @@
       case "view.statusbar": app.statusbar = !app.statusbar; return;
       case "view.actions": app.palette = true; return;
       case "view.ask": return ask.toggle(!ask.open || !document.activeElement?.closest(".ask"));
+      case "view.askNew": ask.fresh(); return ask.toggle(true);
       case "edit.addToAsk": {
         const chip = pointed();
         if (chip) {

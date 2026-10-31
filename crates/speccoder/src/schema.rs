@@ -65,6 +65,7 @@ fn projection(name: &str) -> &'static str {
         "collection.checked" => "events/collection.checked",
         "project.created" => "events/project.created",
         "project.undone" => "events/project.undone",
+        "unit.promoted" => "events/unit.promoted",
         _ => "",
     }
 }
@@ -207,6 +208,7 @@ published! {
     "events/oracle.frozen", "PublicOracleFrozen" => crate::events::PublicOracleFrozen,
     "events/oracle.lapsed", "PublicOracleLapsed" => crate::events::PublicOracleLapsed,
     "events/collection.checked", "PublicCollectionChecked" => crate::events::PublicCollectionChecked,
+    "events/unit.promoted", "PublicUnitPromoted" => crate::events::PublicUnitPromoted,
     "comments", "CommentsView" => core::oracle::CommentsView,
     "preset", "PresetReport" => core::PresetReport,
     "events/project.created", "PublicProjectCreated" => crate::events::PublicProjectCreated,

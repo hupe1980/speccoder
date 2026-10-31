@@ -22,6 +22,7 @@ const host = vi.hoisted(() => ({
     codeCited: null as unknown,
     inbox: null as unknown,
     perform: vi.fn(),
+    selectFeature: vi.fn(async () => {}),
     selectTask: vi.fn(),
     toast: vi.fn(),
   },
@@ -202,5 +203,41 @@ describe("answer text", () => {
     }));
     button(/^Not now$/).click();
     expect(host.app.perform).toHaveBeenLastCalledWith(later);
+  });
+
+  it("shows under its turn what a confirmed proposal created, and opens it", async () => {
+    host.get.mockImplementation(async (path: string) => {
+      if (path.startsWith("/api/ask/conversations")) return { data: { conversations: [] } };
+      return { data: { conversation: { id: "c-1" }, turns: [report], results: [{ turn: 1, kind: "change", unit: "002-quick-changes", requirement: "FR-001", task: "T001" }, { kind: "spec", unit: "003-sign-in-log" }] } };
+    });
+    ask.toggle(true);
+    shown = mount(AskPanel, { target: document.body });
+    await ask.resume("c-1");
+    await settle();
+    const lines = [...document.querySelectorAll(".made")].map((b) => b.textContent?.replace(/\s+/g, " ").trim());
+    expect(lines).toEqual(["Recorded T001 in 002-quick-changes Open", "Started 003-sign-in-log from this conversation Open"]);
+    expect(await violations()).toEqual([]);
+    document.querySelector<HTMLButtonElement>(".made")!.click();
+    await settle();
+    expect(host.app.selectFeature).toHaveBeenCalledWith("002-quick-changes");
+    expect(host.app.selectTask).toHaveBeenCalledWith("T001");
+  });
+
+  it("opens a run's account at the turns a citation names, in place", async () => {
+    const turn = { ...report, reads: [{ id: "r2", tool: "journal_account", target: "account of run r-7", start: 2, end: 3, digest: "d", subject: "r-7" }], answer: "It retried twice [r2].", citations: [{ marker: "[r2]", id: "r2", state: "read", label: "account of run r-7" }], proposal: null };
+    host.post.mockResolvedValue({ status: "ok", message: "answered", data: turn });
+    host.get.mockImplementation(async (path: string) => (path.startsWith("/api/account") ? { turns: [{ turn: 1, reasoning: null, said: "a" }, { turn: 2, reasoning: null, said: "b" }, { turn: 3, reasoning: null, said: "c" }] } : {}));
+    ask.toggle(true);
+    shown = mount(AskPanel, { target: document.body });
+    flushSync();
+    button(/What is left in 001-graph/).click();
+    await settle();
+    document.querySelector<HTMLButtonElement>("button.cite")!.click();
+    await settle();
+    expect(host.get).toHaveBeenCalledWith("/api/account?run=r-7");
+    expect(document.querySelector('[role="dialog"][aria-label="Account of run r-7"]')).not.toBeNull();
+    expect(ask.peek?.marked).toEqual([2, 3]);
+    expect(await violations()).toEqual([]);
+    ask.peek = null;
   });
 });

@@ -450,6 +450,23 @@ pub enum Body {
         /// Citations to what this turn read.
         sources: usize,
     },
+    /// A quick change or bug fix that grew is offered as a spec of its own.
+    #[serde(rename = "ladder.offered")]
+    LadderOffered {
+        /// Its unit.
+        unit: String,
+        /// The task.
+        task: String,
+        /// The signals that hold (`S1`…`S4`).
+        signals: Vec<String>,
+    },
+    /// A unit was promoted from a quick change or bug fix.
+    #[serde(rename = "unit.promoted")]
+    UnitPromoted {
+        /// The public projection.
+        #[serde(flatten)]
+        public: PublicUnitPromoted,
+    },
     /// Plan through stopped where a person decides, at a failure or at the end.
     #[serde(rename = "planning.stopped")]
     PlanningStopped {
@@ -605,6 +622,29 @@ pub struct PublicBugOutcome {
     pub code: Option<String>,
     /// What to do next.
     pub next: Vec<String>,
+}
+
+/// `unit.promoted`, as published: ids and digests, never the words.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PublicUnitPromoted {
+    /// The new unit.
+    pub unit: String,
+    /// The unit it came from.
+    pub from_unit: String,
+    /// The requirement promoted.
+    pub requirement: String,
+    /// The task it came from.
+    pub task: String,
+    /// The requirement's words' digest.
+    pub requirement_sha256: String,
+    /// The digests of the conversations carried.
+    pub conversation_sha256: Vec<String>,
+    /// The signals that held.
+    pub signals: Vec<String>,
+    /// Who.
+    pub by: String,
+    /// Through what.
+    pub via: String,
 }
 
 /// `oracle.frozen`, as published: digests and counts, never a test.
@@ -1084,6 +1124,38 @@ pub fn body(event: &Event) -> Body {
             unit: unit.as_deref().map(clean),
             kind: kind.clone(),
             next_skill: next_skill.as_deref().map(clean),
+        },
+        Event::LadderOffered {
+            unit,
+            task,
+            signals,
+        } => Body::LadderOffered {
+            unit: clean(unit),
+            task: clean(task),
+            signals: signals.clone(),
+        },
+        Event::UnitPromoted {
+            unit,
+            from_unit,
+            requirement,
+            task,
+            requirement_sha256,
+            conversation_sha256,
+            signals,
+            by,
+            via,
+        } => Body::UnitPromoted {
+            public: PublicUnitPromoted {
+                unit: clean(unit),
+                from_unit: clean(from_unit),
+                requirement: clean(requirement),
+                task: clean(task),
+                requirement_sha256: requirement_sha256.clone(),
+                conversation_sha256: conversation_sha256.clone(),
+                signals: signals.clone(),
+                by: clean(by),
+                via: via.clone(),
+            },
         },
         Event::Project { step } => project_body(step),
         Event::AskStep {
