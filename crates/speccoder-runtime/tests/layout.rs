@@ -227,6 +227,51 @@ fn a_section_that_changes_an_existing_line_is_refused() {
     );
 }
 
+/// A section that stops the story's file from building would fail every
+/// test of the project for the attempt: the file goes back to what the
+/// earlier tasks left, and the attempt runs against tests it can pass.
+#[test]
+fn a_section_that_breaks_the_story_file_is_taken_out_again() {
+    let r = project();
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(author(T001));
+    f.will_call_tool("c1", "write_file", json!({ "path": "src/lib.rs", "content": "pub fn greet(name: &str) -> String {\n    format!(\"Hello, {name}!\")\n}\n" }));
+    f.will_structure(done("greet"));
+    let first = run(r.path(), state.path(), "T001", f);
+    assert_eq!(
+        report(&first).verdict,
+        Some(Verdict::Verified),
+        "{}",
+        first.message()
+    );
+    let f = FakeProvider::new();
+    f.will_structure(author(&format!(
+        "{T001}\n// T002 — US1-2\n#[test]\nfn t002_greets_the_world( {{\n"
+    )));
+    f.will_call_tool("c1", "write_file", json!({ "path": "src/lib.rs", "content": "pub fn greet(name: &str) -> String {\n    if name.is_empty() {\n        return \"Hello, world!\".to_owned();\n    }\n    format!(\"Hello, {name}!\")\n}\n" }));
+    f.will_structure(done("default"));
+    let second = run(r.path(), state.path(), "T002", f);
+    let rep = report(&second);
+    let a = rep.acceptance.as_ref().unwrap();
+    assert_eq!(a["removed"], json!(["tests/acceptance_us1.rs"]), "{a}");
+    assert_eq!(a["files"], json!([]), "{a}");
+    assert!(
+        a["note"].as_str().unwrap_or_default().contains("taken out"),
+        "{a}"
+    );
+    let wt = PathBuf::from(&rep.worktree);
+    assert_eq!(
+        fs::read_to_string(wt.join("tests/acceptance_us1.rs")).unwrap(),
+        T001
+    );
+    assert!(
+        rep.verdict.is_some(),
+        "the attempt was judged on tests that build: {}",
+        second.message()
+    );
+}
+
 #[test]
 fn autotests_off_leaves_no_place_and_writes_no_acceptance_test() {
     let r = project();

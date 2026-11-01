@@ -167,7 +167,16 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         .iter()
         .map(|f| json!({ "path": f.path, "scenarios": f.cited }))
         .collect();
-    let planned: Vec<(String, String)> = valid.into_iter().map(|f| (f.path, f.content)).collect();
+    let planned: Vec<(String, String)> = valid
+        .into_iter()
+        .map(|f| match story.filter(|(p, _)| *p == f.path) {
+            Some((_, old)) => {
+                let content = without_repeated_future(old, &f.content);
+                (f.path, content)
+            }
+            None => (f.path, f.content),
+        })
+        .collect();
     if planned.is_empty() {
         return skipped_by(
             "no acceptance tests were generated".to_owned(),
@@ -235,8 +244,30 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         }
     }
     let red = class.is_red();
+    // Tests that do not even build or collect would break every other test
+    // of the project for the attempt: they are taken out again.
+    let broken = matches!(class, RedClass::CollectionError | RedClass::BuildError);
+    let removed = if broken {
+        for rel in &written {
+            let full = a.project.join(rel);
+            match story.filter(|(p, _)| p == rel) {
+                Some((_, old)) => {
+                    let _ = std::fs::write(&full, old);
+                }
+                None => {
+                    let _ = std::fs::remove_file(&full);
+                }
+            }
+        }
+        std::mem::take(&mut written)
+    } else {
+        Vec::new()
+    };
     let mut report = base;
     report["files"] = json!(written);
+    if !removed.is_empty() {
+        report["removed"] = json!(removed);
+    }
     if let Some(p) = placement.as_ref().filter(|p| p.story.is_some()) {
         report["story_file"] = json!(p.path);
         report["appended"] = json!(p.existing.is_some());
@@ -259,6 +290,10 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         report["note"] = json!(match class {
             RedClass::Passed => "the acceptance tests already pass before the attempt, so they are no evidence for it".to_owned(),
             RedClass::Flaky => "the acceptance tests failed once and passed when run again: not demonstrated".to_owned(),
+            other if broken => format!(
+                "the acceptance tests did not fail on an assertion ({}): not demonstrated, and taken out so the project's other tests still run",
+                class_word(other)
+            ),
             other => format!(
                 "the acceptance tests did not fail on an assertion ({}): not demonstrated",
                 class_word(other)
@@ -334,6 +369,25 @@ fn placement(a: &AcceptanceSetup<'_>) -> Result<Option<substrate::acceptance::Pl
         comment,
         layout: layout.text(),
     }))
+}
+
+/// A Python section appended to a story file, without the `from __future__`
+/// imports the file already starts with: Python allows them only at the
+/// top, so a repeat would stop the whole file from loading.
+fn without_repeated_future(old: &str, new: &str) -> String {
+    let (Some(section), true) = (new.strip_prefix(old), old.contains("from __future__")) else {
+        return new.to_owned();
+    };
+    let future = |l: &str| l.trim_start().starts_with("from __future__ import");
+    let has = |l: &str| old.lines().any(|o| o.trim() == l.trim());
+    if !section.lines().any(future) {
+        return new.to_owned();
+    }
+    let kept: Vec<&str> = section
+        .split_inclusive('\n')
+        .filter(|l| !(future(l) && has(l)))
+        .collect();
+    format!("{old}{}", kept.concat())
 }
 
 /// speccoder's words for a refusal's kind (a regression-only reason's detail).
@@ -1300,6 +1354,26 @@ mod argv_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_repeated_future_import_is_left_out_of_a_python_section() {
+        let old = "# T008 — US1-1\n\nfrom __future__ import annotations\n\nimport sys\n\ndef test_a() -> None:\n    assert True\n";
+        let new = format!(
+            "{old}\n# T009 — US1-2\n\nfrom __future__ import annotations\n\nimport sys\n\ndef test_b() -> None:\n    assert sys\n"
+        );
+        let fixed = without_repeated_future(old, &new);
+        assert!(fixed.starts_with(old), "{fixed}");
+        assert_eq!(fixed.matches("from __future__").count(), 1, "{fixed}");
+        assert!(
+            fixed.contains("# T009 — US1-2\n\n\nimport sys\n\ndef test_b"),
+            "{fixed}"
+        );
+        // A file that does not start with one, or a section without one: unchanged.
+        let other = "x\nfrom __future__ import annotations\n";
+        assert_eq!(without_repeated_future("x\n", other), other);
+        let plain = format!("{old}def test_c():\n    pass\n");
+        assert_eq!(without_repeated_future(old, &plain), plain);
+    }
 
     #[test]
     fn the_last_task_of_a_story_with_two_scenarios_composes() {

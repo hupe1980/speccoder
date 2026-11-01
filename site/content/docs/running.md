@@ -145,7 +145,7 @@ Such a stop is never a dead end. At a terminal the run asks, one key each: **d**
 speccoder detects the project's test layout — each runner's collection rule, where tests live, the naming habit, files nothing runs — and gives it to the implementer and every test author.
 
 - Its acceptance tests go to **one file per story** (`tests/acceptance_us1.rs`, `tests/test_acceptance_us1.py`, `src/acceptance-us1.test.ts`, `<package>/acceptance_us1_test.go`), run by the command that runs only that file (`cargo test --test acceptance_us1`).
-- A later task of the story appends its section; changing, inserting among or skipping earlier tests is refused. Convergence tasks keep a file of their own.
+- A later task of the story appends its section; changing, inserting among or skipping earlier tests is refused. A section that stops the file from building or collecting is taken out again before the attempt, so the project's other tests still run. Convergence tasks keep a file of their own.
 - With no place the runner collects (Cargo's `autotests = false`, a missing `testpaths`), no acceptance test is written and `speccoder doctor` names the setting.
 
 ## Retries

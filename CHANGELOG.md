@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Acceptance tests that do not build or collect (a Python section
+  repeating `from __future__ import annotations` mid-file) were left in
+  place and failed every test of the project for the attempt. They are
+  taken out again; a repeated `from __future__` line is left out of a
+  story file's new section.
+
 ## [0.7.1] - 2026-11-01
 
 ### Added
