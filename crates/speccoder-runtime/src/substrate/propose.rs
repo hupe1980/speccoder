@@ -95,7 +95,17 @@ pub fn layout(
         }
     }
     if let Some(others) = bundle["story_tasks"].as_array().filter(|d| !d.is_empty()) {
-        task_text.push_str("\nThe story's other tasks (their work, not this task's):\n");
+        task_text.push_str(
+            if bundle["task"]["story"]
+                .as_str()
+                .unwrap_or_default()
+                .is_empty()
+            {
+                "\nThe phase's other tasks (their work, not this task's):\n"
+            } else {
+                "\nThe story's other tasks (their work, not this task's):\n"
+            },
+        );
         for d in others {
             let mark = if d["done"].as_bool() == Some(true) {
                 "x"

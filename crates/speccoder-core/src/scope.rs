@@ -105,13 +105,19 @@ fn looks_like_path(t: &str) -> bool {
     })
 }
 
-/// Changed paths not covered by `named` (exact path, a directory prefix, or
-/// a `*` glob), except `exempt` ones (speccoder's own acceptance tests).
+/// Changed paths not covered by `named` (exact path, a directory prefix, a
+/// module named without its extension — `src/parser` covers
+/// `src/parser.py` — or a `*` glob), except `exempt` ones (speccoder's own
+/// acceptance tests).
 #[must_use]
 pub fn finding(named: &[String], changed: &[String], exempt: &[String]) -> ScopeFinding {
     let covers = |n: &str, p: &str| {
         let dir = n.trim_end_matches('/');
-        p == n || p.starts_with(&format!("{dir}/")) || (n.contains('*') && glob(n, p))
+        let module = !n.rsplit('/').next().unwrap_or(n).contains('.')
+            && p.strip_prefix(n)
+                .and_then(|r| r.strip_prefix('.'))
+                .is_some_and(|ext| !ext.is_empty() && !ext.contains(['/', '.']));
+        p == n || p.starts_with(&format!("{dir}/")) || module || (n.contains('*') && glob(n, p))
     };
     ScopeFinding {
         stated: !named.is_empty(),
@@ -149,6 +155,26 @@ fn glob(pattern: &str, path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_module_named_without_its_extension_covers_its_file() {
+        let named = vec!["src/services/table_parser".to_owned()];
+        let changed: Vec<String> = [
+            "src/services/table_parser.py",
+            "src/services/table_parser_extra.py",
+            "src/services/table_parser.tar.gz",
+        ]
+        .map(str::to_owned)
+        .to_vec();
+        let f = super::finding(&named, &changed, &[]);
+        assert_eq!(
+            f.outside,
+            [
+                "src/services/table_parser_extra.py",
+                "src/services/table_parser.tar.gz"
+            ]
+        );
+    }
+
     use super::*;
 
     #[test]

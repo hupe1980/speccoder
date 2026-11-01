@@ -6,6 +6,34 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The model's account was empty for models that neither reason aloud nor
+  comment beside their calls (GPT-5.4 mini): it now ends with how the
+  attempt ended — the final report's summary, or why it stopped.
+- A Convergence task was given every scenario of the spec to test, so its
+  tests could need other gaps' fixes and never pass. It is judged by the
+  scenario it cites (`US3/AC2`, as Spec Kit's converge writes it) and its
+  test author sees the phase's other tasks.
+- The Ask panel's close button was easy to miss.
+- Acceptance tests that never failed on an assertion (taken out as
+  broken, not collected, timed out) were still run at green and failed
+  every attempt, whatever it did. Green runs only tests that went red or
+  already passed.
+- A mid-story task whose attempt spent its budget with its tests red was
+  not offered **Judge at** the story's checkpoint.
+- An acceptance file that skips or expects a test to fail, or a story
+  section that defines an earlier test again (silently replacing it in
+  Python), is refused.
+- A task naming a module without its extension (`src/services/parser`)
+  saw that very file listed as changed outside its scope.
+- An attempt stopped by its budget or a crash recorded no token usage, so
+  `report --cost` undercounted it; a saved incomplete attempt's reason
+  repeated its outcome instead of the model's words.
+- A passing attempt whose tick or commit failed reported `verified`; it
+  now stops with its work saved.
+- A diff or file listing git could not produce was audited as empty.
+
 ## [0.7.2] - 2026-11-01
 
 ### Fixed

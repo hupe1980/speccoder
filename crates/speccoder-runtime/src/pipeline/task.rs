@@ -1539,11 +1539,13 @@ fn run_task_once(
         .as_ref()
         .and_then(|a| serde_json::to_value(a).ok());
     // Tests that exist now are frozen for this attempt.
-    let frozen: Vec<String> = worktree::files(&wt_root, &before)
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|p| tools::paths::is_test_path(p))
-        .collect();
+    let frozen: Vec<String> = match worktree::files(&wt_root, &before) {
+        Ok(f) => f,
+        Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
+    }
+    .into_iter()
+    .filter(|p| tools::paths::is_test_path(p))
+    .collect();
     let mut usage: Option<serde_json::Value> = None;
     // Best-of-n: independent samples from the same checkpoint, each
     // with its own retries; the best by evidence is kept.
@@ -1923,6 +1925,14 @@ fn run_task_once(
                     };
                     output["reason"] = serde_json::Value::String(redact(&reason, secret));
                 }
+                // Stopped by the plane (its budget, a crash): the skill never
+                // reported what it used; the journal's turns did.
+                if output.get("usage").is_none_or(serde_json::Value::is_null)
+                    && let Ok(Some(used)) =
+                        rt.block_on(substrate::spent(&s.plane_dir, &outcome.run_id.to_string()))
+                {
+                    output["usage"] = used;
+                }
                 (outcome.run_id.to_string(), succeeded, output)
             };
             if bug_candidate.is_some()
@@ -2024,7 +2034,11 @@ fn run_task_once(
                 Ok(c) => c,
                 Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
             };
-            let raw_changes = worktree::diff(&wt_root, &before, &after).unwrap_or_default();
+            // What the audit reads: never judged blind.
+            let raw_changes = match worktree::diff(&wt_root, &before, &after) {
+                Ok(c) => c,
+                Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
+            };
             // A frozen test a person approved writing (for the task, or inline)
             // is not a violation; the audit still flags removed tests and skip
             // markers in it — approval permits editing a test, not weakening it.
@@ -2036,7 +2050,10 @@ fn run_task_once(
                 *asked = n;
             }
             let approved_writes = approved_writes(&task_grants, &output["tool_calls"]);
-            let patch = worktree::patch(&wt_root, &before, &after).unwrap_or_default();
+            let patch = match worktree::patch(&wt_root, &before, &after) {
+                Ok(p) => p,
+                Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
+            };
             // A value copied from the person's secret files, written into a
             // file git would commit: undone, never judged — named, never shown.
             if let Some(name) = crate::include::added_secret(&patch) {
@@ -3088,6 +3105,7 @@ fn run_task_once(
         }
         report.regression = Some(Regression::of(reason));
     }
+    let recorded_from = report.integrity.len();
     if passed && let (Some(t), Some(file)) = (&parsed_task, &tasks_file) {
         let began = std::time::Instant::now();
         stage(&*live, task, Stage::Commit, StageState::Started, None, None);
@@ -3301,6 +3319,18 @@ fn run_task_once(
         );
     }
 
+    // A passing attempt whose tick or commit failed is not done: saved and
+    // undone below, the person told how to bring it back.
+    let unrecorded = report.integrity[recorded_from..]
+        .iter()
+        .find(|m| m.starts_with("tick refused") || m.starts_with("commit failed"))
+        .cloned();
+    let passed = passed && unrecorded.is_none();
+    if let Some(why) = unrecorded {
+        attempt_status = "tick_failed".to_owned();
+        report.ticked = false;
+        report.reason = Some(why);
+    }
     // 9. An attempt whose tests reject what the spec appears to allow is
     //    held for a person, as a waiting call is: its tree and resume marker
     //    stay, and after a ruling the next run judges it again from the
@@ -3342,7 +3372,7 @@ fn run_task_once(
                 ..
             }) if matches!(
                 outcome.as_str(),
-                "incomplete" | "verification_failed" | "blocked"
+                "incomplete" | "verification_failed" | "blocked" | "budget_exhausted"
             ) && report.acceptance.as_ref().is_some_and(|a| a["red"] == true) =>
             {
                 Some(c.as_str())

@@ -1,6 +1,7 @@
 <script lang="ts">
   // The model's account of an attempt, turn by turn: its reasoning (a
-  // summary the provider gave) and its words beside its calls. A claim,
+  // summary the provider gave), its words beside its calls and how it
+  // ended (its answer's summary, or why it stopped). A claim,
   // shown as one: set apart from the evidence, never as a verdict.
   import type { AccountTurn } from "../lib/types";
   import { tick } from "svelte";
@@ -42,6 +43,12 @@
         {#if t.said}
           <blockquote class="said">{t.said}</blockquote>
         {/if}
+        {#if t.answer}
+          <div class="answer">
+            <span class="kicker">How it ended</span>
+            <blockquote>{t.answer}</blockquote>
+          </div>
+        {/if}
       </div>
     </li>
   {/each}
@@ -76,6 +83,11 @@
     margin: 0; padding: 0.5rem 0.75rem; border-radius: 12px 12px 12px 4px; background: var(--surface-2);
     font-size: 0.86rem; font-style: italic; color: var(--text-2); white-space: pre-wrap; quotes: "“" "”";
   }
+  .answer { padding: 0.5rem 0.75rem 0.6rem; border-radius: 12px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border); }
+  .answer .kicker { color: var(--muted); }
+  .answer blockquote { margin: 0.3rem 0 0; font-size: 0.86rem; line-height: 1.45; color: var(--text); white-space: pre-wrap; quotes: "“" "”"; }
+  .answer blockquote::before { content: open-quote; }
+  .answer blockquote::after { content: close-quote; }
   .said::before { content: open-quote; }
   .said::after { content: close-quote; }
 </style>

@@ -230,7 +230,7 @@ describe("answer text", () => {
   it("opens a run's account at the turns a citation names, in place", async () => {
     const turn = { ...report, reads: [{ id: "r2", tool: "journal_account", target: "account of run r-7", start: 2, end: 3, digest: "d", subject: "r-7" }], answer: "It retried twice [r2].", citations: [{ marker: "[r2]", id: "r2", state: "read", label: "account of run r-7" }], proposal: null };
     host.post.mockResolvedValue({ status: "ok", message: "answered", data: turn });
-    host.get.mockImplementation(async (path: string) => (path.startsWith("/api/account") ? { turns: [{ turn: 1, reasoning: null, said: "a" }, { turn: 2, reasoning: null, said: "b" }, { turn: 3, reasoning: null, said: "c" }] } : {}));
+    host.get.mockImplementation(async (path: string) => (path.startsWith("/api/account") ? { turns: [{ turn: 1, reasoning: null, said: "a", answer: null }, { turn: 2, reasoning: null, said: "b", answer: null }, { turn: 3, reasoning: null, said: "c", answer: null }] } : {}));
     ask.toggle(true);
     shown = mount(AskPanel, { target: document.body });
     flushSync();

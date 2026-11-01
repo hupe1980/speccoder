@@ -133,6 +133,25 @@ fn a_linked_task_is_judged_by_exactly_its_links() {
     );
 }
 
+/// A Convergence task closes one gap the stories left: it is judged by the
+/// scenario its line cites (`US1/AC3`, as Spec Kit's converge writes it),
+/// never the author's pick of the spec, and sees its phase's other gaps.
+#[test]
+fn a_convergence_task_is_judged_by_the_scenario_it_cites() {
+    let r = repo();
+    let tasks = format!(
+        "{}\n## Phase 7: Convergence\n\n- [ ] T026 Route both tables in src/lib.rs per FR-008, US1/AC3 (partial)\n- [ ] T027 Keep cell whitespace in src/lib.rs per FR-005 (partial)\n",
+        TASKS.replace("- [ ]", "- [x]")
+    );
+    fs::write(r.path().join("specs/001-graph/tasks.md"), tasks).unwrap();
+    git(r.path(), &["commit", "-qam", "converge"]);
+    let asked = given(r.path(), "T026");
+    assert_eq!(judged(&asked), ["US1-3"], "{asked}");
+    for s in ["The phase's other tasks", "T027 Keep cell whitespace"] {
+        assert!(asked.contains(s), "{s} missing from {asked}");
+    }
+}
+
 /// A repository whose unit branch holds T001's tick verifying US1-1,
 /// digested over `ticked_wording`; `main` has the spec as given.
 fn ticked(spec: &str, ticked_wording: &str) -> tempfile::TempDir {

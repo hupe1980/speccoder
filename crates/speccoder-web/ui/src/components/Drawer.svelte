@@ -194,7 +194,7 @@
         <summary><Icon name="sparkle" size={12} weight={2.2} /> The Model's Account <span class="muted">— its reasoning and its words; a claim, not evidence</span></summary>
         {#if accountError}<p class="muted small">The journal could not be read: {accountError}</p>
         {:else if account === null}<p class="muted small">Reading the journal…</p>
-        {:else if !account.length}<p class="muted small">The model neither reasoned aloud nor said anything beside its calls in this attempt.</p>
+        {:else if !account.length}<p class="muted small">The model neither reasoned aloud nor said anything in this attempt.</p>
         {:else}
           <Account turns={account} />
         {/if}

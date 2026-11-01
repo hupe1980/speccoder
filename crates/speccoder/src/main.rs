@@ -3045,13 +3045,16 @@ fn task_action(
                         let mut lines = vec![format!("  turn {}", t.turn)];
                         lines.extend(t.reasoning.as_deref().map(|r| block("thinking", r)));
                         lines.extend(t.said.as_deref().map(|w| block("says", &format!("“{w}”"))));
+                        lines.extend(
+                            t.answer
+                                .as_deref()
+                                .map(|a| block("answers", &format!("“{a}”"))),
+                        );
                         lines.join("\n")
                     })
                     .collect::<Vec<_>>()
                     .join("\n"),
-                Some(Ok(_)) => {
-                    "  (it neither reasoned aloud nor said anything beside its calls)".to_owned()
-                }
+                Some(Ok(_)) => "  (it neither reasoned aloud nor said anything)".to_owned(),
                 Some(Err(e)) => format!("  (the journal cannot be read: {e})"),
                 None => "  (no attempt has run)".to_owned(),
             };

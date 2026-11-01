@@ -208,6 +208,8 @@ export interface AccountTurn {
   turn: number;
   reasoning: string | null;
   said: string | null;
+  /** Its closing words: the final answer's summary, or why it stopped. */
+  answer: string | null;
 }
 
 /** The project's current run, from whichever process: `live.json`. */

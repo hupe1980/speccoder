@@ -258,7 +258,7 @@
     </div>
     <button class="hbtn" title="Conversations" aria-label="Conversations" aria-pressed={ask.list !== null} onclick={() => (ask.list ? (ask.list = null) : void ask.showList())}><Icon name="list" size={15} /></button>
     <button class="hbtn" title="New conversation (⌥⌘N)" aria-label="New conversation" onclick={() => ask.fresh()}><Icon name="plus" size={15} /></button>
-    <button class="hbtn" title="Close (⌘L)" aria-label="Close Ask" onclick={() => ask.toggle(false)}><Icon name="xmark" size={14} /></button>
+    <button class="hbtn close" title="Close (⌘L)" aria-label="Close Ask" onclick={() => ask.toggle(false)}><Icon name="xmark" size={11} weight={2.6} /></button>
   </header>
 
   <div class="log" role="log" bind:this={log}>
@@ -460,6 +460,9 @@
   .scope { font-size: 0.74rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hbtn { width: 26px; height: 26px; border: 0; border-radius: 7px; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
   .hbtn:hover, .hbtn[aria-pressed="true"] { background: var(--fill); color: var(--text); }
+  /* Closing is the panel's way out: a filled round control, apart from the others. */
+  .hbtn.close { width: 24px; height: 24px; margin-left: 0.15rem; border-radius: 50%; background: var(--fill-2); color: var(--text-2); }
+  .hbtn.close:hover { background: color-mix(in srgb, var(--text) 16%, transparent); color: var(--text); }
 
   .log { overflow: auto; padding: 0.9rem 0.95rem 1rem; display: grid; align-content: start; gap: 0.7rem; }
   .empty { display: grid; justify-items: center; text-align: center; gap: 0.5rem; padding: 2.2rem 0.6rem 0.5rem; }

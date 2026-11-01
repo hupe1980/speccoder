@@ -40,6 +40,10 @@ pub(crate) fn saved_outcome(
     let reason = match &report.verdict {
         _ if suspected => monitor_summary(report.monitor.as_ref()),
         Some(Verdict::Failed { reasons }) => failed_because(report, reasons),
+        // What the stop says: the model's own words, never its outcome again.
+        _ if attempt_status == "incomplete" && report.reason.is_none() => {
+            incomplete_because(report.model_report.as_ref())
+        }
         _ => report
             .reason
             .clone()
@@ -94,6 +98,20 @@ pub(crate) fn status_and_message(
             format!(
                 "{}; the attempt is saved, not ticked",
                 report.reason.clone().unwrap_or_default()
+            ),
+        ),
+        // The work passed but could not be recorded: saved under its
+        // attempt ref, never reported as done.
+        (_, "tick_failed") => (
+            CommandStatus::NeedsHuman,
+            format!(
+                "the attempt passed but was not recorded ({}); its work is saved{} — fix the cause, then run the task again",
+                report.reason.clone().unwrap_or_default(),
+                report
+                    .saved_attempt
+                    .as_deref()
+                    .map(|r| format!(" under `{r}`"))
+                    .unwrap_or_default()
             ),
         ),
         (Some(Verdict::Failed { reasons }), _) => (

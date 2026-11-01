@@ -152,8 +152,9 @@ pub struct DeltaRequirement {
 }
 
 /// The scenario ids a task's line names — `(scenarios US3-1, US3-2)`, any
-/// case, separated by commas, spaces, `and` or `&` — upper-cased, in written
-/// order, once each. Inline code is quoted text, never a link.
+/// case, separated by commas, spaces, `and` or `&`, or cited as Spec Kit's
+/// converge cites them, `US3/AC2` — upper-cased, in written order, once
+/// each. Inline code is quoted text, never a link.
 #[must_use]
 pub fn scenario_links(line: &str) -> Vec<String> {
     let mut in_code = false;
@@ -177,17 +178,59 @@ pub fn scenario_links(line: &str) -> Vec<String> {
     let bytes = plain.as_bytes();
     let starts = (0..bytes.len().saturating_sub(KEY.len() - 1))
         .filter(|&i| bytes[i..i + KEY.len()].eq_ignore_ascii_case(KEY));
-    let mut out: Vec<String> = Vec::new();
+    let mut found: Vec<(usize, String)> = Vec::new();
     for i in starts {
         let rest = &plain[i + KEY.len()..];
         let Some(end) = rest.find(')') else { continue };
+        let mut at = i + KEY.len();
         for word in
             rest[..end].split(|c: char| c == ',' || c == '&' || c == ':' || c.is_whitespace())
         {
             let id = word.to_uppercase();
-            if is_scenario_id(&id) && !out.contains(&id) {
-                out.push(id);
+            if is_scenario_id(&id) {
+                found.push((at, id));
             }
+            at += word.len() + 1;
+        }
+    }
+    found.extend(cited(&plain));
+    found.sort_by_key(|(at, _)| *at);
+    let mut out: Vec<String> = Vec::new();
+    for (_, id) in found {
+        if !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    out
+}
+
+/// `US3/AC2` citations, as `US3-2`, with where each starts: letters and
+/// digits, `/AC`, digits, standing apart from the words around them.
+fn cited(plain: &str) -> Vec<(usize, String)> {
+    let bytes = plain.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while let Some(off) = plain[i..].find(['/']) {
+        let slash = i + off;
+        i = slash + 1;
+        let head_start = bytes[..slash]
+            .iter()
+            .rposition(|b| !b.is_ascii_alphanumeric())
+            .map_or(0, |p| p + 1);
+        let head = &plain[head_start..slash];
+        let tail = &bytes[slash + 1..];
+        if tail.len() < 3 || !tail[..2].eq_ignore_ascii_case(b"AC") {
+            continue;
+        }
+        let digits = tail[2..].iter().take_while(|b| b.is_ascii_digit()).count();
+        let after = tail.get(2 + digits);
+        if digits == 0 || after.is_some_and(u8::is_ascii_alphanumeric) {
+            continue;
+        }
+        let k = &plain[slash + 3..slash + 3 + digits];
+        let id = format!("{}-{k}", head.to_ascii_uppercase());
+        if is_scenario_id(&id) {
+            out.push((head_start, id));
         }
     }
     out
@@ -233,6 +276,20 @@ mod tests {
             scenario_links("\u{212A}\u{212A} (SCENARIOS us2-3)"),
             ["US2-3"]
         );
+    }
+
+    #[test]
+    fn a_converge_citation_names_a_scenario() {
+        assert_eq!(
+            scenario_links("Route tables per FR-008, US3/AC2, plan: single table (partial)"),
+            ["US3-2"]
+        );
+        assert_eq!(
+            scenario_links("Do it per us1/ac2 and (scenarios US1-1, US1-2)"),
+            ["US1-2", "US1-1"]
+        );
+        assert!(scenario_links("Read `US1/AC2` and src/AC2 and US1/ACK and /AC1").is_empty());
+        assert_eq!(scenario_links("İ US2/AC10."), ["US2-10"]);
     }
 
     proptest::proptest! {

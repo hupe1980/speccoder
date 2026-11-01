@@ -270,22 +270,30 @@ impl Adapter for SpecKit {
                     .collect()
             })
             .unwrap_or_default();
-        let story_tasks = task
-            .story
-            .as_deref()
-            .map(|label| {
-                tasks
-                    .tasks
-                    .iter()
-                    .filter(|t| t.id != task.id && t.story.as_deref() == Some(label))
-                    .map(|t| DependencyContext {
-                        id: t.id.clone(),
-                        title: t.title.clone(),
-                        done: t.done,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        // A Convergence task's others are its phase's: each closes its own
+        // gap, so its tests leave theirs to them.
+        let convergence =
+            task.story.is_none() && self.is_convergence(task.phase.as_deref().unwrap_or_default());
+        let story_tasks = if task.story.is_some() || convergence {
+            tasks
+                .tasks
+                .iter()
+                .filter(|t| {
+                    t.id != task.id
+                        && match task.story.as_deref() {
+                            Some(label) => t.story.as_deref() == Some(label),
+                            None => t.story.is_none() && t.phase == task.phase,
+                        }
+                })
+                .map(|t| DependencyContext {
+                    id: t.id.clone(),
+                    title: t.title.clone(),
+                    done: t.done,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         Ok(Bundle {
             feature: feature.feature.name.clone(),

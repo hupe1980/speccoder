@@ -301,9 +301,14 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         });
         report["excerpt"] = json!(excerpt(&first));
     }
+    // Green runs what went red, and what already passed (a regression
+    // guard); tests that never failed on an assertion — taken out, or that
+    // do not collect or time out — would fail every attempt, whatever it
+    // does.
+    let kept = red || class == RedClass::Passed;
     PreparedAcceptance {
         report,
-        argv: Some(argv),
+        argv: kept.then_some(argv),
         more_argv: Vec::new(),
         red,
         red_class: Some(class),
@@ -396,7 +401,8 @@ pub(crate) fn refusal_words(why: &str) -> &'static str {
         "exists" => "already exists",
         "not_collected" => "is not where the runner collects tests",
         "changes_existing" => "changes existing lines",
-        "skip_marker" => "adds a section that skips a test",
+        "skip_marker" => "skips a test",
+        "redefines" => "defines an earlier test again",
         _ => "is not a new test file",
     }
 }
@@ -531,7 +537,20 @@ pub(crate) fn validate_with(
                         });
                         continue;
                     }
-                    Some(_) => {}
+                    Some(added) => {
+                        let again = crate::integrity::redefined(old, added);
+                        if !again.is_empty() {
+                            refused.push(RefusedFile {
+                                message: format!(
+                                    "`{rel}`: the added section defines {} again, replacing the earlier tasks' tests",
+                                    again.join(", ")
+                                ),
+                                path: rel,
+                                why: "redefines",
+                            });
+                            continue;
+                        }
+                    }
                 }
             }
             _ if project.join(&rel).exists() => {
@@ -543,6 +562,16 @@ pub(crate) fn validate_with(
                 continue;
             }
             _ => {
+                // A new file that skips a test (or expects it to fail) proves
+                // nothing it skips.
+                if crate::integrity::has_skip_marker(content) {
+                    refused.push(RefusedFile {
+                        message: format!("`{rel}` skips a test"),
+                        path: rel,
+                        why: "skip_marker",
+                    });
+                    continue;
+                }
                 // A new file the runner would never collect is no evidence.
                 if crate::collection::statically_refused(project, &rel, content).is_some() {
                     refused.push(RefusedFile {
@@ -1150,7 +1179,8 @@ pub(crate) fn share_of(i: &ShareInput<'_>) -> Option<speccoder_core::story::Shar
     use speccoder_core::story::{StoryTask, share};
     let tasks = i.tasks?;
     if i.story.is_none() && !i.whole_unit {
-        return None;
+        let t = tasks.tasks.iter().find(|t| t.id == i.task)?;
+        return outside_story(t, i.scenarios, i.unit_dir, i.judged);
     }
     let members: Vec<&speccoder_core::snapshot::Task> = tasks
         .tasks
@@ -1178,6 +1208,27 @@ pub(crate) fn share_of(i: &ShareInput<'_>) -> Option<speccoder_core::story::Shar
     let deferred =
         i.as_deferred || crate::acceptance_at::deferred(i.plane, i.feature, i.task).is_some();
     share(&story, i.task, &ids, &verified, deferred)
+}
+
+/// What judges a task outside any story (setup, polish, convergence):
+/// exactly the scenarios it names, never the author's pick of the whole
+/// spec — those the stories' checkpoints judge. `None` when it names none.
+fn outside_story(
+    t: &speccoder_core::snapshot::Task,
+    scenarios: &[speccoder_core::spec::ScenarioRef],
+    unit_dir: &str,
+    judged: &dyn Fn(&str) -> bool,
+) -> Option<speccoder_core::story::Share> {
+    if checks_only(t, unit_dir, judged) {
+        return None;
+    }
+    let links: Vec<String> = t
+        .scenarios
+        .iter()
+        .filter(|l| scenarios.iter().any(|s| &s.id == *l))
+        .cloned()
+        .collect();
+    (!links.is_empty()).then_some(speccoder_core::story::Share::Linked { scenarios: links })
 }
 
 /// Judged by the checks alone: planning work, or a step only a person
@@ -1244,6 +1295,14 @@ pub(crate) fn story_view(
         }
     }
     let mut shares = std::collections::BTreeMap::new();
+    if !whole_unit {
+        for t in v.tasks.tasks.iter().filter(|t| t.story.is_none()) {
+            let scenarios = v.format.scenarios(v.snapshot, &t.id);
+            if let Some(sh) = outside_story(t, &scenarios, v.unit_dir, &judged) {
+                shares.insert(t.id.clone(), sh);
+            }
+        }
+    }
     let mut stories = Vec::new();
     for label in labels {
         let members: Vec<&speccoder_core::snapshot::Task> = v

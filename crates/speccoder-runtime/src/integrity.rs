@@ -170,6 +170,38 @@ pub fn removed_tests(before: &str, after: &str) -> Vec<String> {
     gone
 }
 
+/// The names `added` defines again that `old` already defines — a test, or
+/// a top-level Python function or class: the later definition silently
+/// replaces the frozen one. In written order, once each.
+#[must_use]
+pub fn redefined(old: &str, added: &str) -> Vec<String> {
+    const TOP_LEVEL: &str = r"(?m)^(?:async\s+)?(?:def|class)\s+(\w+)";
+    let (Ok(tests), Ok(top)) = (Regex::new(TEST_NAMES), Regex::new(TOP_LEVEL)) else {
+        return Vec::new();
+    };
+    let names = |text: &str| -> Vec<String> {
+        tests
+            .captures_iter(text)
+            .chain(top.captures_iter(text))
+            .filter_map(|c| {
+                c.iter()
+                    .skip(1)
+                    .flatten()
+                    .next()
+                    .map(|m| m.as_str().to_owned())
+            })
+            .collect()
+    };
+    let before: BTreeSet<String> = names(old).into_iter().collect();
+    let mut out: Vec<String> = Vec::new();
+    for n in names(added) {
+        if before.contains(&n) && !out.contains(&n) {
+            out.push(n);
+        }
+    }
+    out
+}
+
 /// The section `new` adds at the end of `old`: `None` when `new` changes,
 /// removes or inserts among `old`'s lines, or adds nothing.
 #[must_use]
@@ -360,6 +392,14 @@ pub(crate) fn untick(bytes: &[u8]) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_section_that_defines_an_earlier_name_again_is_named() {
+        let old = "def _run_cli(x):\n    pass\n\ndef test_converts():\n    assert 1\n";
+        let added = "\ndef _run_cli(y):\n    pass\n\ndef test_converts():\n    assert 2\n\ndef test_new():\n    pass\n";
+        assert_eq!(redefined(old, added), ["test_converts", "_run_cli"]);
+        assert!(redefined(old, "\ndef test_other():\n    pass\n").is_empty());
+    }
+
     use super::*;
 
     fn change(path: &str, kind: ChangeKind) -> Change {

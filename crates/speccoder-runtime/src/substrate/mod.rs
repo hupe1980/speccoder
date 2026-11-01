@@ -1222,22 +1222,50 @@ pub fn said(completion: &agentplane::model::Completion) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join("\n\n"))
 }
 
+/// How the model ended its attempt, in its words: the final answer's
+/// summary (its text when the answer has no structure), or why it stopped
+/// (`report_blocked`). `None` for a turn that did neither.
+#[must_use]
+pub fn answered(completion: &agentplane::model::Completion) -> Option<String> {
+    if let Some(blocked) = completion
+        .tool_calls
+        .iter()
+        .find(|c| c.name == attempt::REPORT_BLOCKED)
+    {
+        let reason = blocked.arguments["reason"].as_str().unwrap_or_default();
+        return Some(match blocked.arguments["kind"].as_str() {
+            Some(kind) => format!("Blocked ({kind}): {reason}"),
+            None => format!("Blocked: {reason}"),
+        });
+    }
+    if !completion.tool_calls.is_empty() {
+        return None;
+    }
+    let summary = completion
+        .structured
+        .as_ref()
+        .and_then(|s| s["summary"].as_str());
+    let text = summary.unwrap_or(&completion.text).trim();
+    (!text.is_empty()).then(|| text.to_owned())
+}
+
 /// One model turn of an attempt, as the person is shown it afterwards: the
-/// model's summary of its reasoning and its words beside its calls — its
-/// account, a claim. Control characters escaped.
+/// model's summary of its reasoning, its words beside its calls and how it
+/// ended — its account, a claim. Control characters escaped.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct AccountTurn {
     /// The turn (1-based) within the attempt.
     pub turn: u32,
     /// Its reasoning summary, when one was asked for and given.
     pub reasoning: Option<String>,
-    /// Its words beside its calls (a turn without calls is the final
-    /// answer, reported as such).
+    /// Its words beside its calls.
     pub said: Option<String>,
+    /// Its closing words: the final answer's summary, or why it stopped.
+    pub answer: Option<String>,
 }
 
-/// The model's account of `run`, turn by turn: every turn that reasoned or
-/// said something, in order.
+/// The model's account of `run`, turn by turn: every turn that reasoned,
+/// said something or ended the attempt, in order.
 ///
 /// # Errors
 ///
@@ -1262,15 +1290,56 @@ pub async fn account(dir: &Path, run: &str) -> Result<Vec<AccountTurn>, PlaneErr
         .zip(1u32..)
         .filter_map(|(t, turn)| {
             let c = t.completion?;
-            let said = said(&c).as_deref().and_then(text);
+            // A final answer's text is its structure: its summary stands for
+            // it, never the raw JSON beside it as words.
+            let said = if c.tool_calls.is_empty() {
+                c.commentary.as_deref().and_then(text)
+            } else {
+                said(&c).as_deref().and_then(text)
+            };
             let reasoning = c.reasoning.as_deref().and_then(text);
-            (said.is_some() || reasoning.is_some()).then_some(AccountTurn {
+            let answer = answered(&c).as_deref().and_then(text);
+            (said.is_some() || reasoning.is_some() || answer.is_some()).then_some(AccountTurn {
                 turn,
                 reasoning,
                 said,
+                answer,
             })
         })
         .collect())
+}
+
+/// What `run`'s model turns used, summed from the journal: the usage of an
+/// attempt the plane stopped before it could report its own. `None` when
+/// no turn completed.
+///
+/// # Errors
+///
+/// The journal cannot be read.
+pub async fn spent(dir: &Path, run: &str) -> Result<Option<Value>, PlaneError> {
+    let Ok(id) = agentplane::core::RunId::parse(run) else {
+        return Ok(None);
+    };
+    let Some(store) = open_reader(dir)? else {
+        return Ok(None);
+    };
+    let history = store
+        .read(id, 1)
+        .await
+        .map_err(|e| PlaneError(e.to_string()))?;
+    let used: Vec<agentplane::model::Usage> = agentplane::model::turns(&history)
+        .into_iter()
+        .filter_map(|t| t.completion.map(|c| c.usage))
+        .collect();
+    Ok((!used.is_empty()).then(|| {
+        let sum = |f: fn(&agentplane::model::Usage) -> u64| used.iter().map(f).sum::<u64>();
+        serde_json::json!({
+            "input_tokens": sum(|u| u.input_tokens),
+            "output_tokens": sum(|u| u.output_tokens),
+            "cache_read_tokens": sum(|u| u.cache_read_tokens),
+            "cache_write_tokens": sum(|u| u.cache_write_tokens),
+        })
+    }))
 }
 
 /// The tool servers when no worktree is bound: every call is refused.
@@ -1309,6 +1378,40 @@ mod tests {
             )),
             "AGENTPLANE_VERSION is not the workspace's pin"
         );
+    }
+
+    #[test]
+    fn an_attempt_ends_in_its_answer_s_summary_or_why_it_stopped() {
+        use agentplane::model::{Completion, ToolCall};
+        let report = serde_json::json!({ "summary": "Added the parser.", "status": "done" });
+        let done = Completion {
+            text: report.to_string(),
+            structured: Some(report),
+            ..Completion::default()
+        };
+        assert_eq!(answered(&done).as_deref(), Some("Added the parser."));
+        let plain = Completion {
+            text: " All done. ".to_owned(),
+            ..Completion::default()
+        };
+        assert_eq!(answered(&plain).as_deref(), Some("All done."));
+        let call = |name: &str, arguments: Value| Completion {
+            tool_calls: vec![ToolCall {
+                id: "c".to_owned(),
+                name: name.to_owned(),
+                arguments,
+            }],
+            ..Completion::default()
+        };
+        let blocked = call(
+            attempt::REPORT_BLOCKED,
+            serde_json::json!({ "kind": "wrong_test", "evidence": "tests/a.py", "reason": "it asserts the old format" }),
+        );
+        assert_eq!(
+            answered(&blocked).as_deref(),
+            Some("Blocked (wrong_test): it asserts the old format")
+        );
+        assert_eq!(answered(&call("read_file", serde_json::json!({}))), None);
     }
 
     #[test]

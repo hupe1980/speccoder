@@ -3836,8 +3836,11 @@ fn the_model_s_account_is_live_and_kept() {
     let kept = rt
         .block_on(speccoder_runtime::substrate::account(&plane, &run_id))
         .unwrap();
-    assert_eq!(kept.len(), 1, "{kept:?}");
+    assert_eq!(kept.len(), 2, "{kept:?}");
     assert_eq!(kept[0].turn, 1);
+    // The attempt ends in its answer's summary, never its JSON.
+    assert_eq!(kept[1].answer.as_deref(), Some("added login"));
+    assert_eq!(kept[1].said, None);
     assert!(
         kept[0]
             .said

@@ -687,8 +687,14 @@ impl Skill for Acceptance {
                     let several = input["bundle"]["story_tasks"]
                         .as_array()
                         .is_some_and(|t| !t.is_empty());
-                    text.push_str(if several {
+                    let story = !input["bundle"]["task"]["story"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .is_empty();
+                    text.push_str(if several && story {
                         "\n\n# Scenarios this task is judged by (cite these IDs; the story's others are judged at its other tasks)\n"
+                    } else if several {
+                        "\n\n# Scenarios (cite only those this task's own gap concerns; the phase's other tasks close theirs)\n"
                     } else {
                         "\n\n# Scenarios (cite these IDs)\n"
                     });
