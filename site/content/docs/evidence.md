@@ -40,7 +40,7 @@ A tick is proven against the spec as it was at the task's commit. When a require
 
 ## What counts as red
 
-Acceptance tests are evidence only if they failed before the task's work existed. speccoder reads the runner's report (JUnit, or the summary of libtest, nextest, pytest, jest, vitest and `go test`):
+Acceptance tests are evidence only if they failed before the story's work existed. speccoder reads the runner's report (JUnit, or the summary of libtest, nextest, pytest, jest, vitest and `go test`):
 
 | Red | Means |
 |---|---|
@@ -77,14 +77,16 @@ Acceptance and held-out tests count at green only when the green run collected a
 
 ## What judges each task
 
-In a story of several tasks, code decides which scenarios judge each one — never the test author's choice alone:
+A story's acceptance is written once — its **oracle** — and every task of the story is judged by the progress it makes on it.
 
-- **Linked**: a task that names its scenarios in its line, `(scenarios US3-1, US3-2)` or `US3/AC2` as Spec Kit's converge cites them, is judged by exactly those (ids: the story's number and the scenario's position in it). A link to no scenario of the story is ignored and reported (`PLAN-SCENARIO-UNKNOWN`). A task outside any story (a Convergence gap) that cites a scenario is judged by it alone, and its test author sees the phase's other tasks.
-- **Checkpoint**: the story's last open task that is code — not documentation, not a step only you take — is judged by every scenario no earlier tick verified, and with two or more of them by one test of them together. Whatever order the tasks run in, the one that closes the story judges what is left. A verified tick records its scenarios with a digest of each one's wording (`Scenarios: US3-1@3f9a0c1d2e4b`); reworded since, a scenario counts as not verified.
-- **Deferred**: when a task's tests need later tasks of its story — its attempt stopped with them red — Needs You, the inspector and the stop offer **Judge at T021** (`speccoder task defer T018`). The task is then judged by its regression checks (`deferred_to_checkpoint`) and its scenarios move to the checkpoint. A person's decision, kept in speccoder's state; `--revoke` takes it back.
-- Otherwise the test author chooses among the story's scenarios, seeing the story's other tasks; the checkpoint judges what it leaves.
+- **The oracle.** Before a story's first code task implements anything, one author call writes a test for every scenario of the story, through the interface its *Independent Test* names (a command, an API, a page), each scenario first stated as a contract (`a table on stdin → its CSV on stdout`). Tests you [froze at review](@/docs/planning.md#review-the-tests) are the oracle instead, with no author call.
+- **Kept tests.** Each test runs alone: red or already green, it is kept; one that does not build or collect, or that tests several scenarios at once, is asked for once more, then left out (the scenario is *untested*): each scenario turns green on its own. The tests are committed before any code (`speccoder: oracle US1`) and frozen.
+- **Progress.** A task ticks `verified` for the scenarios it turned green (`Scenarios: US1-1@3f9a0c1d2e4b`, a digest of each one's wording), `regression_only` (`in_progress`) when it turned none and broke none. A scenario green before it and red after it fails the verdict. Scenarios that need later tasks may stay red, and a check never fails on them: the oracle's tests are the oracle's to judge.
+- **Linked.** A task that names its scenarios — `(scenarios US3-1, US3-2)`, or `US3/AC2` as Spec Kit's converge cites them — must leave exactly those green. A link to no scenario of the story is ignored and reported (`PLAN-SCENARIO-UNKNOWN`).
+- **Checkpoint.** The story's last open code task must leave every scenario green, and the story's held-out tests passing. Otherwise it stops (`STORY-OPEN`), naming each red scenario with its contract: leave a note (`task nudge`) and run again, or — when a test asserts what the spec does not say — `speccoder task rule T021 --tests-wrong --scenario US3-2 --reason "…"`; the next run writes that scenario's tests again, and nothing else (`Oracle-Amends: US3-2`). A scenario its author declared untestable is shown, and never blocks the story.
+- **Outside a story.** A convergence gap writes its own test, cited to the scenario it closes; a bug is judged by its reproductions.
 
-`speccoder report` and the board show each story's scenarios — `US3 ●○○ 1 of 3 verified · T021 judges the rest` — and each open task what judges it. A story whose every task is documentation or yours has no checkpoint (`PLAN-STORY-UNJUDGED`); a finished story that left a scenario unjudged keeps its strip, saying so.
+`speccoder report` and the board show each story on its oracle — `US1 ●●○ 2 of 3 green · T008 turned US1-1, US1-2 · T010 closes it` — and each open task what judges it. A story whose every task is documentation or yours has no checkpoint (`PLAN-STORY-UNJUDGED`).
 
 ## Why a tick is regression-only
 
@@ -99,19 +101,20 @@ Every `regression_only` tick carries one reason, decided by code, recorded in th
 | `author_wrote_none` | The test author wrote no test |
 | `tests_not_collected` | The acceptance command collected no test |
 | `not_red` | The acceptance tests did not fail first (build error, timeout, flaky, …) |
-| `already_passing` | They passed before the attempt — with the task whose tick made them pass |
+| `already_passing` | Its story's scenarios were green before any of the story's work (built earlier: a Setup task, before the feature) |
 | `planning_work` | A planning task: design documents, not code ([who does a task](@/docs/running.md#who-does-a-task)) |
-| `story_verified` | Its story's checkpoint, every scenario already verified by earlier ticks |
-| `deferred_to_checkpoint` | You moved its acceptance to its story's checkpoint ([what judges each task](#what-judges-each-task)) |
+| `in_progress` | A task of a story that turned none of its scenarios green and broke none |
+| `story_verified` | Its story's checkpoint, every scenario turned green by earlier ticks |
+| `regression_unchecked` | The test check failed before and after without per-test results, so a regression could not be told apart from the story's red tests — set `junit` on the check |
 | `unrecorded` | Ticked by an earlier speccoder: the reason was not recorded |
 
-For `already_passing`, speccoder runs the acceptance tests on the feature's earlier ticks (bisected, at most five sandboxed runs, each in a scratch worktree of its own, under the checks' deadline) to find which task implemented the behaviour, or that it passed before the feature. For a section added to a story's file, only that section's tests run (Rust, pytest and Go; for others no answer is given). Any run that cannot say — a worktree that cannot be made, a timeout, output that cannot be read — ends the search with "could not be determined", never a task's name. A feature with at least three ticks of which more than half are regression-only gets one **Little Was Verified** item in Needs You, with the reasons by count and the fix, until its branch is pushed.
+A feature with at least three ticks of which more than half are regression-only for a reason other than progress (`in_progress`, `story_verified`, `planning_work`) gets one **Little Was Verified** item in Needs You, with the reasons by count and the fix, until its branch is pushed.
 
 ## Held-out tests
 
-Frozen visible tests stop an implementer from editing the tests, not from tailoring code to them. So after the visible tests are red, a second author call writes **held-out** tests for the same scenarios, with other inputs and the edge cases the spec states. They must be red too.
+Frozen visible tests stop an implementer from editing the tests, not from tailoring code to them. So when a story's oracle is written, a second author call writes **held-out** tests for the same scenarios, with other inputs and the edge cases the spec states. They must be red too.
 
-After an attempt passes the visible checks, speccoder writes the held-out tests over the final tree, runs them in the sandbox and restores the tree. `verified` needs both. A failing held-out test fails the verdict; the retry is told only the scenario (`held-out acceptance failed: US1-2 ("Given …")`), never a path, test name, input or output.
+At the story's checkpoint, after an attempt passes the visible checks, speccoder writes the held-out tests over the final tree, runs them in the sandbox and restores the tree. Closing the story needs both. (A convergence gap and a bug have held-out tests of their own.) A failing held-out test fails the verdict; the retry is told only the scenario (`held-out acceptance failed: US1-2 ("Given …")`), never a path, test name, input or output.
 
 | Outcome | Means |
 |---|---|
@@ -120,7 +123,7 @@ After an attempt passes the visible checks, speccoder writes the held-out tests 
 | `absent` | None was kept: not generated, no visible tests to vary (`no_visible_tests`), or every file discarded (`not_red`, `unknown_scenario`, `path`, `command`, `limit`, `collision`). The commit says `Held-Out: absent=<reason>`; the verdict rests on the visible tests |
 | `tampered`, `leak_suspected` | The stored set changed, or the attempt contains a literal only the held-out tests hold: stopped for a person, saved, not ticked |
 
-A story's checkpoint with two or more scenarios left also gets a composition test that exercises them together. `[acceptance] held_out = false` turns held-out tests off; the commit says `Held-Out: off`.
+`[acceptance] held_out = false` turns held-out tests off; the checkpoint's commit says `Held-Out: off`.
 
 ### Where they are kept
 
@@ -128,7 +131,7 @@ Held-out tests never enter the worktree (except overlaid while a judge run check
 
 | Path | Holds |
 |---|---|
-| `held-out/<feature>/<task>/` | A task's set: `manifest.json` and `files/…` |
+| `held-out/<feature>/req-<story>/` | A story's sealed set: `manifest.json` and `files/…` (a convergence gap's: `held-out/<feature>/<task>/`) |
 | `held-out.git` | A private bare repository (borrowing the project's objects) where publications are built |
 
 **Publication.** `refs/speccoder/held-out/<feature>` carries exactly the sets whose manifest digest a task closed on the pushed head names in its signed evidence (or `Held-Out:` trailer); sets of open tasks stay local. A feature run builds it when every task is ticked; [`speccoder pr`](@/docs/github.md#its-pull-request) builds and pushes it from the private store, never forced, writing nothing into the project's repository. Each publication is parented on the branch and the previous one, so the ref only grows.
@@ -155,6 +158,8 @@ When they apply:
 
 | Trailer | Says |
 |---|---|
+| `Scenarios:` | The scenarios the task turned green, each with a digest of its wording |
+| `Regression-Only:` | Why a regression-only tick has no red → green evidence (`in_progress`, …) |
 | `Held-Out:` | The [held-out tests](#held-out-tests) |
 | `Acceptance-Strength-Visible:` | Strength of the visible tests alone, with held-out tests on |
 | `Acceptance:` | Tests decided before the run: `<source> manifest=sha256:… approval=sha256:… wording=sha256:… by=…` (see below) |
@@ -163,6 +168,17 @@ When they apply:
 | `Scope-Outside:` | Changed files the task line did not name: reported, never a failure |
 | `Checklists: overridden` | The run was started with `--ignore-checklists` |
 | `Bug:` | A [bug fix](@/docs/bugs.md): `<outcome> (<home>) triad=sha256:…` |
+
+A story's oracle is its own commit, `speccoder: oracle US1`, before the story's first code:
+
+| Trailer | Says |
+|---|---|
+| `Oracle:` | The story |
+| `Oracle-Scenarios:` | Each scenario's state when written: `US1-1=red, US1-2=green, US1-3=untested` |
+| `Oracle-Tests:` | How many tests it holds |
+| `Oracle-By:` | Who decided them: `speccoder run`, or the person who froze them at review |
+| `Oracle-Untestable:` | Scenarios its author could not test, with why |
+| `Oracle-Amends:` | The scenarios a ruling had written again |
 
 Each tick commit also carries signed statements of the same evidence in a git note ([attestations](@/docs/attestations.md)).
 

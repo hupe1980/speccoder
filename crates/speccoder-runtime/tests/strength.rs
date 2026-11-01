@@ -93,9 +93,22 @@ fn fake() -> (Arc<FakeProvider>, Arc<dyn ModelProvider>) {
     (f, d)
 }
 
+/// The story's oracle: one test of US1-1, by its own command (which names
+/// its file), and what it must hold.
+fn oracle(path: &str, content: &str, pattern: &str) -> Value {
+    let argv = json!(["./accept.sh", "--", pattern, path]);
+    json!({
+        "files": [{ "path": path, "content": content, "scenarios": ["US1-1"], "argv": argv }],
+        "argv": argv,
+        "notes": [],
+        "expectations": [{ "scenario": "US1-1", "given": "a user", "expect": "login exists and does not panic" }],
+        "untestable": [],
+    })
+}
+
 /// The visible set: only "`fn login` exists".
 fn thin() -> Value {
-    json!({ "files": [{ "path": "tests/acceptance_login.txt", "content": "login exists\n", "scenarios": [] }], "argv": ["./accept.sh", "--", "fn login"], "notes": [] })
+    oracle("tests/acceptance_login.txt", "login exists\n", "fn login")
 }
 
 fn implement(f: &FakeProvider) {
@@ -317,7 +330,11 @@ fn fresh_acceptance_sets_a_held_attempt_aside() {
     assert_eq!(report(&res).attempt_status, "over_strict");
     // Fresh tests that allow either name, a fresh attempt. The variants are
     // read back: the same spec and change get the same ones.
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_login.txt", "content": "login or sign_in exists\n", "scenarios": [] }], "argv": ["./accept.sh", "--", "pub fn login\npub fn sign_in"], "notes": [] }));
+    f.will_structure(oracle(
+        "tests/acceptance_login.txt",
+        "login or sign_in exists\n",
+        "pub fn login\npub fn sign_in",
+    ));
     implement(&f);
     let options = speccoder_runtime::RunOptions {
         fresh_acceptance: true,
@@ -437,6 +454,12 @@ fn held_out_tests_count_in_the_combined_strength() {
         .unwrap()
         .replace("held_out = false\n", "");
     fs::write(r.path().join("speccoder.toml"), toml).unwrap();
+    // T005 closes its story: the story's held-out set runs at its checkpoint.
+    fs::write(
+        r.path().join("specs/001-graph/tasks.md"),
+        "# Tasks: Graph\n\n## Phase 3: User Story 1 - Login (Priority: P1)\n\n- [ ] T005 [US1] Implement login in src/lib.rs\n",
+    )
+    .unwrap();
     git(r.path(), &["commit", "-qam", "held-out on"]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();

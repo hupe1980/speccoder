@@ -635,14 +635,6 @@ pub enum TaskAction {
         #[arg(long)]
         revoke: bool,
     },
-    /// Judge this task by its regression checks and its story's scenarios at the story's checkpoint (a decision, not a plan edit).
-    Defer {
-        /// The task, e.g. T018.
-        task: String,
-        /// Take the decision back.
-        #[arg(long)]
-        revoke: bool,
-    },
     /// Approve the call the task stopped for (that object for the rest of the task, by default).
     Approve {
         /// The task, e.g. T005; several decide each one's waiting call on its own.
@@ -733,13 +725,23 @@ pub enum TaskAction {
         #[arg(long, conflicts_with = "note")]
         clear: bool,
     },
-    /// Rule on a held attempt whose tests reject an alternative: the tests are right.
+    /// Rule on a task's tests: right (a held alternative is not allowed) or wrong (one scenario of the oracle).
     Rule {
         /// The task, e.g. T005.
         task: String,
         /// The tests are right: the flagged alternative is not what the spec allows.
-        #[arg(long, required = true)]
+        #[arg(
+            long,
+            required_unless_present = "tests_wrong",
+            conflicts_with = "tests_wrong"
+        )]
         tests_right: bool,
+        /// A scenario's oracle tests are wrong: the next run writes them again (with --scenario).
+        #[arg(long, requires = "scenario")]
+        tests_wrong: bool,
+        /// The scenario whose tests are wrong, e.g. US3-2.
+        #[arg(long, value_name = "ID")]
+        scenario: Option<String>,
         /// Why (recorded with the tick).
         #[arg(long)]
         reason: String,

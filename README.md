@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Spec-driven coding, decided by evidence.</b><br>
-  Implements <a href="https://github.com/github/spec-kit">Spec Kit</a> features and <a href="https://github.com/Fission-AI/OpenSpec">OpenSpec</a> changes task by task — and ticks a task only when tests derived from your spec go from red to green, never on the model's word.
+  Implements <a href="https://github.com/github/spec-kit">Spec Kit</a> features and <a href="https://github.com/Fission-AI/OpenSpec">OpenSpec</a> changes task by task — and calls a task verified only when tests derived from your spec go from red to green, never on the model's word.
 </p>
 
 <p align="center">
@@ -30,12 +30,12 @@
 
 Coding agents are good at writing code and too good at declaring victory. speccoder separates the two: a model proposes, and code decides.
 
-- 🧪 **Evidence decides.** The spec's acceptance examples become tests that must fail before the attempt and pass after it; your checks must not regress; the diff is audited for weakened tests; and plausible wrong versions of the change must fail the tests (the acceptance strength on every tick).
-- 🔒 **Isolated and sandboxed.** Work happens on `speccoder/<feature>` in a worktree of its own. Every command runs in an OS sandbox (Seatbelt on macOS, Landlock and seccomp on Linux): writes only to the worktree, no credentials, no network beyond loopback unless you allow it.
+- 🧪 **Evidence decides.** The spec's acceptance examples become one oracle per story; a task is verified by the scenarios it turns from red to green; your checks must not regress; the diff is audited for weakened tests; and plausible wrong versions of the change must fail the tests (the acceptance strength on every tick).
+- 🔒 **Isolated and sandboxed.** Work happens on `speccoder/<feature>` in a worktree of its own. Every command runs in an OS sandbox (Seatbelt on macOS, Landlock and seccomp on Linux): writes only to the worktree and package caches, no credentials, no network beyond loopback unless you allow it.
 - 🚦 **Every call governed.** Each tool call is allowed, sent to you, or denied before it runs. An approval covers exactly what you saw — that file, that command, that tool — and ends with the run. Every decision records who made it.
 - 💾 **Durable and replayable.** Every model and tool call is journaled. A killed run resumes without repeating finished calls; a recorded run replays offline.
 - 🧾 **Proof a maintainer can check.** Every tick leaves signed in-toto statements in git. `speccoder attest verify --branch` (no model, no network) checks each `[X]` against them, and its GitHub Action posts the result as the `speccoder / evidence` check ([proof in pull requests](https://hupe1980.github.io/speccoder/docs/verifier/)).
-- 🤖 **Your model, or your agent.** Anthropic, OpenAI, Amazon Bedrock, any OpenAI-compatible server (Ollama, vLLM, …), or an agent — GitHub Copilot, OpenCode, Claude Code, Codex, Gemini CLI — making the attempts over ACP, every call it makes decided by speccoder.
+- 🤖 **Your model, or your agent.** Anthropic, OpenAI, Amazon Bedrock, any OpenAI-compatible server (Ollama, vLLM, …), or an agent — GitHub Copilot, OpenCode, Claude Code, Codex, Gemini CLI — making the attempts over ACP, every call it routes through speccoder decided by it (its own tools run as you).
 
 ## 🚀 Quickstart
 
@@ -107,9 +107,9 @@ Then, as you need them:
 
 1. 🟢 **Ready** — its dependencies in `tasks.md` are ticked.
 2. 📏 **Baseline** — your checks run on the untouched worktree, so existing failures are not blamed on the change.
-3. 🔴 **Red** — a separate model call with no tools writes acceptance tests from the spec. They must fail now, and the implementer cannot change them.
+3. 🔴 **Red** — before a story's first code task, a separate model call with no tools writes the story's acceptance tests from the spec, through the product, and commits them: its oracle. The implementer cannot change them.
 4. 🛠️ **Attempt** — the model works in the worktree; every call is classified before it runs.
-5. ⚖️ **Judgement** — `verified` when the acceptance tests went red → green and nothing regressed; `regression_only` when nothing task-specific was shown, with the reason why; `failed` otherwise — a test file the attempt wrote that the runner never collected fails it too. A verified task's tests then meet wrong variants of the change: how many they reject is its acceptance strength.
+5. ⚖️ **Judgement** — `verified` when the task turns scenarios of its story red → green and nothing regresses; `regression_only` (with the reason) when it turns none and breaks none; `failed` otherwise. The story's last task must leave every scenario green. A test file the runner never collected fails the verdict. A verified task's tests then meet wrong variants of the change: how many they reject is its acceptance strength.
 6. 🏁 **Outcome** — a verified task is ticked and committed by speccoder. A failed one is retried once with the verifier's facts. Anything else is saved under `refs/speccoder/attempts/…`, undone, and handed to a person.
 
 🐞 **A bug** (`speccoder bug`) must first be reproduced: one test per expected behaviour that fails by an assertion, confirmed by you. The fix is `verified` only if undoing it makes a reproduction fail again; a bug that cannot be reproduced comes back to you ([bug fixes](https://hupe1980.github.io/speccoder/docs/bugs/)).

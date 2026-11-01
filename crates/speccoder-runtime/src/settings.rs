@@ -385,13 +385,13 @@ pub const CATALOGUE: &[Section] = &[
                 "generate",
                 Kind::Bool,
                 Some("true"),
-                "Derive acceptance tests from the spec before each attempt",
+                "Derive acceptance tests from the spec: a story's oracle before its first code task, a convergence gap's own test",
             ),
             k(
                 "held_out",
                 Kind::Bool,
                 Some("true"),
-                "Also write held-out tests the implementer never sees; verified needs them to pass",
+                "Also write held-out tests the implementer never sees; a story's last code task needs them to pass",
             ),
             k(
                 "strength",

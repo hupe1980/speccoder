@@ -197,6 +197,10 @@ pub struct HeldOutSummary {
     pub manifest_sha256: Option<String>,
     /// Why none was kept (`not_red`, `none_generated`, …).
     pub reason: Option<String>,
+    /// Why each discarded test was (`not_red`, `unknown_scenario`, …);
+    /// never a held-out path.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub discarded: Vec<String>,
 }
 
 /// Where a requirement's oracle is.
@@ -782,6 +786,7 @@ mod tests {
                 count: 2,
                 manifest_sha256: None,
                 reason: None,
+                discarded: Vec::new(),
             },
             strength_target: Some(80),
             calls: 2,

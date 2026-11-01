@@ -185,6 +185,7 @@ Rules — speccoder checks them after you finish, from the diff:\n\
             out.push_str(&format!("\n# {title}\n\n{}\n", s(key)));
         }
     }
+    out.push_str(&crate::substrate::propose::oracle_text(bundle));
     if let Some(d) = digest.filter(|d| !d.is_null()) {
         out.push_str(&format!(
             "\n# Previous attempt (failed; its changes were undone)\n\nThe verifier's facts:\n\n```json\n{}\n```\n",

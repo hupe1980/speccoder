@@ -135,7 +135,7 @@ mod tests {
 
     fn task(id: &str, state: &str, last: Option<&str>) -> TaskStatus {
         TaskStatus {
-            share: None,
+            judged: None,
             lane: speccoder_core::lane::Lane::default(),
             id: id.to_owned(),
             title: "Parse: a, b\nc %".to_owned(),
@@ -151,7 +151,7 @@ mod tests {
                 reason: "the model's words".to_owned(),
                 run_id: None,
                 reference: "refs/x".to_owned(),
-                defer_to: None,
+                story_open: Vec::new(),
             }),
             note: None,
             attestation: None,

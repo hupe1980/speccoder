@@ -858,6 +858,13 @@
             "string",
             "null"
           ]
+        },
+        "discarded": {
+          "description": "Why each discarded test was (`not_red`, `unknown_scenario`, …);\nnever a held-out path.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [

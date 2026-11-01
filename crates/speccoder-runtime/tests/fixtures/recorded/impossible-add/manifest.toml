@@ -1,8 +1,8 @@
 case = "impossible-add"
-run_ids = ["run_01M6A9ZPYD4R9RGSZBGNWZC34M"]
+run_ids = ["run_01M6C5SDTW8NWGFTQ804DFYX7M"]
 provider = "openai"
 model = "gpt-5.4-mini"
 agentplane = "0.57.0"
-speccoder = "0.7.0"
-recorded_at = "2026-11-01T01:01:14Z"
+speccoder = "0.7.2"
+recorded_at = "2026-11-01T18:26:21Z"
 expect = "reproduced"

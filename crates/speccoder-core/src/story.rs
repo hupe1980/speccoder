@@ -1,81 +1,181 @@
-//! What judges a task of a story — decided by code, never by a test
-//! author's choice. A task is judged by the scenarios it names; the story's
-//! checkpoint (its last task that is not planning work) by every scenario
-//! no earlier tick verified, together; a task a person deferred by its
-//! regression checks, its scenarios going to the checkpoint; any other by
-//! the story's scenarios, the author choosing. However the earlier tasks
-//! went, every scenario of a finished story was judged.
+//! What judges a task of a story — decided by code from the story's oracle,
+//! never by a test author's choice. A story's acceptance is written once,
+//! through the product, before its first code task (the oracle); every task
+//! of the story is then judged by the progress it makes on it: the
+//! scenarios it turns green. A task naming scenarios must leave them green;
+//! the story's checkpoint (its last open code task) must leave every one
+//! green. A tick claims exactly what it turned, so no scenario is claimed
+//! twice and none is left unproven when the story closes.
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-/// What judges one task.
+/// A scenario's state on a tree: green when every oracle test citing it
+/// passes, red when one fails, untested when no kept test cites it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ScenarioState {
+    /// Every test citing it passes.
+    Green,
+    /// A test citing it fails.
+    Red,
+    /// No kept test cites it.
+    Untested,
+}
+
+/// What an attempt did to its story, by the oracle's states before and
+/// after it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum Share {
-    /// The scenarios the task names.
+pub enum Progress {
+    /// It turned these scenarios green (in the story's order).
+    Verified {
+        /// Red before, green after.
+        turned: Vec<String>,
+    },
+    /// It turned none and broke none; the story goes on.
+    InProgress,
+    /// The checkpoint, every scenario green before it already.
+    Closed,
+    /// Scenarios green before it are red after it.
+    Regressed {
+        /// Green before, not green after.
+        scenarios: Vec<String>,
+    },
+    /// Scenarios the task names are not green after it.
+    LinksOpen {
+        /// Its links still not green.
+        scenarios: Vec<String>,
+    },
+    /// The checkpoint left scenarios not green.
+    StoryOpen {
+        /// Not green after it.
+        scenarios: Vec<String>,
+    },
+}
+
+impl Progress {
+    /// Whether the attempt may tick.
+    #[must_use]
+    pub const fn passes(&self) -> bool {
+        matches!(
+            self,
+            Self::Verified { .. } | Self::InProgress | Self::Closed
+        )
+    }
+}
+
+/// What an attempt did, from the oracle's states `before` and `after` it
+/// (keyed by scenario id, iterated in the story's order by the caller's
+/// `order`), the task's `links`, and whether it is the story's checkpoint.
+/// A regression fails first; then the checkpoint's whole story — except
+/// the scenarios its author declared `untestable`, shown, never blocking —
+/// then the task's links.
+#[must_use]
+pub fn progress(
+    order: &[String],
+    before: &BTreeMap<String, ScenarioState>,
+    after: &BTreeMap<String, ScenarioState>,
+    links: &[String],
+    checkpoint: bool,
+    untestable: &[String],
+) -> Progress {
+    let state = |m: &BTreeMap<String, ScenarioState>, id: &str| {
+        m.get(id).copied().unwrap_or(ScenarioState::Untested)
+    };
+    let green =
+        |m: &BTreeMap<String, ScenarioState>, id: &str| state(m, id) == ScenarioState::Green;
+    let pick = |f: &dyn Fn(&str) -> bool| -> Vec<String> {
+        order.iter().filter(|id| f(id)).cloned().collect()
+    };
+    let regressed = pick(&|id| green(before, id) && !green(after, id));
+    if !regressed.is_empty() {
+        return Progress::Regressed {
+            scenarios: regressed,
+        };
+    }
+    if checkpoint {
+        let open = pick(&|id| !green(after, id) && !untestable.iter().any(|u| u == id));
+        if !open.is_empty() {
+            return Progress::StoryOpen { scenarios: open };
+        }
+    }
+    let open = pick(&|id| links.iter().any(|l| l == id) && !green(after, id));
+    if !open.is_empty() {
+        return Progress::LinksOpen { scenarios: open };
+    }
+    let turned = pick(&|id| !green(before, id) && green(after, id));
+    match (turned.is_empty(), checkpoint) {
+        (false, _) => Progress::Verified { turned },
+        (true, true) => Progress::Closed,
+        (true, false) => Progress::InProgress,
+    }
+}
+
+/// What judges one open task of a story.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Judged {
+    /// The progress it makes on the story's oracle.
+    Progress,
+    /// The scenarios it names, which it must leave green.
     Linked {
         /// Their ids.
         scenarios: Vec<String>,
     },
-    /// The story's checkpoint: every scenario no earlier tick verified,
-    /// with its links.
-    Checkpoint {
-        /// Their ids, in the story's order.
-        scenarios: Vec<String>,
-        /// Also one test of these scenarios together (two or more left).
-        composition: bool,
-    },
-    /// The story's scenarios; the test author chooses.
-    Authored {
-        /// Their ids.
-        scenarios: Vec<String>,
-        /// The story's checkpoint, where what this task leaves is judged.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        checkpoint: Option<String>,
-    },
-    /// A person moved its acceptance to the checkpoint.
-    Deferred {
-        /// The task that judges its scenarios.
-        checkpoint: String,
-    },
+    /// The story's checkpoint: every scenario must be green after it.
+    Checkpoint,
 }
 
-impl Share {
-    /// The scenarios a test author is given (none when deferred).
-    #[must_use]
-    pub fn scenarios(&self) -> &[String] {
-        match self {
-            Self::Linked { scenarios }
-            | Self::Checkpoint { scenarios, .. }
-            | Self::Authored { scenarios, .. } => scenarios,
-            Self::Deferred { .. } => &[],
-        }
-    }
-
-    /// `linked`, `checkpoint`, `authored` or `deferred`.
+impl Judged {
+    /// `progress`, `linked` or `checkpoint`.
     #[must_use]
     pub const fn kind(&self) -> &'static str {
         match self {
+            Self::Progress => "progress",
             Self::Linked { .. } => "linked",
-            Self::Checkpoint { .. } => "checkpoint",
-            Self::Authored { .. } => "authored",
-            Self::Deferred { .. } => "deferred",
+            Self::Checkpoint => "checkpoint",
+        }
+    }
+
+    /// The scenarios it must leave green: its links (none otherwise).
+    #[must_use]
+    pub fn links(&self) -> &[String] {
+        match self {
+            Self::Linked { scenarios } => scenarios,
+            _ => &[],
         }
     }
 }
 
-/// A story's scenarios, each verified by a tick or left for its checkpoint.
+/// A story's scenarios as its oracle and ticks show them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct StoryScenarios {
     /// The story (`US3`; for OpenSpec the change).
     pub story: String,
     /// Its scenarios in order.
     pub scenarios: Vec<ScenarioMark>,
-    /// The task that judges what is left (none: every task is planning work).
+    /// The task that closes it (none: every open task is planning work, or
+    /// all are done).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checkpoint: Option<String>,
+    /// The story's oracle, once written.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oracle: Option<OracleMark>,
+    /// Every task done and every scenario green: the spec shows it, the
+    /// report and the board leave it out.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub proven: bool,
+}
+
+/// Where a story's oracle was written, and who froze it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct OracleMark {
+    /// The `Oracle:` commit (short).
+    pub commit: String,
+    /// `speccoder run`, or the person who approved it at review.
+    pub decided_by: String,
 }
 
 /// One scenario of a story.
@@ -83,9 +183,14 @@ pub struct StoryScenarios {
 pub struct ScenarioMark {
     /// Its id (`US3-1`).
     pub id: String,
-    /// The task whose tick verified it, worded as it is now.
+    /// Its state at the branch's tip (red before the oracle exists).
+    pub state: ScenarioState,
+    /// The task whose tick turned it green, worded as it is now.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub verified_by: Option<String>,
+    pub turned_by: Option<String>,
+    /// What must hold, as the oracle states it (given → must hold).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contract: Option<String>,
 }
 
 /// One task of the story, in document order.
@@ -102,9 +207,9 @@ pub struct StoryTask<'a> {
     pub links: &'a [String],
 }
 
-/// The story's checkpoint: its last open task that is judged by acceptance
-/// tests. Whatever order the tasks run in, the one that closes the story
-/// judges what is left; none once every such task is done.
+/// The story's checkpoint: its last open task that is judged by the
+/// oracle. Whatever order the tasks run in, the one that closes the story
+/// judges all of it; none once every such task is done.
 #[must_use]
 pub fn checkpoint<'a>(tasks: &[StoryTask<'a>]) -> Option<&'a str> {
     tasks
@@ -114,24 +219,27 @@ pub fn checkpoint<'a>(tasks: &[StoryTask<'a>]) -> Option<&'a str> {
         .map(|t| t.id)
 }
 
-/// What judges `task` of the story `tasks`, whose scenarios are `scenarios`
-/// (in the story's order), of which earlier ticks verified `verified`, and
-/// which a person deferred to the checkpoint when `deferred`. `None`: the
-/// story has no scenario, or the task is judged by its checks alone.
-///
-/// Links naming no scenario of the story are ignored (the plan reports
-/// them). The checkpoint comes first: a link never narrows what it judges.
+/// The story's first open code task: where its oracle is written.
 #[must_use]
-pub fn share(
-    tasks: &[StoryTask<'_>],
-    task: &str,
-    scenarios: &[String],
-    verified: &BTreeSet<String>,
-    deferred: bool,
-) -> Option<Share> {
+pub fn first<'a>(tasks: &[StoryTask<'a>]) -> Option<&'a str> {
+    tasks
+        .iter()
+        .find(|t| !t.checks_only && !t.done)
+        .map(|t| t.id)
+}
+
+/// What judges `task` of the story `tasks`, whose scenarios are
+/// `scenarios`. `None`: the story has no scenario, or the task is judged by
+/// its checks alone. Links naming no scenario of the story are ignored
+/// (the plan reports them); the checkpoint comes first.
+#[must_use]
+pub fn judged(tasks: &[StoryTask<'_>], task: &str, scenarios: &[String]) -> Option<Judged> {
     let me = tasks.iter().find(|t| t.id == task)?;
     if scenarios.is_empty() || me.checks_only {
         return None;
+    }
+    if checkpoint(tasks) == Some(task) {
+        return Some(Judged::Checkpoint);
     }
     let links: Vec<String> = me
         .links
@@ -139,40 +247,25 @@ pub fn share(
         .filter(|l| scenarios.contains(l))
         .cloned()
         .collect();
-    let at = checkpoint(tasks);
-    if at == Some(task) {
-        let left: Vec<String> = scenarios
-            .iter()
-            .filter(|s| !verified.contains(*s) || links.contains(s))
-            .cloned()
-            .collect();
-        let composition = left.len() >= 2;
-        return Some(Share::Checkpoint {
-            scenarios: left,
-            composition,
-        });
-    }
-    if !links.is_empty() {
-        return Some(Share::Linked { scenarios: links });
-    }
-    if deferred && let Some(at) = at {
-        return Some(Share::Deferred {
-            checkpoint: at.to_owned(),
-        });
-    }
-    Some(Share::Authored {
-        scenarios: scenarios.to_vec(),
-        checkpoint: at.map(str::to_owned),
+    Some(if links.is_empty() {
+        Judged::Progress
+    } else {
+        Judged::Linked { scenarios: links }
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ScenarioState::{Green, Red, Untested};
     use proptest::prelude::*;
 
     fn ids(n: usize) -> Vec<String> {
         (1..=n).map(|k| format!("US3-{k}")).collect()
+    }
+
+    fn states(s: &[ScenarioState]) -> BTreeMap<String, ScenarioState> {
+        ids(s.len()).into_iter().zip(s.iter().copied()).collect()
     }
 
     const NONE: &[String] = &[];
@@ -187,152 +280,197 @@ mod tests {
     }
 
     #[test]
-    fn the_real_case_t018_to_t022() {
+    fn a_task_claims_what_it_turned_and_nothing_else() {
+        let o = ids(3);
+        assert_eq!(
+            progress(
+                &o,
+                &states(&[Red, Red, Red]),
+                &states(&[Green, Red, Green]),
+                &[],
+                false,
+                &[],
+            ),
+            Progress::Verified {
+                turned: vec!["US3-1".into(), "US3-3".into()]
+            }
+        );
+        assert_eq!(
+            progress(
+                &o,
+                &states(&[Green, Red, Red]),
+                &states(&[Green, Red, Red]),
+                &[],
+                false,
+                &[],
+            ),
+            Progress::InProgress
+        );
+        assert_eq!(
+            progress(
+                &o,
+                &states(&[Green, Red, Red]),
+                &states(&[Red, Green, Green]),
+                &[],
+                false,
+                &[],
+            ),
+            Progress::Regressed {
+                scenarios: vec!["US3-1".into()]
+            },
+            "a regression fails whatever else turned"
+        );
+    }
+
+    #[test]
+    fn links_and_the_checkpoint_must_be_green_after() {
+        let o = ids(2);
+        let link = vec!["US3-2".to_owned()];
+        assert_eq!(
+            progress(
+                &o,
+                &states(&[Red, Red]),
+                &states(&[Green, Red]),
+                &link,
+                false,
+                &[],
+            ),
+            Progress::LinksOpen {
+                scenarios: link.clone()
+            }
+        );
+        assert_eq!(
+            progress(
+                &o,
+                &states(&[Red, Red]),
+                &states(&[Green, Untested]),
+                &[],
+                true,
+                &[],
+            ),
+            Progress::StoryOpen {
+                scenarios: vec!["US3-2".into()]
+            },
+            "untested is not green"
+        );
+        assert_eq!(
+            progress(
+                &o,
+                &states(&[Green, Green]),
+                &states(&[Green, Green]),
+                &[],
+                true,
+                &[],
+            ),
+            Progress::Closed
+        );
+    }
+
+    #[test]
+    fn a_scenario_its_author_could_not_test_never_blocks_the_story() {
+        let o = ids(2);
+        let untestable = vec!["US3-2".to_owned()];
+        assert_eq!(
+            progress(
+                &o,
+                &states(&[Red, Untested]),
+                &states(&[Green, Untested]),
+                &[],
+                true,
+                &untestable
+            ),
+            Progress::Verified {
+                turned: vec!["US3-1".into()]
+            }
+        );
+    }
+
+    #[test]
+    fn the_checkpoint_is_the_last_open_code_task_and_the_oracle_goes_first() {
         let mut docs = open("T022");
         docs.checks_only = true;
-        let tasks = [open("T018"), open("T019"), open("T020"), open("T021"), docs];
-        let sc = ids(2);
-        let none = BTreeSet::new();
-        assert_eq!(checkpoint(&tasks), Some("T021"));
-        assert_eq!(
-            share(&tasks, "T018", &sc, &none, true),
-            Some(Share::Deferred {
-                checkpoint: "T021".into()
-            })
-        );
-        assert_eq!(
-            share(&tasks, "T018", &sc, &none, false),
-            Some(Share::Authored {
-                scenarios: sc.clone(),
-                checkpoint: Some("T021".into())
-            })
-        );
-        assert_eq!(
-            share(&tasks, "T021", &sc, &none, false),
-            Some(Share::Checkpoint {
-                scenarios: sc.clone(),
-                composition: true
-            })
-        );
-        assert_eq!(
-            share(&tasks, "T022", &sc, &none, false),
-            None,
-            "documentation has no share"
-        );
-    }
-
-    #[test]
-    fn a_link_beats_a_deferral_and_never_narrows_the_checkpoint() {
-        let one = vec!["US3-1".to_owned()];
-        let unknown = vec!["US9-4".to_owned()];
-        let tasks = [
-            StoryTask {
-                id: "T1",
-                checks_only: false,
-                done: false,
-                links: &one,
-            },
-            StoryTask {
-                id: "T2",
-                checks_only: false,
-                done: false,
-                links: &unknown,
-            },
-            StoryTask {
-                id: "T3",
-                checks_only: false,
-                done: false,
-                links: &one,
-            },
-        ];
-        let sc = ids(3);
-        let verified: BTreeSet<String> = ["US3-1".to_owned()].into();
-        assert_eq!(
-            share(&tasks, "T1", &sc, &verified, true),
-            Some(Share::Linked {
-                scenarios: one.clone()
-            })
-        );
-        assert_eq!(
-            share(&tasks, "T2", &sc, &verified, false),
-            Some(Share::Authored {
-                scenarios: sc.clone(),
-                checkpoint: Some("T3".into())
-            })
-        );
-        assert_eq!(
-            share(&tasks, "T3", &sc, &verified, false),
-            Some(Share::Checkpoint {
-                scenarios: ids(3),
-                composition: true
-            })
-        );
-    }
-
-    #[test]
-    fn a_person_s_step_is_never_the_checkpoint_and_a_done_one_hands_it_on() {
-        let mut you = open("T3");
-        you.checks_only = true;
-        let mut done = open("T2");
+        let mut done = open("T018");
         done.done = true;
-        let tasks = [open("T1"), done, you];
+        let link = vec!["US3-2".to_owned()];
+        let mut linked = open("T020");
+        linked.links = &link;
+        let tasks = [done, open("T019"), linked, open("T021"), docs];
+        let sc = ids(2);
+        assert_eq!(checkpoint(&tasks), Some("T021"));
+        assert_eq!(first(&tasks), Some("T019"));
+        assert_eq!(judged(&tasks, "T019", &sc), Some(Judged::Progress));
         assert_eq!(
-            checkpoint(&tasks),
-            Some("T1"),
-            "T2 ticked first, T3 is yours"
+            judged(&tasks, "T020", &sc),
+            Some(Judged::Linked {
+                scenarios: link.clone()
+            })
         );
-        assert!(matches!(
-            share(&tasks, "T1", &ids(2), &BTreeSet::new(), true),
-            Some(Share::Checkpoint { .. })
-        ));
-        assert_eq!(
-            share(&[open("T1")], "T1", &[], &BTreeSet::new(), false),
-            None,
-            "no scenario, no share"
-        );
+        assert_eq!(judged(&tasks, "T021", &sc), Some(Judged::Checkpoint));
+        assert_eq!(judged(&tasks, "T022", &sc), None, "documentation");
+        assert_eq!(judged(&tasks, "T019", &[]), None, "no scenario");
+    }
+
+    fn state() -> impl Strategy<Value = ScenarioState> {
+        prop_oneof![Just(Green), Just(Red), Just(Untested)]
     }
 
     proptest! {
-        /// Same inputs, same share; and in ANY order the tasks finish — lanes,
-        /// `--task`, a person's ticks — every scenario of the story is
-        /// given to some task's test author before the story closes:
-        /// verified by an earlier tick, or judged at the checkpoint.
+        /// The rule is a function of its inputs; a verified tick names what
+        /// it turned and only that; a checkpoint never passes with a scenario
+        /// not green; a green scenario never goes red on a passing tick.
         #[test]
-        fn every_scenario_of_a_story_is_judged(
-            n in 1usize..6,
-            plan in proptest::collection::vec((any::<bool>(), proptest::collection::vec(1usize..7, 0..3), any::<bool>(), proptest::collection::vec(1usize..7, 0..3)), 1..7),
-            order in proptest::collection::vec(any::<prop::sample::Index>(), 7),
+        fn progress_is_honest(
+            before in proptest::collection::vec(state(), 1..6),
+            after_seed in proptest::collection::vec(state(), 6),
+            link_mask in proptest::collection::vec(any::<bool>(), 6),
+            checkpoint in any::<bool>(),
         ) {
-            let sc = ids(n);
-            let links: Vec<Vec<String>> = plan.iter().map(|(_, l, _, _)| l.iter().map(|k| format!("US3-{k}")).collect()).collect();
-            let names = ["T1", "T2", "T3", "T4", "T5", "T6"];
-            let mut done = vec![false; plan.len()];
-            let mut remaining: Vec<usize> = (0..plan.len()).collect();
-            let mut verified = BTreeSet::new();
-            let mut judged = BTreeSet::new();
-            let any_judged_task = plan.iter().any(|p| !p.0);
-            let mut k = 0;
-            while !remaining.is_empty() {
-                let i = remaining.remove(order[k % order.len()].index(remaining.len()));
-                k += 1;
-                let tasks: Vec<StoryTask<'_>> = (0..plan.len()).map(|j| StoryTask {
-                    id: names[j], checks_only: plan[j].0, done: done[j], links: &links[j],
-                }).collect();
-                let s = share(&tasks, names[i], &sc, &verified, plan[i].2);
-                prop_assert_eq!(&s, &share(&tasks, names[i], &sc, &verified, plan[i].2));
-                if let Some(s) = &s {
-                    judged.extend(s.scenarios().iter().cloned());
-                    // The model verifies some of what it was given, never more.
-                    for k in &plan[i].3 {
-                        let id = format!("US3-{k}");
-                        if s.scenarios().contains(&id) { verified.insert(id); }
-                    }
+            let n = before.len();
+            let o = ids(n);
+            let b = states(&before);
+            let a = states(&after_seed[..n]);
+            let links: Vec<String> = o.iter().zip(&link_mask).filter(|(_, m)| **m).map(|(id, _)| id.clone()).collect();
+            let p = progress(&o, &b, &a, &links, checkpoint, &[]);
+            prop_assert_eq!(&p, &progress(&o, &b, &a, &links, checkpoint, &[]));
+            if let Progress::Verified { turned } = &p {
+                prop_assert!(!turned.is_empty());
+                for id in turned {
+                    prop_assert!(b[id] != Green && a[id] == Green);
                 }
-                done[i] = true;
             }
-            if any_judged_task {
-                let all: BTreeSet<String> = sc.iter().cloned().collect();
-                prop_assert_eq!(judged.union(&verified).cloned().collect::<BTreeSet<_>>(), all);
+            if p.passes() {
+                for id in &o {
+                    prop_assert!(!(b[id] == Green && a[id] != Green));
+                }
+                for id in &links {
+                    prop_assert_eq!(a[id], Green);
+                }
+                if checkpoint {
+                    prop_assert!(o.iter().all(|id| a[id] == Green));
+                }
+            }
+        }
+
+        /// Ticks applied in sequence never claim a scenario twice: once
+        /// green it stays green on every later passing tick.
+        #[test]
+        fn a_scenario_is_claimed_once(
+            steps in proptest::collection::vec(proptest::collection::vec(state(), 4), 1..6),
+        ) {
+            let o = ids(4);
+            let mut now = states(&[Red, Red, Red, Red]);
+            let mut claimed: BTreeMap<String, usize> = BTreeMap::new();
+            for (i, s) in steps.iter().enumerate() {
+                let next = states(s);
+                let p = progress(&o, &now, &next, &[], false, &[]);
+                if p.passes() {
+                    if let Progress::Verified { turned } = &p {
+                        for id in turned {
+                            prop_assert!(claimed.insert(id.clone(), i).is_none());
+                        }
+                    }
+                    now = next;
+                }
             }
         }
     }

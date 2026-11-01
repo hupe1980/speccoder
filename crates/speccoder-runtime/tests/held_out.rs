@@ -65,6 +65,13 @@ fn repo(extra: &str) -> tempfile::TempDir {
             .success()
     );
     fs::write(r.join("specs/001-graph/spec.md"), SPEC).unwrap();
+    // T005 is its story's only code task: its checkpoint, where the story's
+    // held-out tests run.
+    fs::write(
+        r.join("specs/001-graph/tasks.md"),
+        "# Tasks: Graph\n\n## Phase 3: User Story 1 - Login (Priority: P1)\n\n- [ ] T005 [US1] Implement login in src/lib.rs\n",
+    )
+    .unwrap();
     fs::write(r.join("specs/001-graph/plan.md"), "# Plan\n\nRust.\n").unwrap();
     fs::create_dir_all(r.join("src")).unwrap();
     fs::write(r.join("src/lib.rs"), "pub fn ok() {}\n").unwrap();
@@ -83,8 +90,21 @@ fn fake() -> (Arc<FakeProvider>, Arc<dyn ModelProvider>) {
     (f, d)
 }
 
+/// The story's oracle: one test of US1-1, by its own command.
 fn visible() -> Value {
-    json!({ "files": [{ "path": "tests/acceptance_login.txt", "content": "login exists\n", "scenarios": [] }], "argv": ["./accept.sh", "--", "fn login"], "notes": [] })
+    let argv = [
+        "./accept.sh",
+        "--",
+        "fn login",
+        "tests/acceptance_login.txt",
+    ];
+    json!({
+        "files": [{ "path": "tests/acceptance_login.txt", "content": "login exists\n", "scenarios": ["US1-1"], "argv": argv }],
+        "argv": argv,
+        "notes": [],
+        "expectations": [{ "scenario": "US1-1", "given": "a user", "expect": "a login function exists" }],
+        "untestable": [],
+    })
 }
 
 fn held_out(pattern: &str, scenarios: &[&str]) -> Value {
@@ -296,10 +316,18 @@ fn each_visible_test_is_traced_to_the_scenario_it_cites() {
     let r = repo("\n[acceptance]\nheld_out = false\n");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
+    let login = [
+        "./accept.sh",
+        "--",
+        "fn login",
+        "tests/acceptance_login.txt",
+    ];
     f.will_structure(json!({ "files": [
-        { "path": "tests/acceptance_login.txt", "content": "login exists\n", "scenarios": ["US1-1", "US9-9"] },
-        { "path": "tests/acceptance_more.txt", "content": "more\n", "scenarios": [] },
-    ], "argv": ["./accept.sh", "--", "fn login"], "notes": [] }));
+        { "path": "tests/acceptance_login.txt", "content": "login exists\n", "scenarios": ["US1-1", "US9-9"], "argv": login },
+        { "path": "tests/acceptance_more.txt", "content": "more\n", "scenarios": [], "argv": ["./accept.sh", "--", "fn more", "tests/acceptance_more.txt"] },
+    ], "argv": login, "notes": [],
+    "expectations": [{ "scenario": "US1-1", "given": "a user", "expect": "a login function exists" }],
+    "untestable": [] }));
     write_lib(&f, "c1", TAILORED);
     let res = run(r.path(), state.path(), d);
     let rep = report(&res);
@@ -308,11 +336,11 @@ fn each_visible_test_is_traced_to_the_scenario_it_cites() {
     let author = serde_json::to_string(&f.asked()[0].prompt).unwrap();
     assert!(author.contains("US1-1"), "{author}");
     let tests = &rep.acceptance.as_ref().unwrap()["tests"];
+    // A test citing no scenario never enters the oracle; an unknown id is dropped.
     assert_eq!(
         tests,
         &json!([
-            { "path": "tests/acceptance_login.txt", "scenarios": ["US1-1"] },
-            { "path": "tests/acceptance_more.txt", "scenarios": [] },
+            { "path": "tests/acceptance_login.txt", "scenarios": ["US1-1"], "argv": login },
         ])
     );
     // The signed trace: scenario → test → verdict; untagged ⇒ unknown.
@@ -339,10 +367,7 @@ fn each_visible_test_is_traced_to_the_scenario_it_cites() {
         .collect();
     assert_eq!(
         rows,
-        [
-            (json!("US1-1"), json!("tests/acceptance_login.txt")),
-            (Value::Null, json!("tests/acceptance_more.txt")),
-        ]
+        [(json!("US1-1"), json!("tests/acceptance_login.txt"))]
     );
 }
 
@@ -371,13 +396,6 @@ fn switched_off_it_is_visible_evidence_only_and_says_so() {
 fn a_finished_feature_publishes_its_held_out_sets() {
     let r = repo("");
     // Only T005 is open: the feature ends with its tick.
-    let tasks = r.path().join("specs/001-graph/tasks.md");
-    let text = fs::read_to_string(&tasks)
-        .unwrap()
-        .replace("- [ ] T0", "- [x] T0")
-        .replace("- [x] T005", "- [ ] T005");
-    fs::write(&tasks, text).unwrap();
-    git(r.path(), &["commit", "-qam", "only T005"]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_structure(visible());
@@ -415,11 +433,14 @@ fn a_finished_feature_publishes_its_held_out_sets() {
     );
     let store = project_state.join("held-out.git");
     let files = git(&store, &["ls-tree", "-r", "--name-only", reference]);
-    assert!(files.lines().any(|l| l == "T005/manifest.json"), "{files}");
+    assert!(
+        files.lines().any(|l| l == "req-US1/manifest.json"),
+        "{files}"
+    );
     assert!(
         files
             .lines()
-            .any(|l| l == format!("T005/files/{HELD_OUT_PATH}")),
+            .any(|l| l == format!("req-US1/files/{HELD_OUT_PATH}")),
         "{files}"
     );
     // Its parent is the feature branch the tick is on, and the manifest is
@@ -428,7 +449,7 @@ fn a_finished_feature_publishes_its_held_out_sets() {
     assert_eq!(parent, git(wt, &["rev-parse", "speccoder/001-graph"]));
     let blob = git(
         &store,
-        &["rev-parse", &format!("{reference}:T005/manifest.json")],
+        &["rev-parse", &format!("{reference}:req-US1/manifest.json")],
     );
     let in_project = Command::new("git")
         .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
@@ -443,7 +464,7 @@ fn a_finished_feature_publishes_its_held_out_sets() {
     );
     let manifest = git(
         &store,
-        &["show", &format!("{reference}:T005/manifest.json")],
+        &["show", &format!("{reference}:req-US1/manifest.json")],
     );
     let m: speccoder_runtime::held_out::Manifest = serde_json::from_str(&manifest).unwrap();
     let body = git(wt, &["log", "-1", "--format=%B", "speccoder/001-graph"]);

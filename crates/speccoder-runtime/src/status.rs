@@ -94,7 +94,7 @@ fn read_log(log: &str, feature: &str) -> (BTreeMap<String, Evidence>, Vec<Conver
 }
 
 /// A regression-only tick's reason from its trailer; a tick without one
-/// (made before reasons were recorded) reads `unrecorded`, never a guess.
+/// (without a recorded reason) reads `unrecorded`, never a guess.
 #[must_use]
 pub fn regression_of(trailer: &str) -> speccoder_core::regression::Regression {
     use speccoder_core::regression::{Regression, RegressionReason, parse_trailer};
@@ -166,9 +166,9 @@ fn statuses(
                         reason: a.reason.clone(),
                         run_id: a.run_id.clone(),
                         reference: a.reference.clone(),
-                        defer_to: a.defer_to.clone(),
+                        story_open: a.story_open.clone(),
                     }),
-                share: None,
+                judged: None,
                 set_aside: None,
                 bug: None,
                 regression: found
@@ -608,12 +608,10 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     }
     // What judges each open task, and each story's scenarios: from the
     // ticks' `Scenarios:` on the unit's branch (first-parent, as a run reads them).
-    let plane = crate::worktree::state_dir().map(|s| crate::worktree::project_state_dir(&s, root));
     let (shares, stories) =
-        crate::pipeline::acceptance::story_view(&crate::pipeline::acceptance::StoryView {
+        crate::pipeline::story::story_view(&crate::pipeline::story::StoryView {
             format,
             snapshot,
-            plane: plane.as_deref(),
             feature: &name,
             unit_dir: &f.feature.dir,
             tasks: &parsed,
@@ -626,7 +624,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             "verified" | "regression_only" | "attested" | "ticked_without_evidence" | "skipped"
         );
         if open {
-            t.share = shares.get(&t.id).cloned();
+            t.judged = shares.get(&t.id).cloned();
         }
     }
     CommandResult::new("report", CommandStatus::Ok, &message).with_data(CommandData::Report(
@@ -824,7 +822,7 @@ mod tests {
             commit: None,
             run_id: None,
             last_attempt: None,
-            share: None,
+            judged: None,
             set_aside: None,
             bug: None,
             regression: None,

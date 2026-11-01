@@ -556,6 +556,16 @@ pub fn run_feature_with(
             .filter(|t| {
                 parallel_ids.contains(&t.id) && !one_at_a_time.contains(&t.id) && !yours(&t.id)
             })
+            // A story whose oracle is still to be written goes first, alone.
+            .filter(|t| {
+                !super::story::oracle_pending(
+                    std::path::Path::new(w.path.as_deref().unwrap_or_default()),
+                    &crate::worktree::project_state_dir(state, path),
+                    format,
+                    &snap,
+                    &t.id,
+                )
+            })
             .map(|t| t.id.clone())
             .take(options.parallel.min(budget))
             .collect();

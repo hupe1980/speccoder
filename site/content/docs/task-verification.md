@@ -62,6 +62,8 @@ The [JSON Schema](https://hupe1980.github.io/speccoder/schemas/task-verification
 | `policy_sha256` | string | yes | sha256 of the judge's configuration in `speccoder.toml` at the parent commit |
 | `time` | string | yes | RFC 3339, UTC |
 | `red` | object | no (revision 2) | the red run's output: `kind` (`assertion`, `missing_symbol`), `excerpt` (its last ≤ 2048 bytes, or `null`), `excerpt_sha256`, `output_sha256`, `withheld` |
+| `regression` | object | no (revision 3) | why a `regression_only` tick is one: `reason` (`in_progress`, `already_passing`, `no_story`, …) and its details |
+| `collection` | object | no (revision 3) | which changed test files the run collected: per file its `state`, `decided_by`, `tests` and `test_ids` |
 
 ### Opaque fields
 
@@ -106,7 +108,7 @@ One verified tick's task-verification predicate (abbreviated):
   "spec": { "section": "US1", "section_hash": "a41e…" },
   "trace": [
     { "requirement": "FR-001", "requirement_hash": "77b0…", "phase": "green", "result": "verified" },
-    { "requirement": "US1", "scenario": "US1.1", "test": "tests/login.rs", "phase": "green", "result": "verified" }
+    { "requirement": "US1", "scenario": "US1-1", "test": "tests/login.rs", "phase": "green", "result": "verified" }
   ],
   "integrity": { "findings": [] },
   "monitor": { "state": "clean", "findings": [] },

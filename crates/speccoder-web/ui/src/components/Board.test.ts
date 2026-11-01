@@ -43,7 +43,7 @@ describe("Board", () => {
       data: {
         tasks: [
           task("T007", "regression_only", {
-            regression: { reason: { reason: "already_passing", implemented_by: { task: "T003", commit: "d433d77" } }, text: "already passing before the attempt — implemented by T003" },
+            regression: { reason: { reason: "already_passing" }, text: "already passing before the attempt" },
           }),
           task("T004", "regression_only", {}),
           task("T005", "ready", {
@@ -55,8 +55,8 @@ describe("Board", () => {
     shown = mount(Board, { target: document.body });
     flushSync();
     const t007 = document.querySelector('button[aria-label^="T007"]') as HTMLButtonElement;
-    expect(t007.getAttribute("aria-label")).toBe("T007 do T007, Regression only: already passing before the attempt — implemented by T003");
-    expect(t007.title).toBe("Regression only: already passing before the attempt — implemented by T003");
+    expect(t007.getAttribute("aria-label")).toBe("T007 do T007, Regression only: already passing before the attempt");
+    expect(t007.title).toBe("Regression only: already passing before the attempt");
     const t004 = document.querySelector('button[aria-label^="T004"]') as HTMLButtonElement;
     expect(t004.title).toBe("Regression only: why was not recorded");
     expect(document.body.textContent).toContain("Tests never ran: tests/unit/greet_name.rs");
@@ -80,26 +80,39 @@ describe("Board", () => {
     expect(yours!.querySelector(".act")).toBeNull();
   });
 
-  it("shows each open story's scenarios and what judges a task, and the strip opens the checkpoint", async () => {
+  it("shows each open story's scenarios on its oracle and what judges a task, and the strip opens the checkpoint", async () => {
     host.app.report = {
       data: {
         tasks: [
-          task("T018", "ready", { share: { kind: "deferred", checkpoint: "T021" } }),
-          task("T020", "ready", { share: { kind: "linked", scenarios: ["US3-2"] } }),
-          task("T021", "blocked", { share: { kind: "checkpoint", scenarios: ["US3-1", "US3-3"], composition: true } }),
+          task("T019", "ready", { judged: { kind: "progress" } }),
+          task("T020", "ready", { judged: { kind: "linked", scenarios: ["US3-2"] } }),
+          task("T021", "blocked", { judged: { kind: "checkpoint" } }),
         ],
-        stories: [{ story: "US3", scenarios: [{ id: "US3-1" }, { id: "US3-2", verified_by: "T020" }, { id: "US3-3" }], checkpoint: "T021" }],
+        stories: [
+          {
+            story: "US3",
+            oracle: { commit: "abc1234", decided_by: "speccoder run" },
+            scenarios: [
+              { id: "US3-1", state: "red", contract: "a malformed row → an error" },
+              { id: "US3-2", state: "green", turned_by: "T018" },
+              { id: "US3-3", state: "untested" },
+            ],
+            checkpoint: "T021",
+          },
+        ],
       },
     };
     shown = mount(Board, { target: document.body });
     flushSync();
     const strip = document.querySelector('button[aria-label^="US3"]') as HTMLButtonElement;
-    expect(strip.getAttribute("aria-label")).toBe("US3: 1 of 3 verified · T021 judges the rest");
+    expect(strip.getAttribute("aria-label")).toBe("US3: 1 of 3 green · T018 turned US3-2 · T021 closes it");
     expect(strip.querySelectorAll(".mk.on")).toHaveLength(1);
+    expect(strip.querySelectorAll(".mk.untested")).toHaveLength(1);
+    expect(strip.querySelector(".mk")?.getAttribute("title")).toBe("US3-1: red — a malformed row → an error");
     strip.click();
     expect(host.app.selectTask).toHaveBeenCalledWith("T021");
     const chips = [...document.querySelectorAll(".foot.share")].map((c) => c.textContent?.trim());
-    expect(chips).toEqual(expect.arrayContaining(["judged at T021", "US3-2", "checkpoint · 2 left"]));
+    expect(chips).toEqual(expect.arrayContaining(["US3-2", "closes the story"]));
     expect(await violations()).toEqual([]);
   });
 });

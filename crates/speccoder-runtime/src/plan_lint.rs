@@ -34,7 +34,7 @@ pub const RULES: [Rule; 4] = [
     },
     Rule {
         code: "PLAN-SCENARIO-UNKNOWN",
-        preset: "Name, in each implementing task's line, the scenarios it makes hold — `(scenarios US1-1, US1-2)`: the story's number and the scenario's position in it; that task is judged by exactly them, and the story's checkpoint — its last open code task — by every scenario not yet verified.",
+        preset: "Name, in an implementing task's line, the scenarios it makes hold — `(scenarios US1-1, US1-2)`, the story's number and the scenario's position in it; it must leave exactly those passing.",
     },
     Rule {
         code: "PLAN-TESTS-UNCOLLECTED",
@@ -248,7 +248,7 @@ fn story_links(
             code: "PLAN-SCENARIO-UNKNOWN",
             tasks: vec![t.id.clone()],
             detail: format!(
-                "{} names {}, not a scenario of {} — the link is ignored: its test author chooses, and the story's checkpoint judges what is left",
+                "{} names {}, not a scenario of {} — the link is ignored: the task is judged by the scenarios it turns green",
                 t.id,
                 unknown.join(", "),
                 t.story.as_deref().unwrap_or("its story")

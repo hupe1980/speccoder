@@ -633,9 +633,6 @@ pub struct ReasonCount {
     pub n: usize,
     /// Their tasks.
     pub tasks: Vec<String>,
-    /// `already_passing`: the tasks that made the tests pass.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub implemented_by: Vec<String>,
     /// speccoder's words for the group (`7 had no user story`).
     pub text: String,
 }
@@ -1717,7 +1714,10 @@ pub struct RunReport {
     /// What judged the task in its story (none for a bug fix or a task of
     /// no story).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub share: Option<crate::story::Share>,
+    pub judged: Option<crate::story::Judged>,
+    /// What the attempt did to its story's oracle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<crate::story::Progress>,
     /// What reached the implementer, by digest (constitution VIII).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<crate::context::ContextManifest>,
@@ -2431,7 +2431,7 @@ pub struct TaskStatus {
     pub last_attempt: Option<LastAttempt>,
     /// For an open task of a story: what will judge it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub share: Option<crate::story::Share>,
+    pub judged: Option<crate::story::Judged>,
     /// Changes found in the worktree when the task's run started (a person's
     /// edits, or an interrupted run's leftovers), saved and set aside.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2447,7 +2447,7 @@ pub struct TaskStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bug: Option<String>,
     /// A regression-only tick: why, with speccoder's wording
-    /// (`unrecorded` for a tick made before reasons were recorded).
+    /// (`unrecorded` for a tick without a recorded reason).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub regression: Option<crate::regression::Regression>,
     /// Who does it ([`crate::lane`]); left out for `code`.
@@ -2466,10 +2466,10 @@ pub struct LastAttempt {
     pub run_id: Option<String>,
     /// The ref holding the attempt's tree.
     pub reference: String,
-    /// The story's checkpoint this task's acceptance may be moved to: its
-    /// tests stayed red mid-story (`speccoder task defer`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub defer_to: Option<String>,
+    /// The story's scenarios its oracle still showed red when the story's
+    /// last task stopped (`STORY-OPEN`): each can be ruled wrong.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub story_open: Vec<String>,
 }
 
 /// Changes saved and set aside so a run could start from the branch tip.

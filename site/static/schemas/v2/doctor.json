@@ -1194,26 +1194,26 @@
           ]
         },
         {
-          "description": "Judge a task by its regression checks and its story's scenarios at\nthe story's checkpoint (`revoke`: take the decision back) — a\nperson's decision in the state directory, never an edit of the plan.",
+          "description": "Rule that one scenario's oracle tests are wrong (the input is the\nreason): the next run writes that scenario's tests again.",
           "type": "object",
           "properties": {
             "kind": {
               "type": "string",
-              "const": "defer_acceptance"
+              "const": "rule_scenario"
             },
             "task": {
-              "description": "The task.",
+              "description": "The task that met them.",
               "type": "string"
             },
-            "revoke": {
-              "description": "Take the decision back.",
-              "type": "boolean"
+            "scenario": {
+              "description": "The scenario (`US3-2`).",
+              "type": "string"
             }
           },
           "required": [
             "kind",
             "task",
-            "revoke"
+            "scenario"
           ]
         },
         {

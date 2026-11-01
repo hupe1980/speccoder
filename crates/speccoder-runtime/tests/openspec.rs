@@ -17,7 +17,7 @@ use speccoder_runtime::{RunOptions, run_feature_with, run_with};
 
 const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.sh\", \"--\"]]\n";
 
-const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\ncase \"$1\" in *.txt) [ -f \"$1\" ] || { echo \"error: no test file $1\" >&2; exit 2; }; shift;; esac\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 const CHANGE: &str = "add-farewell-and-locale";
 
@@ -180,7 +180,32 @@ fn acceptance_tests_come_from_the_scenarios() {
     let r = repo("sample", "\n[acceptance]\nheld_out = false\n");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_1_2.txt", "content": "greeting / Default greeting / Configured default\n", "scenarios": [] }], "argv": ["./accept.sh", "--", "fn empty_default"], "notes": [] }));
+    // The change is the story: its oracle cites the scenarios by name.
+    let opened = speccoder_runtime::format::open(r.path(), Some(CHANGE)).unwrap();
+    let ids: Vec<String> = opened
+        .adapter
+        .scenarios(&opened.snapshot, "1.2")
+        .into_iter()
+        .map(|s| s.id)
+        .collect();
+    let id = ids
+        .iter()
+        .find(|i| i.contains("Configured default"))
+        .cloned()
+        .unwrap_or_else(|| panic!("{ids:?}"));
+    let argv = [
+        "./accept.sh",
+        "--",
+        "tests/acceptance_1_2.txt",
+        "fn empty_default",
+    ];
+    f.will_structure(json!({
+        "files": [{ "path": "tests/acceptance_1_2.txt", "content": "greeting / Default greeting / Configured default\n", "scenarios": [id], "argv": argv }],
+        "argv": argv,
+        "notes": [],
+        "expectations": [{ "scenario": id, "given": "GREET_DEFAULT=Grace", "expect": "Hello, Grace!" }],
+        "untestable": [],
+    }));
     add(&f, "c1", "empty_default");
     let res = run_with(r.path(), Some(CHANGE), "1.2", state.path(), d, None);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
@@ -640,10 +665,10 @@ fn a_skill_that_stops_incomplete_says_why() {
 }
 
 /// The change is the story: its last code task is the checkpoint, every
-/// other task's test author chooses with the change's other tasks in view.
+/// other task is judged by the progress it makes on the change's oracle.
 #[test]
 fn a_change_has_one_checkpoint_and_no_links() {
-    use speccoder_core::story::Share;
+    use speccoder_core::story::Judged;
     let r = repo("sample", "");
     let res = speccoder_runtime::status::report(r.path(), Some(CHANGE));
     let Some(speccoder_core::CommandData::Report(rep)) = res.data() else {
@@ -653,18 +678,10 @@ fn a_change_has_one_checkpoint_and_no_links() {
         rep.tasks
             .iter()
             .find(|t| t.id == id)
-            .and_then(|t| t.share.clone())
+            .and_then(|t| t.judged.clone())
     };
-    assert!(
-        matches!(share("2.2"), Some(Share::Checkpoint { .. })),
-        "{:?}",
-        share("2.2")
-    );
-    assert!(
-        matches!(share("1.2"), Some(Share::Authored { checkpoint: Some(ref c), .. }) if c == "2.2"),
-        "{:?}",
-        share("1.2")
-    );
+    assert_eq!(share("2.2"), Some(Judged::Checkpoint));
+    assert_eq!(share("1.2"), Some(Judged::Progress));
     assert_eq!(
         rep.stories
             .first()
@@ -714,7 +731,7 @@ fn a_named_scenario_verified_by_a_tick_reads_back() {
         .first()
         .and_then(|s| s.scenarios.iter().find(|m| m.id == first.id));
     assert_eq!(
-        mark.and_then(|m| m.verified_by.clone()).as_deref(),
+        mark.and_then(|m| m.turned_by.clone()).as_deref(),
         Some("1.1"),
         "{:?}",
         rep.stories

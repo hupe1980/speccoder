@@ -443,7 +443,7 @@ mod tests {
             commit: Some("abc".to_owned()),
             run_id: None,
             last_attempt: None,
-            share: None,
+            judged: None,
             set_aside: None,
             bug: None,
             regression: None,
@@ -495,7 +495,7 @@ mod tests {
             phase_stmt("green", "PASSED", &["a"], &[]),
             json!({ "predicateType": "https://speccoder.dev/task-verification/v0", "predicate": {
                 "revision": 3,
-                "regression": { "reason": "already_passing", "implemented_by": { "task": "T003", "commit": "d433d77" } },
+                "regression": { "reason": "already_passing" },
                 "collection": { "files": [
                     { "path": "tests/greet.rs", "state": "collected", "decided_by": "junit", "tests": 2, "test_ids": ["greet::greet::a", "greet::greet::b"] },
                     { "path": "tests/unit/x.rs", "state": "not_collected", "decided_by": "static", "tests": 0, "test_ids": [],
@@ -506,7 +506,7 @@ mod tests {
         let row = |label: &str| rows.iter().find(|r| r.label == label).cloned().unwrap();
         assert_eq!(
             row("Acceptance").text,
-            "none red first — already passing before the attempt — implemented by T003"
+            "none red first — already passing before the attempt"
         );
         let c = row("Collection");
         assert_eq!(c.mark, "failed");

@@ -24,7 +24,7 @@ const GREP: &str = "[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.
 /// A stand-in test runner for scripted acceptance tests: one test, "the
 /// pattern is in src/lib.rs", reported with libtest's summary line so its
 /// red is an assertion failure.
-const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\ncase \"$1\" in *.txt) [ -f \"$1\" ] || { echo \"error: no test file $1\" >&2; exit 2; }; shift;; esac\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 fn write_accept_sh(root: &Path) {
     use std::os::unix::fs::PermissionsExt;
@@ -166,8 +166,9 @@ fn with_acceptance(repo: &Path) {
     git(repo, &["commit", "-qam", "acceptance"]);
 }
 
+/// The story's oracle author found nothing testable.
 fn no_tests() -> Value {
-    json!({ "files": [], "argv": [], "notes": ["none"] })
+    json!({ "files": [], "argv": [], "notes": ["none"], "expectations": [], "untestable": [] })
 }
 
 fn reject_empty_test() -> Value {
@@ -488,7 +489,8 @@ fn the_report_shows_each_ticks_evidence_from_the_branch() {
     // a round appends T003, which is verified too.
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t002.txt", "content": "x\n", "scenarios": [] }], "argv": ["./accept.sh", "--", "fn greet"], "notes": [] }));
+    let greet = ["./accept.sh", "--", "tests/acceptance_t002.txt", "fn greet"];
+    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t002.txt", "content": "x\n", "scenarios": ["US1-1"], "argv": greet }], "argv": greet, "notes": [], "expectations": [{ "scenario": "US1-1", "given": "a name", "expect": "a greeting" }], "untestable": [] }));
     f.will_call_tool("g", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn greet() {}" }));
     f.will_structure(json!({ "summary": "greet", "status": "done", "files_changed": ["src/lib.rs"], "checks_run": [], "notes": [] }));
     f.will_structure(answer(&[finding(
@@ -534,8 +536,9 @@ fn the_report_shows_each_ticks_evidence_from_the_branch() {
         s.convergence[0].tasks,
         ["T003 Reject empty names in login per FR-002 (missing)"]
     );
-    // Two task commits and one convergence commit are not merged yet.
-    assert_eq!(s.unmerged_commits, 3);
+    // The story's oracle, two task commits and one convergence commit are
+    // not merged yet.
+    assert_eq!(s.unmerged_commits, 4);
     assert!(
         after.message().starts_with("3/3 done: 2 verified"),
         "{}",

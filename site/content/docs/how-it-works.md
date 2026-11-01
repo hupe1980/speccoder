@@ -19,7 +19,7 @@ Your **checks** (the test, lint and type-check commands in `speccoder.toml`) run
 
 ## 3. Acceptance tests, red first
 
-If the task's user story has acceptance examples, a **separate model call with no tools** writes tests from the ones [that judge this task](@/docs/evidence.md#what-judges-each-task). They must **fail** now, since a test that already passes demonstrates nothing, and are then frozen so the implementing model cannot change them. A second set, [held out](@/docs/evidence.md#held-out-tests) from the model, checks the same scenarios with other inputs.
+Before a user story's first code task, a **separate model call with no tools** writes the story's tests — its [oracle](@/docs/evidence.md#what-judges-each-task) — one per scenario, through the product, each scenario stated as a contract first. They run now: each red scenario is what a later task must turn green, and one already green proves nothing about the work (`already_passing`). They are committed and frozen so the implementing model cannot change them. A second set, [held out](@/docs/evidence.md#held-out-tests) from the model, checks the same scenarios with other inputs at the story's last task.
 
 ## 4. The attempt
 
@@ -31,9 +31,9 @@ speccoder [audits the diff](@/docs/evidence.md#the-diff-audit) (deleted or weake
 
 | Verdict | Means |
 |---|---|
-| `verified` | The acceptance tests went from red to green and nothing regressed. |
-| `regression_only` | Nothing regressed, but there was nothing task-specific to show (no acceptance examples). |
-| `failed` | A check or an acceptance test failed, or the audit found something. |
+| `verified` | The task turned scenarios of its story's oracle from red to green, and nothing regressed. |
+| `regression_only` | Nothing regressed, but it turned no scenario (its story goes on), or there was nothing to test — with the reason. |
+| `failed` | A check failed, a green scenario went red, the task's linked scenarios or — at the story's last task — any scenario stayed red, or the audit found something. |
 
 Optionally, [mutation testing](@/docs/evidence.md#mutation-testing) checks that the tests test the change, and a [gaming monitor](@/docs/evidence.md#the-gaming-monitor) looks for hard-coded results.
 
@@ -45,7 +45,7 @@ Optionally, [mutation testing](@/docs/evidence.md#mutation-testing) checks that 
 
 ## After the last task: convergence
 
-All tasks can be ticked while the spec is still unmet. [Convergence](@/docs/running.md#convergence) has a read-only model call compare the code with the spec and appends what remains as new tasks, each of which changes code only once its acceptance tests fail first.
+All tasks can be ticked while the spec is still unmet. [Convergence](@/docs/running.md#convergence) has a read-only model call compare the code with the spec and appends what remains as new tasks, each judged by a test of its own for the scenario it closes.
 
 ## What speccoder does not decide
 

@@ -49,6 +49,68 @@ fn breakpoint(ttl: CacheTtl) -> Value {
     }
 }
 
+/// The story's oracle as the implementer is told it (`bundle.oracle`):
+/// the scenarios still red with what must hold and the tests that check
+/// them, what this task must turn green, and that a test contradicting the
+/// spec is reported, never worked around. Empty outside a story.
+#[must_use]
+pub fn oracle_text(bundle: &Value) -> String {
+    let o = &bundle["oracle"];
+    let red: Vec<String> = o["red"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|r| {
+            let tests: Vec<&str> = r["tests"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            format!(
+                "- {}: {}{}",
+                r["id"].as_str().unwrap_or_default(),
+                r["contract"].as_str().unwrap_or("(as the spec states it)"),
+                if tests.is_empty() {
+                    String::new()
+                } else {
+                    format!(" — {}", tests.join(", "))
+                }
+            )
+        })
+        .collect();
+    if red.is_empty() && o.is_null() {
+        return String::new();
+    }
+    let links: Vec<&str> = o["links"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let mut out =
+        String::from("\n# The story's acceptance tests (frozen: you cannot change them)\n\n");
+    if red.is_empty() {
+        out.push_str("Every scenario of the story passes already: keep them passing.\n");
+    } else {
+        out.push_str("Still failing — what must hold, and the tests that check it:\n");
+        out.push_str(&red.join("\n"));
+        out.push('\n');
+    }
+    if o["checkpoint"] == true {
+        out.push_str("\nThis is the story's last task: every scenario must pass after it.\n");
+    } else if !links.is_empty() {
+        out.push_str(&format!(
+            "\nThis task must make these pass: {}. The others belong to later tasks of the story: once yours pass, the task is done.\n",
+            links.join(", ")
+        ));
+    } else {
+        out.push_str("\nMake pass what this task's work makes hold; the rest belong to later tasks of the story, and their failing does not make this task incomplete. Never break one that passes.\n");
+    }
+    out.push_str("If a test asserts what the specification does not say, stop with report_blocked, kind wrong_test, naming the test — never work around it.\n");
+    out
+}
+
 /// The prompt for a bundle (the run's input `{bundle, cache_ttl}`).
 ///
 /// Order is stability order: policy and constitution (identical for the whole
@@ -119,6 +181,8 @@ pub fn layout(
             ));
         }
     }
+
+    task_text.push_str(&oracle_text(bundle));
 
     let w = format.wording();
     let constitution = format!("# {}\n\n{}", w.constitution, or_none(&text("constitution")));

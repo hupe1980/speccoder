@@ -1284,7 +1284,14 @@ pub fn approve_and_run(
             via,
             at,
         };
-        match crate::oracle::freeze(&plane, &u.feature, f, &sha, decided) {
+        match crate::oracle::freeze(
+            &plane,
+            &u.feature,
+            f,
+            &sha,
+            decided,
+            speccoder_core::acceptance::Producer::Review,
+        ) {
             Ok(rec) => {
                 record.oracle.insert(
                     f.req.key.clone(),

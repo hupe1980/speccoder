@@ -717,7 +717,7 @@ pub const CATALOG: &[Entry] = &[
         W,
         S::Ok,
         "a task names a scenario its story does not have",
-        "A task names the scenarios it makes hold, `(scenarios US3-1)`; this one names an id that is not a scenario of its story (ids are the story's number and the scenario's position in it). The link is ignored: the task's test author chooses from the story, and the story's checkpoint judges what is left.",
+        "A task names the scenarios it makes hold, `(scenarios US3-1)`; this one names an id that is not a scenario of its story (ids are the story's number and the scenario's position in it). The link is ignored: the task is judged by the scenarios it turns green on its story's oracle.",
         ["speccoder spec tasks"]
     ),
     entry!(
@@ -1011,6 +1011,28 @@ pub const CATALOG: &[Entry] = &[
             "→ declare a JUnit report for the check (`junit = \"…\"`)",
             "→ set the check's `list` command in speccoder.toml",
             "speccoder task accept {task} --reason \"…\""
+        ]
+    ),
+    entry!(
+        "STORY-OPEN",
+        P,
+        S::NeedsHuman,
+        "the story's last task left scenarios of its oracle red",
+        "The story's last open code task must leave every scenario of the story's oracle green (and its held-out tests passing); these are still red after the attempts. Leave the model a note, or — when a test asserts what the spec does not say — rule that scenario's tests wrong: the next run writes them again, and nothing else.",
+        [
+            "speccoder task nudge {task} --note \"…\"",
+            "speccoder task rule {task} --tests-wrong --scenario <id> --reason \"…\""
+        ]
+    ),
+    entry!(
+        "ORACLE-UNWRITTEN",
+        P,
+        S::NeedsHuman,
+        "the story's oracle got no usable test for any scenario",
+        "Before a story's first code task, speccoder writes the story's acceptance tests through its interface. None of them could be used (they did not build or collect, twice), so the story has nothing to be judged by and the task stops before any code is written.",
+        [
+            "speccoder review tests <story> --write",
+            "speccoder run --task {task}"
         ]
     ),
     entry!(

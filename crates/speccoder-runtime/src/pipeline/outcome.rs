@@ -114,6 +114,22 @@ pub(crate) fn status_and_message(
                     .unwrap_or_default()
             ),
         ),
+        // The story's last task left scenarios red: a person decides — a
+        // hint, or a ruling that a scenario's tests are wrong.
+        (Some(Verdict::Failed { reasons }), _)
+            if matches!(
+                report.progress,
+                Some(speccoder_core::story::Progress::StoryOpen { .. })
+            ) =>
+        {
+            (
+                CommandStatus::NeedsHuman,
+                format!(
+                    "the story is still open — {}",
+                    failed_because(report, reasons)
+                ),
+            )
+        }
         (Some(Verdict::Failed { reasons }), _) => (
             CommandStatus::VerificationFailed,
             format!("verdict: failed — {}", failed_because(report, reasons)),
@@ -305,7 +321,8 @@ pub(crate) fn bare_report(
         bug: None,
         collection: None,
         regression: None,
-        share: None,
+        judged: None,
+        progress: None,
         context: None,
     }
 }

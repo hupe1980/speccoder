@@ -898,38 +898,51 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
                 shorten(&a.reason, 90)
             )?;
         }
-        if let Some(sh) = &t.share {
-            writeln!(w, "      judged by: {}", share_words(sh))?;
+        if let Some(j) = &t.judged {
+            writeln!(w, "      judged by: {}", judged_words(j))?;
         }
     }
-    // Each story's scenarios: verified by a tick (●) or left (○), and the
-    // task that judges what is left.
-    for st in &r.stories {
+    // Each story's scenarios on its oracle: green (●, with the tick that
+    // turned it), red (○) or untested (·), and the task that closes it.
+    for st in r.stories.iter().filter(|s| !s.proven) {
+        use speccoder_core::story::ScenarioState as S;
         let marks: String = st
             .scenarios
             .iter()
-            .map(|m| {
-                if m.verified_by.is_some() {
-                    '●'
-                } else {
-                    '○'
-                }
+            .map(|m| match m.state {
+                S::Green => '●',
+                S::Red => '○',
+                S::Untested => '·',
             })
             .collect();
-        let done = st
-            .scenarios
-            .iter()
-            .filter(|m| m.verified_by.is_some())
-            .count();
+        let green = st.scenarios.iter().filter(|m| m.state == S::Green).count();
         let n = st.scenarios.len();
-        let rest = match (&st.checkpoint, done == n) {
-            (_, true) => "every scenario verified".to_owned(),
-            (Some(c), false) => format!("{c} judges the rest"),
-            (None, false) => "no task judges the rest — see `speccoder doctor`".to_owned(),
+        let mut turned: Vec<(String, Vec<&str>)> = Vec::new();
+        for m in &st.scenarios {
+            if let Some(t) = &m.turned_by {
+                match turned.iter_mut().find(|(x, _)| x == t) {
+                    Some((_, ids)) => ids.push(&m.id),
+                    None => turned.push((t.clone(), vec![&m.id])),
+                }
+            }
+        }
+        let by: String = turned
+            .iter()
+            .map(|(t, ids)| format!(" · {t} turned {}", ids.join(", ")))
+            .collect();
+        let rest = match (&st.checkpoint, green == n) {
+            (_, true) => String::new(),
+            (Some(c), false) => format!(" · {c} closes it"),
+            (None, false) => " · no task closes it — see `speccoder doctor`".to_owned(),
+        };
+        let oracle = if st.oracle.is_none() {
+            " · its oracle is written at its first code task"
+        } else {
+            ""
         };
         writeln!(
             w,
-            "Story      {} {marks} {done} of {n} verified · {rest}",
+            "Story      {} {marks} {green} of {n} green{by}{rest}{oracle}",
             st.story
         )?;
     }
@@ -2264,39 +2277,18 @@ pub fn ask_conversations(
         .collect()
 }
 
-/// What judges a task, in words: `linked US3-1`, `checkpoint: US3-2 US3-3 + together`,
-/// `the test author's choice of US3-1…US3-3`, `deferred to T021`.
-fn share_words(sh: &speccoder_core::story::Share) -> String {
-    use speccoder_core::story::Share;
-    match sh {
-        Share::Linked { scenarios } => format!("linked {}", scenarios.join(" ")),
-        Share::Checkpoint {
-            scenarios,
-            composition,
-        } => {
-            if scenarios.is_empty() {
-                "its story's checkpoint — every scenario already verified".to_owned()
-            } else {
-                format!(
-                    "its story's checkpoint: {}{}",
-                    scenarios.join(" "),
-                    if *composition { " + together" } else { "" }
-                )
-            }
-        }
-        Share::Authored {
-            scenarios,
-            checkpoint,
-        } => format!(
-            "the test author's choice of {}{}",
-            scenarios.join(" "),
-            checkpoint
-                .as_ref()
-                .map(|c| format!(" · {c} judges what it leaves"))
-                .unwrap_or_default()
+/// What judges a task, in words: `progress on its story's oracle`,
+/// `linked US3-1`, `its story's checkpoint`.
+fn judged_words(j: &speccoder_core::story::Judged) -> String {
+    use speccoder_core::story::Judged;
+    match j {
+        Judged::Progress => "the scenarios it turns green on its story's oracle".to_owned(),
+        Judged::Linked { scenarios } => format!(
+            "linked {} — they must be green after it",
+            scenarios.join(" ")
         ),
-        Share::Deferred { checkpoint } => {
-            format!("its regression checks; its scenarios at {checkpoint}")
+        Judged::Checkpoint => {
+            "its story's checkpoint — every scenario must be green after it".to_owned()
         }
     }
 }

@@ -1,8 +1,8 @@
 case = "calc-add"
-run_ids = ["run_01M6A9YR28QDJ3W4A2T3KWZ39C"]
+run_ids = ["run_01M6C5RSRZGFKGKQT9G8GWTQA0"]
 provider = "openai"
 model = "gpt-5.4-mini"
 agentplane = "0.57.0"
-speccoder = "0.7.0"
-recorded_at = "2026-11-01T01:00:48Z"
+speccoder = "0.7.2"
+recorded_at = "2026-11-01T18:26:07Z"
 expect = "reproduced"

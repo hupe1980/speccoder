@@ -18,6 +18,9 @@ pub enum Producer {
     BugConfirmation,
     /// A person named the bug's reproduction tests (`--test`).
     PersonTest,
+    /// A run wrote a story's oracle before its first code task, nobody
+    /// having reviewed it.
+    Run,
 }
 
 impl Producer {
@@ -28,6 +31,7 @@ impl Producer {
             Self::Review => AcceptanceSource::Review,
             Self::BugConfirmation => AcceptanceSource::BugConfirmation,
             Self::PersonTest => AcceptanceSource::PersonTest,
+            Self::Run => AcceptanceSource::Authored,
         }
     }
 
@@ -38,6 +42,7 @@ impl Producer {
             Self::Review => "review",
             Self::BugConfirmation => "bug_confirmation",
             Self::PersonTest => "person_test",
+            Self::Run => "run",
         }
     }
 }

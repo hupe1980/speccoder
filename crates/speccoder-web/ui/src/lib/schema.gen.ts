@@ -100,7 +100,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "defer_acceptance" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "rule_scenario" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -1067,7 +1067,10 @@ export interface Comparison {
   count_before: number;
   /** Tests collected now. */
   count_after: number;
-  /** Checks failing now only because of tests that already failed in the baseline. */
+  /**
+   * Checks failing now only because of tests that already failed in the
+   * baseline, or tests of a story's oracle (judged by the oracle's own runs).
+   */
   failing_as_before: string[];
 }
 
@@ -1858,16 +1861,6 @@ export type EventLine = {
     /** Each judged test file. */
     files: PublicCollectionFile[];
   }
-  /** The search for the tick that made already-passing tests pass ended. */
-  | {
-    type: "regression.bisected";
-    /** Task ID. */
-    task: string;
-    /** Acceptance runs it took. */
-    runs: number;
-    /** The implementing task, `before_feature`, or `null`. */
-    result: string | null;
-  }
   /**
    * An external agent makes the attempt: its name and permission mode
    * (`decides_alone`: it was not put into a mode that asks first).
@@ -2593,6 +2586,11 @@ export interface HeldOutSummary {
   manifest_sha256: string | null;
   /** Why none was kept (`not_red`, `none_generated`, …). */
   reason: string | null;
+  /**
+   * Why each discarded test was (`not_red`, `unknown_scenario`, …);
+   * never a held-out path.
+   */
+  discarded?: string[];
 }
 
 /** A held-out variant, as the payload shows it: never its content or path. */
@@ -2679,21 +2677,6 @@ export type How =
     how: "words";
     /** Why it is not taken here; `None` for words. */
     why: string | null;
-  };
-
-/** Which tick made already-passing acceptance tests pass. */
-export type ImplementedBy =
-  /** A tick on the feature branch. */
-  | {
-    /** Its task. */
-    task: string;
-    /** Its commit (short). */
-    commit: string;
-  }
-  /** They passed before the feature's first tick. */
-  | {
-    /** Always `true`. */
-    before_feature: boolean;
   };
 
 /** Why an in-place run refused or stopped. */
@@ -2943,6 +2926,23 @@ export interface JourneyStep {
   state: StepState;
 }
 
+/** What judges one open task of a story. */
+export type Judged =
+  /** The progress it makes on the story's oracle. */
+  | {
+    kind: "progress";
+  }
+  /** The scenarios it names, which it must leave green. */
+  | {
+    kind: "linked";
+    /** Their ids. */
+    scenarios: string[];
+  }
+  /** The story's checkpoint: every scenario must be green after it. */
+  | {
+    kind: "checkpoint";
+  };
+
 /** How a code presents itself. */
 export type Kind = "error" | "stop" | "warning";
 
@@ -2960,10 +2960,10 @@ export interface LastAttempt {
   /** The ref holding the attempt's tree. */
   reference: string;
   /**
-   * The story's checkpoint this task's acceptance may be moved to: its
-   * tests stayed red mid-story (`speccoder task defer`).
+   * The story's scenarios its oracle still showed red when the story's
+   * last task stopped (`STORY-OPEN`): each can be ruled wrong.
    */
-  defer_to?: string | null;
+  story_open?: string[];
 }
 
 /** A listing speccoder ran because the earlier sources left a file undecided. */
@@ -3245,6 +3245,14 @@ export interface OracleDiscarded {
   path: string;
   /** `cites_no_scenario`, `not_a_new_test_file`, `exists`. */
   why: string;
+}
+
+/** Where a story's oracle was written, and who froze it. */
+export interface OracleMark {
+  /** The `Oracle:` commit (short). */
+  commit: string;
+  /** `speccoder run`, or the person who approved it at review. */
+  decided_by: string;
 }
 
 /** What a change to a requirement's tests does. */
@@ -3681,6 +3689,44 @@ export interface PresetState {
   bundled: string;
 }
 
+/**
+ * What an attempt did to its story, by the oracle's states before and
+ * after it.
+ */
+export type Progress =
+  /** It turned these scenarios green (in the story's order). */
+  | {
+    kind: "verified";
+    /** Red before, green after. */
+    turned: string[];
+  }
+  /** It turned none and broke none; the story goes on. */
+  | {
+    kind: "in_progress";
+  }
+  /** The checkpoint, every scenario green before it already. */
+  | {
+    kind: "closed";
+  }
+  /** Scenarios green before it are red after it. */
+  | {
+    kind: "regressed";
+    /** Green before, not green after. */
+    scenarios: string[];
+  }
+  /** Scenarios the task names are not green after it. */
+  | {
+    kind: "links_open";
+    /** Its links still not green. */
+    scenarios: string[];
+  }
+  /** The checkpoint left scenarios not green. */
+  | {
+    kind: "story_open";
+    /** Not green after it. */
+    scenarios: string[];
+  };
+
 /** Where the project is made. */
 export type ProjectMode = "new_folder" | "existing_repository";
 
@@ -4019,8 +4065,6 @@ export interface ReasonCount {
   n: number;
   /** Their tasks. */
   tasks: string[];
-  /** `already_passing`: the tasks that made the tests pass. */
-  implemented_by?: string[];
   /** speccoder's words for the group (`7 had no user story`). */
   text: string;
 }
@@ -4088,8 +4132,6 @@ export type RegressionReason =
   /** The acceptance tests passed before the attempt. */
   | {
     reason: "already_passing";
-    /** The tick that made them pass; `null` when it could not be determined. */
-    implemented_by: ImplementedBy | null;
   }
   /** They did not fail on an assertion or an absent symbol. */
   | {
@@ -4106,19 +4148,28 @@ export type RegressionReason =
     reason: "planning_work";
   }
   /**
-   * Its story's checkpoint, with every scenario of the story verified by
-   * earlier ticks: nothing left to show.
+   * Its story's checkpoint, with every scenario of the story turned green
+   * by earlier ticks: nothing left to show.
    */
   | {
     reason: "story_verified";
   }
-  /** A person moved its acceptance to its story's checkpoint. */
+  /**
+   * A task of a story that turned none of its scenarios green and broke
+   * none: the story goes on.
+   */
   | {
-    reason: "deferred_to_checkpoint";
-    /** The task that judges its scenarios. */
-    checkpoint: string;
+    reason: "in_progress";
   }
-  /** A tick made before reasons were recorded (read side only). */
+  /**
+   * A task of a story whose test check failed before and after it and
+   * reports no per-test results: a regression could not be told apart
+   * from the story's own red tests.
+   */
+  | {
+    reason: "regression_unchecked";
+  }
+  /** A tick without a recorded reason (read side only). */
   | {
     reason: "unrecorded";
   };
@@ -4559,7 +4610,9 @@ export interface RunReport {
    * What judged the task in its story (none for a bug fix or a task of
    * no story).
    */
-  share?: Share | null;
+  judged?: Judged | null;
+  /** What the attempt did to its story's oracle. */
+  progress?: Progress | null;
   /** What reached the implementer, by digest (constitution VIII). */
   context?: ContextManifest | null;
 }
@@ -4944,16 +4997,15 @@ export type Runnable =
     revoke: boolean;
   }
   /**
-   * Judge a task by its regression checks and its story's scenarios at
-   * the story's checkpoint (`revoke`: take the decision back) — a
-   * person's decision in the state directory, never an edit of the plan.
+   * Rule that one scenario's oracle tests are wrong (the input is the
+   * reason): the next run writes that scenario's tests again.
    */
   | {
-    kind: "defer_acceptance";
-    /** The task. */
+    kind: "rule_scenario";
+    /** The task that met them. */
     task: string;
-    /** Take the decision back. */
-    revoke: boolean;
+    /** The scenario (`US3-2`). */
+    scenario: string;
   }
   /**
    * Install the bundled `speccoder` Spec Kit preset through Spec Kit's
@@ -5107,8 +5159,12 @@ export interface SandboxNote {
 export interface ScenarioMark {
   /** Its id (`US3-1`). */
   id: string;
-  /** The task whose tick verified it, worded as it is now. */
-  verified_by?: string | null;
+  /** Its state at the branch's tip (red before the oracle exists). */
+  state: ScenarioState;
+  /** The task whose tick turned it green, worded as it is now. */
+  turned_by?: string | null;
+  /** What must hold, as the oracle states it (given → must hold). */
+  contract?: string | null;
 }
 
 /**
@@ -5121,6 +5177,12 @@ export interface ScenarioRef {
   /** The scenario as written in the spec. */
   text: string;
 }
+
+/**
+ * A scenario's state on a tree: green when every oracle test citing it
+ * passes, red when one fails, untested when no kept test cites it.
+ */
+export type ScenarioState = "green" | "red" | "untested";
 
 /** Which tasks can start now, and what blocks the rest. */
 export interface Schedule {
@@ -5293,40 +5355,6 @@ export interface ShapeReport {
   /** Its tokens. */
   usage: unknown;
 }
-
-/** What judges one task. */
-export type Share =
-  /** The scenarios the task names. */
-  | {
-    kind: "linked";
-    /** Their ids. */
-    scenarios: string[];
-  }
-  /**
-   * The story's checkpoint: every scenario no earlier tick verified,
-   * with its links.
-   */
-  | {
-    kind: "checkpoint";
-    /** Their ids, in the story's order. */
-    scenarios: string[];
-    /** Also one test of these scenarios together (two or more left). */
-    composition: boolean;
-  }
-  /** The story's scenarios; the test author chooses. */
-  | {
-    kind: "authored";
-    /** Their ids. */
-    scenarios: string[];
-    /** The story's checkpoint, where what this task leaves is judged. */
-    checkpoint?: string | null;
-  }
-  /** A person moved its acceptance to the checkpoint. */
-  | {
-    kind: "deferred";
-    /** The task that judges its scenarios. */
-    checkpoint: string;
-  };
 
 /** A reproduction as the stream shows it. */
 export interface ShownReproduction {
@@ -5758,14 +5786,24 @@ export type StepKind = "requirement" | "frozen_tests" | "red" | "diff" | "green"
 /** Where a step of the journey is. */
 export type StepState = "done" | "now" | "todo" | "skipped";
 
-/** A story's scenarios, each verified by a tick or left for its checkpoint. */
+/** A story's scenarios as its oracle and ticks show them. */
 export interface StoryScenarios {
   /** The story (`US3`; for OpenSpec the change). */
   story: string;
   /** Its scenarios in order. */
   scenarios: ScenarioMark[];
-  /** The task that judges what is left (none: every task is planning work). */
+  /**
+   * The task that closes it (none: every open task is planning work, or
+   * all are done).
+   */
   checkpoint?: string | null;
+  /** The story's oracle, once written. */
+  oracle?: OracleMark | null;
+  /**
+   * Every task done and every scenario green: the spec shows it, the
+   * report and the board leave it out.
+   */
+  proven?: boolean;
 }
 
 /** One set's strength. */
@@ -5867,7 +5905,7 @@ export interface TaskStatus {
   /** For an open task: its latest saved attempt. */
   last_attempt: LastAttempt | null;
   /** For an open task of a story: what will judge it. */
-  share?: Share | null;
+  judged?: Judged | null;
   /**
    * Changes found in the worktree when the task's run started (a person's
    * edits, or an interrupted run's leftovers), saved and set aside.
@@ -5887,7 +5925,7 @@ export interface TaskStatus {
   bug?: string | null;
   /**
    * A regression-only tick: why, with speccoder's wording
-   * (`unrecorded` for a tick made before reasons were recorded).
+   * (`unrecorded` for a tick without a recorded reason).
    */
   regression?: RegressionOnly | null;
   /** Who does it ([`crate::lane`]); left out for `code`. */

@@ -1,6 +1,6 @@
 //! The project's test layout, detected by code: the runners of
 //! the checkout, each runner's collection rule as configured, where tests
-//! live today, the naming habit, and where speccoder puts a story's
+//! live today, the naming habit, and where speccoder puts a task's
 //! acceptance file. A fact handed to the implementer and every test author,
 //! never a judge input; undeterminable parts are listed as unknown, never
 //! guessed. Same checkout, same bytes.
@@ -42,9 +42,9 @@ pub struct RunnerLayout {
     pub not_run: Vec<String>,
     /// The project's naming habit.
     pub naming: Option<String>,
-    /// Where speccoder puts story files; `None`: no place the runner collects.
+    /// Where speccoder puts acceptance files; `None`: no place the runner collects.
     pub story_dir: Option<String>,
-    /// The file extension story files take (JS/TS: the project's majority).
+    /// The file extension acceptance files take (JS/TS: the project's majority).
     pub extension: String,
     /// What could not be determined.
     pub unknown: Vec<String>,
@@ -387,13 +387,13 @@ impl TestLayout {
             .or_else(|| self.runners.first())
     }
 
-    /// The story file for `story` (`US1`) — for Go, in `package` (a
-    /// directory). `None`: no place the runner collects.
+    /// The acceptance file named after `name` (a task, `T005`) — for Go, in
+    /// `package` (a directory). `None`: no place the runner collects.
     #[must_use]
-    pub fn story_file(&self, story: &str, package: Option<&str>) -> Option<String> {
+    pub fn acceptance_file(&self, name: &str, package: Option<&str>) -> Option<String> {
         let r = self.primary()?;
         let dir = r.story_dir.as_ref()?;
-        let s = story.to_ascii_lowercase();
+        let s = name.to_ascii_lowercase();
         Some(match r.toolchain {
             Toolchain::Rust => at(dir, &format!("acceptance_{s}.rs")),
             Toolchain::Python => at(dir, &format!("test_acceptance_{s}.py")),
@@ -512,7 +512,7 @@ mod tests {
         );
         let l = detect(d.path(), &[]);
         assert_eq!(
-            l.story_file("US1", None).as_deref(),
+            l.acceptance_file("US1", None).as_deref(),
             Some("tests/acceptance_us1.rs")
         );
         assert_eq!(
@@ -594,15 +594,15 @@ mod tests {
             ],
         );
         let l = detect(d.path(), &[]);
-        assert_eq!(l.story_file("US1", None), None);
+        assert_eq!(l.acceptance_file("US1", None), None);
         assert!(l.runners[0].unknown[0].contains("autotests = false"));
         let d = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
         write(d.path(), &[("pytest.ini", "[pytest]\ntestpaths = spec\n")]);
-        assert_eq!(detect(d.path(), &[]).story_file("US1", None), None);
+        assert_eq!(detect(d.path(), &[]).acceptance_file("US1", None), None);
     }
 
     #[test]
-    fn python_js_and_go_story_files_follow_the_layout() {
+    fn python_js_and_go_acceptance_files_follow_the_layout() {
         let d = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
         write(
             d.path(),
@@ -612,7 +612,9 @@ mod tests {
             ],
         );
         assert_eq!(
-            detect(d.path(), &[]).story_file("US2", None).as_deref(),
+            detect(d.path(), &[])
+                .acceptance_file("US2", None)
+                .as_deref(),
             Some("tests/test_acceptance_us2.py")
         );
         let d = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
@@ -627,7 +629,9 @@ mod tests {
             ],
         );
         assert_eq!(
-            detect(d.path(), &[]).story_file("US1", None).as_deref(),
+            detect(d.path(), &[])
+                .acceptance_file("US1", None)
+                .as_deref(),
             Some("src/acceptance-us1.test.ts")
         );
         let d = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
@@ -637,7 +641,7 @@ mod tests {
         );
         assert_eq!(
             detect(d.path(), &[])
-                .story_file("US1", Some("g"))
+                .acceptance_file("US1", Some("g"))
                 .as_deref(),
             Some("g/acceptance_us1_test.go")
         );

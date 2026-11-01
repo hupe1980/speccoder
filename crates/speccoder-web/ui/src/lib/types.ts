@@ -38,7 +38,7 @@ export type {
   PolicyCoverage,
   Remedy,
   RequirementDrift,
-  Share,
+  Judged,
   StoryScenarios,
   ReviewChange,
   ReviewItem,

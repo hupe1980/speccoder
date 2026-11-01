@@ -16,7 +16,7 @@ speccoder is a coding agent for [GitHub Spec Kit](https://github.com/github/spec
 1. A separate model call turns the acceptance examples in your spec into tests that must **fail** on the current code.
 2. The implementing model works in an isolated git worktree; every tool call is checked before it runs.
 3. speccoder runs your checks and the acceptance tests itself and audits the diff.
-4. A task is ticked and committed only when its tests went from red to green, nothing regressed and no test was weakened. Anything else is saved and stopped for you.
+4. A task is ticked and committed only when nothing regressed and no test was weakened: `verified` when it turned scenarios of its story's oracle from red to green, the story's last task when all are green. Anything else is saved and stopped for you.
 
 ## Core concepts
 

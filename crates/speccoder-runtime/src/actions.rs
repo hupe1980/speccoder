@@ -587,7 +587,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::RevisionUndo
             | K::CodeNudge
             | K::AcceptanceAt
-            | K::DeferAcceptance
+            | K::RuleScenario
             | K::PresetAdd
             | K::PlanThrough
             | K::NewProject
@@ -637,7 +637,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::RevisionUndo
             | K::CodeNudge
             | K::AcceptanceAt
-            | K::DeferAcceptance
+            | K::RuleScenario
             | K::PresetAdd
             | K::NewProject
             | K::UndoNewProject
@@ -684,7 +684,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::RevisionUndo
             | K::CodeNudge
             | K::AcceptanceAt
-            | K::DeferAcceptance
+            | K::RuleScenario
             | K::PresetAdd
             | K::NewProject
             | K::UndoNewProject
@@ -730,7 +730,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::RevisionUndo
             | K::CodeNudge
             | K::AcceptanceAt
-            | K::DeferAcceptance
+            | K::RuleScenario
             | K::PresetAdd
             | K::PlanThrough
             | K::NewProject
@@ -779,7 +779,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::RevisionUndo
             | K::CodeNudge
             | K::AcceptanceAt
-            | K::DeferAcceptance
+            | K::RuleScenario
             | K::PresetAdd
             | K::PlanThrough
             | K::NewProject
@@ -909,9 +909,12 @@ pub fn perform_in(
             }
             None => no_state(),
         },
-        Runnable::DeferAcceptance { task, revoke } => match state {
-            Some(s) => crate::acceptance_at::defer(root, feature, task, *revoke, via, s),
-            None => no_state(),
+        Runnable::RuleScenario { task, scenario } => match (text, state) {
+            (Some(why), Some(s)) => {
+                crate::acceptance_at::rule_scenario(root, feature, task, scenario, why, via, s)
+            }
+            (None, _) => needs("a reason"),
+            (_, None) => no_state(),
         },
         // The interface has confirmed: Spec Kit's own command runs.
         Runnable::PresetAdd { update } => match state {

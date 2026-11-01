@@ -7,7 +7,7 @@ use std::path::Path;
 
 use serde_json::Value;
 use speccoder_core::RunReport;
-use speccoder_core::verify::{CheckStatus, Verdict, VerifyReport, compare, passes, verdict};
+use speccoder_core::verify::{CheckStatus, Verdict, VerifyReport, compare_except, passes, verdict};
 
 use crate::tools::policy::{Object, Policy};
 use crate::{integrity, sandbox, verify, worktree};
@@ -122,10 +122,12 @@ pub(crate) fn changes_of(raw: Vec<worktree::Change>) -> Vec<(String, String)> {
 /// The verdict: the fast checks against the baseline, and the acceptance
 /// tests green — task evidence only when they were red first. Any integrity
 /// finding fails it, whatever the checks said.
+/// Tests of the story's `oracle` files failing in a check are the
+/// oracle's to judge, never the check's.
 pub(crate) fn judge_checks(
     project: &Path,
     runner: &sandbox::Runner,
-    baseline: &VerifyReport,
+    (baseline, oracle): (&VerifyReport, &[String]),
     acceptance: Option<&PreparedAcceptance>,
     findings: &[String],
     report: &mut RunReport,
@@ -173,7 +175,7 @@ pub(crate) fn judge_checks(
         }
         current.checks.push(green);
     }
-    let cmp = compare(baseline, &current);
+    let cmp = compare_except(baseline, &current, oracle);
     current.passed = passes(&current.checks, Some(&cmp));
     let mut judged = verdict(&task_checks, &current.checks, Some(&cmp));
     if uncollected_at_green {

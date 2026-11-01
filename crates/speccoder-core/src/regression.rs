@@ -2,31 +2,13 @@
 //! code from the run's facts, worded once, and carried in the commit's
 //! `Regression-Only:` trailer and its signed statement.
 //!
-//! The reason sits beside [`crate::verify::Verdict`], not inside it: signed
-//! statements and schemas of the verdict stay as they are, and a tick made
-//! before reasons existed reads [`RegressionReason::Unrecorded`].
+//! The reason sits beside [`crate::verify::Verdict`], not inside it, so the
+//! verdict's statements and schemas are independent of it; a tick without a
+//! recorded reason reads [`RegressionReason::Unrecorded`].
 
 use serde::{Deserialize, Serialize};
 
 use crate::verify::RedClass;
-
-/// Which tick made already-passing acceptance tests pass.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(untagged)]
-pub enum ImplementedBy {
-    /// A tick on the feature branch.
-    Task {
-        /// Its task.
-        task: String,
-        /// Its commit (short).
-        commit: String,
-    },
-    /// They passed before the feature's first tick.
-    BeforeFeature {
-        /// Always `true`.
-        before_feature: bool,
-    },
-}
 
 /// Why a tick is regression-only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -49,10 +31,7 @@ pub enum RegressionReason {
         detail: String,
     },
     /// The acceptance tests passed before the attempt.
-    AlreadyPassing {
-        /// The tick that made them pass; `null` when it could not be determined.
-        implemented_by: Option<ImplementedBy>,
-    },
+    AlreadyPassing,
     /// They did not fail on an assertion or an absent symbol.
     NotRed {
         /// How the red run ended.
@@ -62,15 +41,17 @@ pub enum RegressionReason {
     TestsNotCollected,
     /// A planning task: design documents, judged by the checks alone.
     PlanningWork,
-    /// Its story's checkpoint, with every scenario of the story verified by
-    /// earlier ticks: nothing left to show.
+    /// Its story's checkpoint, with every scenario of the story turned green
+    /// by earlier ticks: nothing left to show.
     StoryVerified,
-    /// A person moved its acceptance to its story's checkpoint.
-    DeferredToCheckpoint {
-        /// The task that judges its scenarios.
-        checkpoint: String,
-    },
-    /// A tick made before reasons were recorded (read side only).
+    /// A task of a story that turned none of its scenarios green and broke
+    /// none: the story goes on.
+    InProgress,
+    /// A task of a story whose test check failed before and after it and
+    /// reports no per-test results: a regression could not be told apart
+    /// from the story's own red tests.
+    RegressionUnchecked,
+    /// A tick without a recorded reason (read side only).
     Unrecorded,
 }
 
@@ -103,12 +84,13 @@ impl RegressionReason {
             Self::AcceptanceOff => "acceptance_off",
             Self::AuthorWroteNone => "author_wrote_none",
             Self::AuthorFailed { .. } => "author_failed",
-            Self::AlreadyPassing { .. } => "already_passing",
+            Self::AlreadyPassing => "already_passing",
             Self::NotRed { .. } => "not_red",
             Self::TestsNotCollected => "tests_not_collected",
             Self::PlanningWork => "planning_work",
             Self::StoryVerified => "story_verified",
-            Self::DeferredToCheckpoint { .. } => "deferred_to_checkpoint",
+            Self::InProgress => "in_progress",
+            Self::RegressionUnchecked => "regression_unchecked",
             Self::Unrecorded => "unrecorded",
         }
     }
@@ -159,8 +141,9 @@ pub struct RegressionFacts {
 
 /// The reason, by precedence (highest first): `acceptance_off`,
 /// `no_story`, `no_scenarios`, `author_failed`, `author_wrote_none`,
-/// `tests_not_collected`, `not_red`, `already_passing`. `already_passing`
-/// comes without `implemented_by`; the bisection fills it.
+/// `tests_not_collected`, `not_red`, `already_passing` — for a task judged
+/// by its own acceptance tests (a convergence gap, a quick change); a story
+/// task's reason comes from its progress on the story's oracle.
 #[must_use]
 pub fn decide(f: &RegressionFacts) -> RegressionReason {
     if !f.acceptance_on {
@@ -186,9 +169,7 @@ pub fn decide(f: &RegressionFacts) -> RegressionReason {
     match f.red_class {
         None => RegressionReason::AuthorWroteNone,
         Some(RedClass::NoTests) => RegressionReason::TestsNotCollected,
-        Some(RedClass::Passed) => RegressionReason::AlreadyPassing {
-            implemented_by: None,
-        },
+        Some(RedClass::Passed) => RegressionReason::AlreadyPassing,
         Some(c) => RegressionReason::NotRed { red_class: c },
     }
 }
@@ -287,16 +268,7 @@ pub fn wording(r: &RegressionReason) -> String {
         RegressionReason::AuthorFailed { detail } => {
             format!("its acceptance tests could not be used: {detail}")
         }
-        RegressionReason::AlreadyPassing { implemented_by } => match implemented_by {
-            Some(ImplementedBy::Task { task, .. }) => {
-                format!("already passing before the attempt — implemented by {task}")
-            }
-            Some(ImplementedBy::BeforeFeature { .. }) => {
-                "already passing before this feature".to_owned()
-            }
-            None => "already passing before the attempt; which task did it could not be determined"
-                .to_owned(),
-        },
+        RegressionReason::AlreadyPassing => "already passing before the attempt".to_owned(),
         RegressionReason::NotRed { red_class } => format!(
             "its acceptance tests did not fail first ({})",
             class_words(*red_class)
@@ -308,10 +280,14 @@ pub fn wording(r: &RegressionReason) -> String {
             "planning work — design documents, not code: nothing to test".to_owned()
         }
         RegressionReason::StoryVerified => {
-            "its story's scenarios were all verified by earlier ticks".to_owned()
+            "its story's scenarios were all turned green by earlier ticks".to_owned()
         }
-        RegressionReason::DeferredToCheckpoint { checkpoint } => {
-            format!("its story's scenarios are judged at {checkpoint}, as you decided")
+        RegressionReason::InProgress => {
+            "turned none of its story's scenarios green and broke none: the story goes on"
+                .to_owned()
+        }
+        RegressionReason::RegressionUnchecked => {
+            "its test check failed before and after and reports no per-test results, so a regression could not be told apart from the story's own red tests — set `junit` on the check".to_owned()
         }
         RegressionReason::Unrecorded => {
             "why was not recorded (ticked by an earlier speccoder)".to_owned()
@@ -329,20 +305,8 @@ pub fn trailer(r: &RegressionReason) -> String {
     match r {
         RegressionReason::NoScenarios { story } => format!("{name} story={}", escape(story)),
         RegressionReason::AuthorFailed { detail } => format!("{name} detail={}", escape(detail)),
-        RegressionReason::AlreadyPassing { implemented_by } => match implemented_by {
-            Some(ImplementedBy::Task { task, commit }) => format!(
-                "{name} implemented_by={} commit={}",
-                escape(task),
-                escape(commit)
-            ),
-            Some(ImplementedBy::BeforeFeature { .. }) => format!("{name} before_feature=true"),
-            None => format!("{name} implemented_by=unknown"),
-        },
         RegressionReason::NotRed { red_class } => {
             format!("{name} red_class={}", class_name(*red_class))
-        }
-        RegressionReason::DeferredToCheckpoint { checkpoint } => {
-            format!("{name} checkpoint={}", escape(checkpoint))
         }
         _ => name.to_owned(),
     }
@@ -369,30 +333,15 @@ pub fn parse_trailer(value: &str) -> Option<RegressionReason> {
         "author_failed" => RegressionReason::AuthorFailed {
             detail: get("detail")?,
         },
-        "already_passing" => RegressionReason::AlreadyPassing {
-            implemented_by: if get("before_feature").as_deref() == Some("true") {
-                Some(ImplementedBy::BeforeFeature {
-                    before_feature: true,
-                })
-            } else {
-                match get("implemented_by") {
-                    Some(t) if t != "unknown" => Some(ImplementedBy::Task {
-                        task: t,
-                        commit: get("commit").unwrap_or_default(),
-                    }),
-                    _ => None,
-                }
-            },
-        },
+        "already_passing" => RegressionReason::AlreadyPassing,
         "not_red" => RegressionReason::NotRed {
             red_class: class_named(&get("red_class")?)?,
         },
         "tests_not_collected" => RegressionReason::TestsNotCollected,
         "planning_work" => RegressionReason::PlanningWork,
         "story_verified" => RegressionReason::StoryVerified,
-        "deferred_to_checkpoint" => RegressionReason::DeferredToCheckpoint {
-            checkpoint: get("checkpoint")?,
-        },
+        "in_progress" => RegressionReason::InProgress,
+        "regression_unchecked" => RegressionReason::RegressionUnchecked,
         _ => return None,
     })
 }
@@ -452,25 +401,13 @@ mod tests {
             Just(RegressionReason::AcceptanceOff),
             Just(RegressionReason::AuthorWroteNone),
             ".{0,40}".prop_map(|detail| RegressionReason::AuthorFailed { detail }),
-            Just(RegressionReason::AlreadyPassing {
-                implemented_by: None
-            }),
-            Just(RegressionReason::AlreadyPassing {
-                implemented_by: Some(ImplementedBy::BeforeFeature {
-                    before_feature: true
-                })
-            }),
-            ("T[0-9]{3}", "[0-9a-f]{7}").prop_map(|(task, commit)| {
-                RegressionReason::AlreadyPassing {
-                    implemented_by: Some(ImplementedBy::Task { task, commit }),
-                }
-            }),
+            Just(RegressionReason::AlreadyPassing),
             class().prop_map(|red_class| RegressionReason::NotRed { red_class }),
             Just(RegressionReason::TestsNotCollected),
             Just(RegressionReason::PlanningWork),
             Just(RegressionReason::StoryVerified),
-            "T[0-9]{3}"
-                .prop_map(|checkpoint| RegressionReason::DeferredToCheckpoint { checkpoint }),
+            Just(RegressionReason::InProgress),
+            Just(RegressionReason::RegressionUnchecked),
         ]
     }
 
@@ -510,19 +447,11 @@ mod tests {
 
     #[test]
     fn the_wording_is_the_spec_s() {
-        let r = RegressionReason::AlreadyPassing {
-            implemented_by: Some(ImplementedBy::Task {
-                task: "T003".to_owned(),
-                commit: "d433d77".to_owned(),
-            }),
-        };
+        let r = RegressionReason::InProgress;
+        assert_eq!(trailer(&r), "in_progress");
         assert_eq!(
-            wording(&r),
-            "already passing before the attempt — implemented by T003"
-        );
-        assert_eq!(
-            trailer(&r),
-            "already_passing implemented_by=T003 commit=d433d77"
+            wording(&RegressionReason::AlreadyPassing),
+            "already passing before the attempt"
         );
         assert_eq!(
             wording(&RegressionReason::NotRed {
@@ -546,7 +475,7 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_value(&r).unwrap_or_default(),
-            serde_json::json!({ "reason": "already_passing", "implemented_by": { "task": "T003", "commit": "d433d77" } })
+            serde_json::json!({ "reason": "in_progress" })
         );
         assert!(code_path(&"a".repeat(300)).chars().count() <= 122);
         assert_eq!(trailer(&RegressionReason::PlanningWork), "planning_work");

@@ -161,7 +161,8 @@ pub struct Comparison {
     pub count_before: usize,
     /// Tests collected now.
     pub count_after: usize,
-    /// Checks failing now only because of tests that already failed in the baseline.
+    /// Checks failing now only because of tests that already failed in the
+    /// baseline, or tests of a story's oracle (judged by the oracle's own runs).
     pub failing_as_before: Vec<String>,
 }
 
@@ -177,6 +178,33 @@ pub struct Regression {
 /// Compares `current` with `baseline`, test by test and check by check.
 #[must_use]
 pub fn compare(baseline: &VerifyReport, current: &VerifyReport) -> Comparison {
+    compare_except(baseline, current, &[])
+}
+
+/// Whether test `id` (as a runner reports it) is one of `files`: the path
+/// itself, or a segment naming the file (`us1_count` for
+/// `tests/us1_count.rs`, `tests.test_x.test_a` for `tests/test_x.py`).
+#[must_use]
+pub fn test_of(id: &str, files: &[String]) -> bool {
+    files.iter().any(|f| {
+        let name = f.rsplit('/').next().unwrap_or(f);
+        let stem = name.rsplit_once('.').map_or(name, |(s, _)| s);
+        id.contains(f.as_str())
+            || id
+                .split(['/', ':', ' ', '>'])
+                .any(|seg| seg == name || seg.split('.').any(|part| part == stem))
+    })
+}
+
+/// [`compare`], with the failing tests of `oracle` files never blamed on
+/// the change: a story's oracle is judged by its own runs, and its
+/// scenarios that later tasks make pass stay red meanwhile.
+#[must_use]
+pub fn compare_except(
+    baseline: &VerifyReport,
+    current: &VerifyReport,
+    oracle: &[String],
+) -> Comparison {
     let index = |r: &VerifyReport| -> BTreeMap<String, TestOutcome> {
         r.checks
             .iter()
@@ -236,10 +264,15 @@ pub fn compare(baseline: &VerifyReport, current: &VerifyReport) -> Comparison {
             continue;
         };
         let now = c.failing_tests();
-        if old.status == CheckStatus::Failed
-            && c.tests.is_some()
+        let old_failing = old.failing_tests();
+        let unexplained = now
+            .iter()
+            .filter(|t| !old_failing.contains(*t) && !test_of(t, oracle))
+            .count();
+        if c.tests.is_some()
             && !now.is_empty()
-            && now.is_subset(&old.failing_tests())
+            && unexplained == 0
+            && (old.status == CheckStatus::Failed || now.iter().all(|t| test_of(t, oracle)))
         {
             cmp.failing_as_before.push(c.name.clone());
         }
@@ -770,6 +803,53 @@ mod tests {
 
     use CheckStatus::{Failed, Passed};
     use TestOutcome as T;
+
+    #[test]
+    fn a_test_is_known_by_its_file_in_each_runner_s_words() {
+        let files = [
+            "tests/us1_word_count.rs".to_owned(),
+            "tests/test_title.py".to_owned(),
+        ];
+        assert!(test_of("wordcount::us1_word_count::us1_1_counts", &files));
+        assert!(test_of("tests.test_title.test_long", &files));
+        assert!(test_of("tests/test_title.py::test_long", &files));
+        assert!(!test_of("wordcount::us1_word_counter::other", &files));
+        assert!(!test_of("lib::tests::word_count", &files));
+    }
+
+    #[test]
+    fn the_story_s_oracle_tests_failing_are_never_the_check_s_failure() {
+        let oracle = ["tests/us1_count.rs".to_owned()];
+        // At baseline the oracle's file did not build: no test ran.
+        let before = report(vec![check("test", Failed, Some(&[]))]);
+        let after = report(vec![check(
+            "test",
+            Failed,
+            Some(&[
+                ("demo::us1_count::one", T::Passed),
+                ("demo::us1_count::two", T::Failed),
+            ]),
+        )]);
+        let cmp = compare_except(&before, &after, &oracle);
+        assert_eq!(cmp.failing_as_before, ["test"]);
+        assert!(passes(&after.checks, Some(&cmp)));
+        // Any other failing test is the change's.
+        let worse = report(vec![check(
+            "test",
+            Failed,
+            Some(&[
+                ("demo::us1_count::two", T::Failed),
+                ("demo::lib::other", T::Failed),
+            ]),
+        )]);
+        assert!(
+            compare_except(&before, &worse, &oracle)
+                .failing_as_before
+                .is_empty()
+        );
+        // Without the oracle, as before.
+        assert!(compare(&before, &after).failing_as_before.is_empty());
+    }
 
     #[test]
     fn comparison_finds_regressions_pre_existing_and_new() {

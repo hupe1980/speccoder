@@ -717,7 +717,8 @@ fn us3_us4_approve_freezes_and_the_run_reuses_the_oracle_without_an_author_call(
     let acc = rep.acceptance.as_ref().unwrap();
     assert_eq!(acc["source"], "review");
     assert_eq!(acc["pre_frozen"]["approval"], approval);
-    assert_eq!(acc["held_out"]["state"], "on", "{acc}");
+    // T005 is not its story's last task: the story's held-out set waits for
+    // the checkpoint (held_out.rs).
     assert!(
         rep.notices
             .iter()
@@ -1730,18 +1731,18 @@ fn us4_a_frozen_set_already_passing_is_not_demonstrated_and_nothing_is_authored(
     write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n// again\n");
     let run = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
     let rep = report_of(&run);
-    let acc = rep
-        .acceptance
-        .as_ref()
-        .unwrap_or_else(|| panic!("{}", run.message()));
-    assert_eq!(acc["red"], false, "{acc}");
-    assert!(
-        acc["note"]
-            .as_str()
-            .is_some_and(|n| n.contains("already passing")),
-        "{acc}"
+    // The frozen test passes before the work: its scenario is green on the
+    // oracle, and no tick claims it.
+    let oracle = git(
+        r.path(),
+        &[
+            "log",
+            "--format=%(trailers:key=Oracle-Scenarios,valueonly)",
+            "--grep=^Oracle: US1$",
+            "speccoder/001-graph",
+        ],
     );
-    assert_eq!(acc["source"], "review");
+    assert!(oracle.contains("US1-1=green"), "{oracle} {}", run.message());
     assert_ne!(rep.verdict, Some(speccoder_core::verify::Verdict::Verified));
     assert_eq!(author_calls(&f), before, "no author call");
 }
@@ -1775,6 +1776,8 @@ fn us4_a_lapsed_or_absent_frozen_set_is_authored_as_today_with_one_author_call()
             "files": [file("tests/acceptance_t005.txt", &["US1-1"], "fn login")],
             "argv": ["./accept.sh", "--", "tests/acceptance_t005.txt", "fn login"],
             "notes": [],
+            "expectations": [{ "scenario": "US1-1", "given": "a user", "expect": "a login function" }],
+            "untestable": [],
         }));
         f.will_structure(held_out("fn login"));
         write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n");
@@ -1787,8 +1790,9 @@ fn us4_a_lapsed_or_absent_frozen_set_is_authored_as_today_with_one_author_call()
         };
         assert!(
             rep.notices.iter().any(|n| n.contains(said)),
-            "{case}: {:?}",
-            rep.notices
+            "{case}: {:?} {}",
+            rep.notices,
+            run.message()
         );
         let visible = f
             .asked()
@@ -1811,7 +1815,7 @@ fn us4_a_lapsed_or_absent_frozen_set_is_authored_as_today_with_one_author_call()
 
 #[test]
 fn a_crash_between_writing_the_frozen_files_and_the_red_check_resumes_without_an_author_call() {
-    // T062 (fault injection): the process dies after the frozen tests were
+    // Fault injection: the process dies after the frozen tests were
     // written into the worktree, before they were red-checked.
     let r = repo();
     let state = tempfile::tempdir().unwrap();

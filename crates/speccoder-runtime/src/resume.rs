@@ -30,6 +30,10 @@ pub struct Marker {
     pub sample: usize,
     /// The acceptance tests prepared for the task run.
     pub acceptance: Option<serde_json::Value>,
+    /// The story oracle's run before the attempt (a task of a story): what
+    /// a resumed attempt is judged against, never its own changed tree.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub story_before: Option<serde_json::Value>,
     /// The run the attempt belongs to: an invocation resuming it adopts it.
     #[serde(default)]
     pub run_id: Option<String>,

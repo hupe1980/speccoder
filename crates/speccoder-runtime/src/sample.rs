@@ -170,6 +170,17 @@ pub fn open_from(asset: &Asset, state: &Path, fresh: bool) -> CommandResult {
             &bundle.display().to_string(),
             &dir.display().to_string(),
         ]);
+        // A clone makes only the default branch local: the ticks, their
+        // notes and the full-tier record come in as they were recorded.
+        let cloned = cloned.and_then(|_| {
+            crate::git::Git::at(&dir).run(&[
+                "fetch",
+                "--quiet",
+                "--update-head-ok",
+                &bundle.display().to_string(),
+                "+refs/*:refs/*",
+            ])
+        });
         let _ = std::fs::remove_file(&bundle);
         if let Err(e) = cloned {
             return failed(&format!(

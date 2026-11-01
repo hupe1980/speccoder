@@ -9,13 +9,6 @@ export function regressionLabel(t: Task): string | null {
   return `Regression only: ${t.regression?.text ?? "why was not recorded"}`;
 }
 
-/** The task whose tick made already-passing tests pass, when known. */
-export function implementedBy(t: Task): string | null {
-  const r = t.regression?.reason;
-  if (r?.reason !== "already_passing" || !r.implemented_by || !("task" in r.implemented_by)) return null;
-  return r.implemented_by.task;
-}
-
 /** The first test file an attempt wrote that never ran, from its saved reason. */
 export function neverRan(t: Task): string | null {
   const m = t.last_attempt?.reason.match(/^tests not collected: `([^`]+)`/);

@@ -22,7 +22,7 @@ speccoder run --no-prompt        # never ask inline; stop instead (unattended ru
 
 | Flag | Does |
 |---|---|
-| `--task T005 --fresh-acceptance` | Sets the task's held attempt aside and writes its acceptance tests anew |
+| `--task T005 --fresh-acceptance` | Sets the task's held attempt aside and writes its acceptance tests anew (a story's oracle: every scenario's tests) |
 | `--allow-failing-baseline` | Attempts although a check cannot run on the untouched code (that check can never judge the task) |
 | `--ignore-checklists` | Runs although `checklists/*.md` has unchecked items (recorded on every commit) |
 | `--in-place` | Works in your checkout instead of a worktree; see [in-place runs](#in-place-runs) |
@@ -54,7 +54,9 @@ A worktree holds only what is committed, and `node_modules/` or `.venv/` never a
 
 It runs once per lockfile; later tasks reuse it. An attempt that changes the lockfile is installed again before its checks, so they and the tick are about the lockfile committed. A workspace member whose lockfile sits above it is installed where that lockfile is. Go and Rust need no step.
 
-A package the cache lacks stops the task with `error[PREPARE-FAILED]`: run the install once in your checkout, or let its online form reach the network (`[sandbox] network_allow = [["npm", "ci"]]`). A project `speccoder new` made installs from the cache its own steps filled. Lane and bisection worktrees are prepared the same way, and start with the feature worktree's `target/` and Node folders cloned copy-on-write when their lockfile is the same, each lane its own copy (APFS, Btrfs, XFS; elsewhere they build and install as before). In-place runs use your checkout's own folders; `[worktree] prepare = "off"` skips the step.
+A package the cache lacks stops the task with `error[PREPARE-FAILED]`: run the install once in your checkout, or let its online form reach the network (`[sandbox] network_allow = [["npm", "ci"]]`). A project `speccoder new` made installs from the cache its own steps filled. 
+
+Lane worktrees are prepared the same way, and start with the feature worktree's `target/` and Node folders cloned copy-on-write when their lockfile is the same, each lane its own copy (APFS, Btrfs, XFS; elsewhere they build and install as before). In-place runs use your checkout's own folders; `[worktree] prepare = "off"` skips the step.
 
 ## Copied files
 
@@ -112,7 +114,8 @@ The new unit's origin is recorded once in speccoder's state, never in a spec fil
 | `stopped[ACCEPTANCE-WEAK]`, `stopped[TESTS-OVER-STRICT]` | 23 | The acceptance tests are too weak, or stricter than the spec; not ticked | [Strength](@/docs/evidence.md#acceptance-strength), [over-strict tests](@/docs/evidence.md#over-strict-tests) |
 | `failed` (`TESTS-NOT-COLLECTED`) | 20 | A test file the attempt wrote never ran | Retried with the runner's rule; see [tests that never ran](@/docs/evidence.md#tests-that-never-ran) |
 | `stopped[TESTS-COLLECTION-UNKNOWN]` | 23 | speccoder cannot tell whether a changed test file ran; not ticked | Declare `junit` or `list` for the check, or `task accept` (it ticks the saved attempt's code) |
-| `acceptance_failed` | 23 | The acceptance tests could not be written (`ACCEPTANCE-UNWRITTEN`); nothing was attempted | Check the provider and key, then run again |
+| `acceptance_failed` | 23 | The acceptance tests could not be written (`ACCEPTANCE-UNWRITTEN`, `ORACLE-UNWRITTEN`); nothing was attempted | Check the provider and key, then run again; or write them in [review](@/docs/planning.md#review-the-tests) |
+| `stopped[STORY-OPEN]` | 23 | The story's last task left scenarios of its oracle red; not ticked | `task nudge`, or `task rule T --tests-wrong --scenario ID --reason R` when a test asserts what the spec does not say |
 | `error[NO-TASKS]` | 16 | The feature has no task list yet, or one without a task: nothing ran, and it is not done | `speccoder spec tasks` (OpenSpec: `spec propose`), then run |
 | feature done, full tier failed | 20 | Every task is ticked, but a `full` check failed | Fix it, or `speccoder pr --force` |
 | unfinished checklists | 23 | `checklists/*.md` has unchecked items; nothing ran | Finish them, or `--ignore-checklists` |
@@ -144,8 +147,7 @@ Such a stop is never a dead end. At a terminal the run asks, one key each: **d**
 
 speccoder detects the project's test layout — each runner's collection rule, where tests live, the naming habit, files nothing runs — and gives it to the implementer and every test author.
 
-- Its acceptance tests go to **one file per story** (`tests/acceptance_us1.rs`, `tests/test_acceptance_us1.py`, `src/acceptance-us1.test.ts`, `<package>/acceptance_us1_test.go`), run by the command that runs only that file (`cargo test --test acceptance_us1`).
-- A later task of the story appends its section; changing, inserting among or skipping earlier tests is refused. A section that stops the file from building or collecting is taken out again before the attempt, so the project's other tests still run. Convergence tasks keep a file of their own.
+- A story's [oracle](@/docs/evidence.md#what-judges-each-task) is a set of test files where the runner collects them, each run by the command that runs only it (`cargo test --test acceptance_us1_parse`); a test that would stop the project's other tests from building or collecting is never committed. A convergence gap writes a file of its own.
 - With no place the runner collects (Cargo's `autotests = false`, a missing `testpaths`), no acceptance test is written and `speccoder doctor` names the setting.
 
 ## Retries

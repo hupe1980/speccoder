@@ -141,6 +141,40 @@ pub(crate) fn commit_attempt(worktree: &Path, message: &str) -> Result<String, S
     commit_attempt_as(worktree, message, false)
 }
 
+/// Commits exactly `paths` (worktree-relative: added, changed or removed)
+/// with speccoder's identity — nothing else the worktree holds; returns the
+/// commit id. Never pushes.
+pub(crate) fn commit_paths(
+    worktree: &Path,
+    message: &str,
+    paths: &[String],
+    allow_empty: bool,
+) -> Result<String, String> {
+    let g = git::Git::at(worktree);
+    let base = [
+        "-c",
+        "user.name=speccoder",
+        "-c",
+        "user.email=speccoder@users.noreply.invalid",
+        "-c",
+        "commit.gpgsign=false",
+    ];
+    g.run(&["reset", "-q"]).map_err(|e| e.0)?;
+    if !paths.is_empty() {
+        let mut add = base.to_vec();
+        add.extend(["add", "-A", "--"]);
+        add.extend(paths.iter().map(String::as_str));
+        g.run(&add).map_err(|e| e.0)?;
+    }
+    let mut commit = base.to_vec();
+    commit.extend(["commit", "-q", "--no-verify", "-m", message]);
+    if allow_empty {
+        commit.push("--allow-empty");
+    }
+    g.run(&commit).map_err(|e| e.0)?;
+    g.line(&["rev-parse", "HEAD"]).map_err(|e| e.0)
+}
+
 /// [`commit_attempt`]; `allow_empty` records a verdict whose work touched no
 /// tracked file (in place, the tick lives in a git-ignored `tasks.md`).
 pub(crate) fn commit_attempt_as(
@@ -206,9 +240,14 @@ pub(crate) struct TickFacts<'a> {
 /// longer has to judge them while they are worded the same.
 pub(crate) fn scenarios_trailer(
     acceptance: Option<&serde_json::Value>,
+    progress: Option<&speccoder_core::story::Progress>,
     scenarios: &[speccoder_core::spec::ScenarioRef],
 ) -> String {
     let mut cited: Vec<&str> = Vec::new();
+    // A task of a story claims exactly what it turned green on the oracle.
+    if let Some(speccoder_core::story::Progress::Verified { turned }) = progress {
+        cited.extend(turned.iter().map(String::as_str));
+    }
     for t in acceptance
         .and_then(|a| a["tests"].as_array())
         .into_iter()
@@ -252,45 +291,6 @@ pub(crate) fn scenario_digest(id: &str, text: &str) -> String {
     crate::integrity::sha256_hex(format!("{id}\0{words}").as_bytes())[..12].to_owned()
 }
 
-/// Per task of `feature`, the scenario digests its ticks on `rev`'s
-/// first-parent history recorded (`Scenarios:`, read by git's trailer
-/// parser) — the one reader the pipeline and the report share.
-pub(crate) fn verified_digests(
-    repo: &Path,
-    rev: &str,
-    feature: &str,
-) -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
-    let log = crate::git::Git::at(repo)
-        .run(&[
-            "log",
-            "--first-parent",
-            "--format=%(trailers:key=Spec-Task,valueonly,separator=%x20)%x1f%(trailers:key=Scenarios,valueonly,separator=%x20)%x1e",
-            rev,
-            "--",
-        ])
-        .map(|b| String::from_utf8_lossy(&b).into_owned())
-        .unwrap_or_default();
-    let mut out: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
-        std::collections::BTreeMap::new();
-    for record in log.split('\u{1e}') {
-        let Some((task, marked)) = record.trim().split_once('\u{1f}') else {
-            continue;
-        };
-        let Some(task) = task.trim().strip_prefix(&format!("{feature}/")) else {
-            continue;
-        };
-        for token in marked.split(|c: char| c == ',' || c.is_whitespace()) {
-            let d = token.rsplit('@').next().unwrap_or_default();
-            if d.len() == 12 && d.bytes().all(|b| b.is_ascii_hexdigit()) {
-                out.entry(task.to_owned())
-                    .or_default()
-                    .insert(d.to_ascii_lowercase());
-            }
-        }
-    }
-    out
-}
-
 /// The commit message of a ticked task: subject, title, and the trailers
 /// `report` reads back (`Spec-Task`, `Verdict`, `Regression-Only`, `Red`, `Scenarios`, `Flaky`,
 /// `Scope-Outside`, `Checklists`, `Held-Out`, `Acceptance-Strength`,
@@ -330,14 +330,11 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
     );
     evidence.push_str(&held_out_trailer(report.acceptance.as_ref()));
     if verdict_word == "verified" {
-        evidence.push_str(&scenarios_trailer(report.acceptance.as_ref(), f.scenarios));
-    }
-    if let Some(story) = report
-        .acceptance
-        .as_ref()
-        .and_then(|a| a["story_file"].as_str())
-    {
-        evidence.push_str(&format!("Story-File: {story}\n"));
+        evidence.push_str(&scenarios_trailer(
+            report.acceptance.as_ref(),
+            report.progress.as_ref(),
+            f.scenarios,
+        ));
     }
     evidence.push_str(&flaky_trailer(report.verification.as_ref()));
     evidence.push_str(&scope_trailer(report.scope.as_ref()));
@@ -372,33 +369,6 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
             .and_then(crate::mutation::trailer)
             .unwrap_or_default()
     )
-}
-
-/// The story files speccoder created on the feature's branch: the
-/// `Story-File:` trailers of its ticks.
-pub(crate) fn story_files(repo: &std::path::Path, feature: &str) -> Vec<String> {
-    let log = crate::git::Git::at(repo)
-        .run(&[
-            "log",
-            "--first-parent",
-            "--format=%(trailers:key=Spec-Task,valueonly)%x1f%(trailers:key=Story-File,valueonly)%x1e",
-            "HEAD",
-        ])
-        .map(|b| String::from_utf8_lossy(&b).into_owned())
-        .unwrap_or_default();
-    let mut out: Vec<String> = log
-        .split('\u{1e}')
-        .filter_map(|r| {
-            let (task, file) = r.trim().split_once('\u{1f}')?;
-            task.trim()
-                .starts_with(&format!("{feature}/"))
-                .then(|| file.trim().to_owned())
-        })
-        .filter(|f| !f.is_empty())
-        .collect();
-    out.sort();
-    out.dedup();
-    out
 }
 
 /// `Held-Out: passed=<k>/<k> manifest=sha256:<hex>`, `absent=<reason>` or
@@ -472,7 +442,7 @@ pub(crate) fn set_aside_leftovers(
             reason: "the worktree had uncommitted changes when a run started (an interrupted run, or edits by hand); saved and set aside — `speccoder task restore` keeps them, `task drop` discards them",
             pending: None,
             usage: None,
-            defer_to: None,
+            story_open: &[],
         },
     )
     .and_then(|saved| crate::attempts::restore_head(wt_root, tmp).map(|()| saved.reference))

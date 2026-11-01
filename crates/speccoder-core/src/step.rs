@@ -826,6 +826,15 @@ fn speccoder(argv: &[String], constant: bool) -> How {
                     "The note",
                 ),
                 "hint" => asking(Runnable::Hint { task: t }, a, positional(a, 3), "The hint"),
+                "rule" if a.iter().any(|w| w == "--tests-wrong") => asking(
+                    Runnable::RuleScenario {
+                        task: t,
+                        scenario: flag(a, "--scenario").unwrap_or_default().to_owned(),
+                    },
+                    a,
+                    flag(a, "--reason"),
+                    "Why the tests are wrong",
+                ),
                 "rule" => asking(
                     Runnable::Rule { task: t },
                     a,
@@ -833,13 +842,6 @@ fn speccoder(argv: &[String], constant: bool) -> How {
                     "Why the tests are right",
                 ),
                 "done" => perform(Runnable::Done { task: t }, a),
-                "defer" => perform(
-                    Runnable::DeferAcceptance {
-                        task: t,
-                        revoke: a.iter().any(|w| w == "--revoke"),
-                    },
-                    a,
-                ),
                 "restore" => perform(Runnable::KeepSetAside { task: t }, a),
                 "drop" => confirmed(
                     Runnable::DropSetAside { task: t.clone() },

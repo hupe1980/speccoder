@@ -53,18 +53,23 @@ pub fn all(plane: &Path) -> Vec<Decision> {
     read_all(plane).unwrap_or_default()
 }
 
-/// A person's decision that a task's acceptance moves to its story's
-/// checkpoint: it is judged by its regression checks, its scenarios at
-/// the checkpoint.
+/// A person's ruling that one scenario's oracle tests are wrong: the next
+/// run writes that scenario's tests again (an oracle amendment), and
+/// nothing else of the story's oracle.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Deferral {
+pub struct Ruling {
     /// The feature.
     pub feature: String,
-    /// The task deferred.
+    /// The scenario (`US3-2`; OpenSpec: its name).
+    pub scenario: String,
+    /// Its story (`US3`; OpenSpec: the change).
+    #[serde(default)]
+    pub story: String,
+    /// The task that met the tests.
     pub task: String,
-    /// The checkpoint when it was decided.
-    pub checkpoint: String,
-    /// Who decided.
+    /// Why they are wrong (told to the author).
+    pub reason: String,
+    /// Who ruled.
     pub by: String,
     /// Through what.
     pub via: Via,
@@ -72,18 +77,18 @@ pub struct Deferral {
     pub at: u64,
 }
 
-fn deferrals_file(plane: &Path) -> PathBuf {
-    plane.join("decisions").join("acceptance-deferred.json")
+fn rulings_file(plane: &Path) -> PathBuf {
+    plane.join("decisions").join("oracle-rulings.json")
 }
 
-/// Every recorded deferral; an absent file is none, an unreadable one an
-/// error (never silently none).
+/// Every ruling not yet acted on; an absent file is none, an unreadable
+/// one an error (never silently none).
 ///
 /// # Errors
 ///
 /// The file exists but cannot be read or parsed.
-pub fn read_deferrals(plane: &Path) -> Result<Vec<Deferral>, String> {
-    let path = deferrals_file(plane);
+pub fn rulings(plane: &Path) -> Result<Vec<Ruling>, String> {
+    let path = rulings_file(plane);
     match std::fs::read_to_string(&path) {
         Ok(t) => serde_json::from_str(&t).map_err(|e| format!("{}: {e}", path.display())),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
@@ -91,13 +96,51 @@ pub fn read_deferrals(plane: &Path) -> Result<Vec<Deferral>, String> {
     }
 }
 
-/// The deferral of `task` of `feature`, if a person made one.
-#[must_use]
-pub fn deferred(plane: &Path, feature: &str, task: &str) -> Option<Deferral> {
-    read_deferrals(plane)
-        .unwrap_or_default()
+/// Replaces the rulings whole, under a lock: a reader never sees half a list.
+fn write_rulings(plane: &Path, change: impl FnOnce(&mut Vec<Ruling>)) -> Result<PathBuf, String> {
+    let path = rulings_file(plane);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    let lock = std::fs::File::create(path.with_extension("lock"))
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    lock.lock()
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut list = rulings(plane)?;
+    change(&mut list);
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(
+        &tmp,
+        serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".to_owned()),
+    )
+    .and_then(|()| std::fs::rename(&tmp, &path))
+    .map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
+}
+
+/// The rulings on `story`'s scenarios of `feature`. An unreadable list is
+/// an error, never "none".
+///
+/// # Errors
+///
+/// The list exists but cannot be read.
+pub fn rulings_for(plane: &Path, feature: &str, story: &str) -> Result<Vec<Ruling>, String> {
+    Ok(rulings(plane)?
         .into_iter()
-        .find(|d| d.feature == feature && d.task == task)
+        .filter(|r| r.feature == feature && r.story == story)
+        .collect())
+}
+
+/// Forgets the rulings an amendment acted on.
+///
+/// # Errors
+///
+/// The list cannot be read or written.
+pub fn acted_on(plane: &Path, feature: &str, scenarios: &[String]) -> Result<(), String> {
+    write_rulings(plane, |l| {
+        l.retain(|r| !(r.feature == feature && scenarios.contains(&r.scenario)));
+    })
+    .map(|_| ())
 }
 
 /// The story `task` of `feature` writes the acceptance tests of, if any.
@@ -227,21 +270,26 @@ pub fn decide(
     ))
 }
 
-/// Records (or, with `revoke`, removes) a person's decision that `task`'s
-/// acceptance moves to its story's checkpoint. Refused for a task of no
-/// story, a task that names its scenarios, and the checkpoint itself —
-/// nothing later would judge them.
+/// Records a person's ruling that `scenario`'s oracle tests are wrong
+/// (`task` met them): the next run writes them again. Refused for an id
+/// that is not a scenario of the task's story.
 #[must_use]
-pub fn defer(
+pub fn rule_scenario(
     root: &Path,
     feature: Option<&str>,
     task: &str,
-    revoke: bool,
+    scenario: &str,
+    reason: &str,
     via: Via,
     state: &Path,
 ) -> CommandResult {
-    use speccoder_core::story::Share;
     let refuse = |status, m: String| CommandResult::new("task", status, &m);
+    if reason.trim().is_empty() {
+        return refuse(
+            CommandStatus::UsageError,
+            "a ruling needs a reason".to_owned(),
+        );
+    }
     let Ok(opened) = crate::format::open(root, feature) else {
         return refuse(
             CommandStatus::NotAProject,
@@ -256,145 +304,67 @@ pub fn defer(
         );
     };
     let name = f.feature.name.clone();
-    let Some(t) = f
-        .tasks
-        .as_ref()
-        .and_then(|ts| ts.tasks.iter().find(|t| t.id == task))
-    else {
+    let known = opened.adapter.scenarios(snap, task);
+    if !known.iter().any(|s| s.id == scenario) {
         return refuse(
             CommandStatus::NotFound,
-            format!("{task} is not a task of {name}"),
+            format!(
+                "{scenario} is not a scenario of {task}'s story ({})",
+                known
+                    .iter()
+                    .map(|s| s.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         );
-    };
+    }
     let plane = crate::worktree::project_state_dir(state, Path::new(&snap.root));
-    // One writer at a time (the app and a terminal may both decide): the
-    // list is read, changed and replaced under a lock.
-    let path = deferrals_file(&plane);
-    if let Some(dir) = path.parent()
-        && let Err(e) = std::fs::create_dir_all(dir)
-    {
-        return refuse(
-            CommandStatus::Error,
-            format!("cannot write {}: {e}", dir.display()),
-        );
-    }
-    let lock = match std::fs::File::create(path.with_extension("lock")) {
-        Ok(f) => f,
-        Err(e) => {
-            return refuse(
-                CommandStatus::Error,
-                format!("cannot lock {}: {e}", path.display()),
-            );
-        }
-    };
-    if let Err(e) = lock.lock() {
-        return refuse(
-            CommandStatus::Error,
-            format!("cannot lock {}: {e}", path.display()),
-        );
-    }
-    let mut list = match read_deferrals(&plane) {
-        Ok(l) => l,
-        Err(e) => {
-            return refuse(
-                CommandStatus::Error,
-                format!("the recorded decisions cannot be read, so none is changed: {e}"),
-            );
-        }
-    };
-    let checkpoint = if revoke {
-        String::new()
+    // The story the scenario is of: the task's label; OpenSpec: the change.
+    let story = if opened.adapter.kind() == speccoder_core::spec::FormatKind::Openspec {
+        name.clone()
     } else {
-        let scenarios = opened.adapter.scenarios(snap, task);
-        let judged = opened.adapter.rules().judged;
-        let share =
-            crate::pipeline::acceptance::share_of(&crate::pipeline::acceptance::ShareInput {
-                repo: root,
-                plane: &plane,
-                feature: &name,
-                task,
-                story: t.story.as_deref(),
-                whole_unit: opened.adapter.kind() == speccoder_core::spec::FormatKind::Openspec,
-                tasks: f.tasks.as_ref(),
-                unit_dir: &f.feature.dir,
-                judged: &judged,
-                scenarios: &scenarios,
-                as_deferred: true,
-            });
-        match share {
-            Some(Share::Deferred { checkpoint }) => checkpoint,
-            Some(Share::Checkpoint { .. }) => {
-                return refuse(
-                    CommandStatus::UsageError,
-                    format!(
-                        "{task} is its story's checkpoint: no later task would judge its scenarios"
-                    ),
-                );
-            }
-            Some(Share::Linked { scenarios }) => {
-                return refuse(
-                    CommandStatus::UsageError,
-                    format!(
-                        "{task} names its scenarios ({}): it is judged by them — change the link in the task list to move them",
-                        scenarios.join(", ")
-                    ),
-                );
-            }
-            Some(Share::Authored { .. }) | None => {
-                return refuse(
-                    CommandStatus::UsageError,
-                    format!("{task} is not a task of a story with a later code task"),
-                );
-            }
+        f.tasks
+            .as_ref()
+            .and_then(|ts| ts.tasks.iter().find(|t| t.id == task))
+            .and_then(|t| t.story.clone())
+            .unwrap_or_default()
+    };
+    let ruling = Ruling {
+        feature: name.clone(),
+        scenario: scenario.to_owned(),
+        story,
+        task: task.to_owned(),
+        reason: reason.trim().to_owned(),
+        by: crate::controls::person(root),
+        via,
+        at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs()),
+    };
+    let path = match write_rulings(&plane, |l| {
+        l.retain(|r| !(r.feature == name && r.scenario == scenario));
+        l.push(ruling);
+    }) {
+        Ok(p) => p,
+        Err(e) => {
+            return refuse(
+                CommandStatus::Error,
+                format!("the ruling cannot be recorded: {e}"),
+            );
         }
     };
-    let had = list.iter().any(|d| d.feature == name && d.task == task);
-    if revoke && !had {
-        return refuse(
-            CommandStatus::Ok,
-            format!("{task} was not deferred: nothing to take back"),
-        );
-    }
-    list.retain(|d| !(d.feature == name && d.task == task));
-    if !revoke {
-        list.push(Deferral {
-            feature: name.clone(),
-            task: task.to_owned(),
-            checkpoint: checkpoint.clone(),
-            by: crate::controls::person(root),
-            via,
-            at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_secs()),
-        });
-    }
-    // Replaced whole: a reader never sees half a list.
-    let tmp = path.with_extension("json.tmp");
-    let written = std::fs::write(
-        &tmp,
-        serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".to_owned()),
+    CommandResult::new(
+        "task",
+        CommandStatus::Ok,
+        &format!(
+            "{scenario}'s tests are ruled wrong: the next run writes them again, and nothing else of the story's oracle — `speccoder run --task {task}`"
+        ),
     )
-    .and_then(|()| std::fs::rename(&tmp, &path));
-    if let Err(e) = written {
-        return refuse(
-            CommandStatus::Error,
-            format!("cannot write {}: {e}", path.display()),
-        );
-    }
-    let message = if revoke {
-        format!("{task} is judged by its own acceptance tests again")
-    } else {
-        format!(
-            "{task} is judged by its regression checks; its story's scenarios at {checkpoint} — run it again: `speccoder run --task {task}`"
-        )
-    };
-    CommandResult::new("task", CommandStatus::Ok, &message).with_data(CommandData::Control(
-        Box::new(ControlReport {
-            feature: name,
-            task: task.to_owned(),
-            action: if revoke { "defer_revoked" } else { "deferred" }.to_owned(),
-            text: (!revoke).then_some(checkpoint),
-            record: Some(path.display().to_string()),
-        }),
-    ))
+    .with_data(CommandData::Control(Box::new(ControlReport {
+        feature: name,
+        task: task.to_owned(),
+        action: "tests_ruled_wrong".to_owned(),
+        text: Some(scenario.to_owned()),
+        record: Some(path.display().to_string()),
+    })))
 }

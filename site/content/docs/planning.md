@@ -74,7 +74,7 @@ Before the creating skill runs, the description is compared with every feature's
 | `PLAN-SCENARIO-UNKNOWN` | A task that names a scenario its story does not have, `(scenarios US9-4)`: the link is ignored ([what judges each task](@/docs/evidence.md#what-judges-each-task)) |
 | `PLAN-STORY-UNJUDGED` | A story whose every task is documentation or a step only you take: no task is judged by its scenarios |
 
-For `PLAN-BEHAVIOUR-EARLY`, `speccoder task acceptance-at <TASK> --story <US>` records that the story's acceptance tests are written at that task: its tick can then be verified on the story's scenarios. It is a decision in the state directory, not an edit of the spec, and `--revoke` takes it back. Re-planning is offered only while no task of the feature is ticked.
+For `PLAN-BEHAVIOUR-EARLY`, `speccoder task acceptance-at <TASK> --story <US>` records that the story's oracle is written before that task: its tick can then be verified on the story's scenarios it turns green. It is a decision in the state directory, not an edit of the spec, and `--revoke` takes it back. Re-planning is offered only while no task of the feature is ticked.
 
 The phase-based checks need Spec Kit's phases and story labels; OpenSpec gets only the first. Beside them, information rather than a warning, a line says which tasks are planning work or yours ([who does a task](@/docs/running.md#who-does-a-task)).
 
@@ -142,7 +142,7 @@ speccoder review approve --run autopilot --grant ID       # nobody is asked
 
 - In the app it binds to what its sheet showed: a test changed in between is refused (`REVIEW-CHANGED`) and the sheet shown again.
 - Frozen tests are read only (`ORACLE-FROZEN`) until a reworded requirement lapses the freeze; the run then writes tests anew. A checkout without the stored set (a teammate's) says *frozen oracle not present here* and does the same.
-- The first task citing a frozen requirement's scenarios writes those tests, checks them red with the sealed held-out set, and makes no author call; its tick carries the `Acceptance: review …` trailer ([evidence](@/docs/evidence.md#where-the-evidence-lives)).
+- Frozen tests are the story's [oracle](@/docs/evidence.md#what-judges-each-task): the story's first code task commits them, makes no author call, and every tick of the story carries the `Acceptance: review …` trailer ([evidence](@/docs/evidence.md#where-the-evidence-lives)). A story nobody reviewed gets its oracle written by the run, the same way, frozen by `speccoder run`.
 - A stored test or record that no longer matches its digests stops the task (`ORACLE-TAMPERED`); so does an unreadable `review.json` (`REVIEW-UNREADABLE`).
 
 ### Comments

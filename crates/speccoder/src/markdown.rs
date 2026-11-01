@@ -274,7 +274,7 @@ mod tests {
 
     fn task(id: &str, state: &str, title: &str) -> TaskStatus {
         TaskStatus {
-            share: None,
+            judged: None,
             lane: speccoder_core::lane::Lane::default(),
             id: id.to_owned(),
             title: title.to_owned(),
@@ -331,14 +331,9 @@ mod tests {
     /// report, `--json`, the evidence rows and the finish line.
     #[test]
     fn a_regression_only_reason_reads_the_same_everywhere() {
-        use speccoder_core::regression::{ImplementedBy, Regression, RegressionReason};
-        let why = Regression::of(RegressionReason::AlreadyPassing {
-            implemented_by: Some(ImplementedBy::Task {
-                task: "T003".to_owned(),
-                commit: "d433d77".to_owned(),
-            }),
-        });
-        let text = "already passing before the attempt — implemented by T003";
+        use speccoder_core::regression::{Regression, RegressionReason};
+        let why = Regression::of(RegressionReason::InProgress);
+        let text = "turned none of its story's scenarios green and broke none: the story goes on";
         assert_eq!(why.text, text);
         let mut r = report(1);
         r.tasks[0].state = "regression_only".to_owned();

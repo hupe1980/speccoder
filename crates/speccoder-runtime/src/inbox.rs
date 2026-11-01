@@ -503,35 +503,31 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             ));
             continue;
         }
-        // Its tests needed later tasks of the story: judging them at the
-        // story's checkpoint comes first — a person's decision.
-        let undecided = |c: &&String| {
-            state.is_none_or(|s| {
-                crate::acceptance_at::deferred(
-                    &crate::worktree::project_state_dir(s, path),
-                    feature,
-                    &t.id,
-                )
-                .is_none()
-            }) && !c.is_empty()
-        };
-        let defer_offer = t
+        // The story's last task stopped with scenarios red: a person may
+        // rule a scenario's tests wrong — that scenario's tests are written
+        // again, nothing else of the oracle.
+        let rulings: Vec<_> = t
             .last_attempt
-            .as_ref()
-            .and_then(|a| a.defer_to.as_ref())
-            .filter(undecided)
-            .map(|at| {
-                action(
+            .iter()
+            .flat_map(|a| a.story_open.iter())
+            .map(|id| {
+                let mut a = action(
                     "decide",
-                    format!("judge it at {at}"),
-                    format!("its acceptance tests need later tasks of the story: {} is judged by its regression checks, its scenarios at {at}", t.id),
-                    flag(format!("speccoder task defer {}", t.id)),
+                    format!("rule {id}'s tests wrong"),
+                    format!("when {id}'s tests assert what the spec does not say: the next run writes them again"),
+                    flag(format!(
+                        "speccoder task rule {} --tests-wrong --scenario {id} --reason \"…\"",
+                        t.id
+                    )),
                 )
-                .with_run(Runnable::DeferAcceptance {
+                .with_run(Runnable::RuleScenario {
                     task: t.id.clone(),
-                    revoke: false,
-                })
-            });
+                    scenario: id.clone(),
+                });
+                a.input = Some(format!("What {id}'s tests assert that the spec does not say"));
+                a
+            })
+            .collect();
         // A step only a person can take — a `[YOU]` task that is ready, or
         // an honest stop: the agent's reason as its claim, and three ways on.
         if t.lane == speccoder_core::lane::Lane::Yours
@@ -552,7 +548,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 Some(&t.id),
                 title,
                 detail,
-                defer_offer
+                rulings
                     .clone()
                     .into_iter()
                     .chain(yours_actions(
@@ -578,7 +574,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             ));
             continue;
         }
-        let mut actions: Vec<_> = defer_offer.into_iter().collect();
+        let mut actions: Vec<_> = rulings;
         if t.state == "ready" {
             let mut again = action(
                 "work",
@@ -1192,25 +1188,34 @@ fn review_rank(i: &InboxItem) -> usize {
 /// branch pushed, or merged with every task done).
 fn unverified(r: &StatusReport, path: &Path) -> Option<speccoder_core::Unverified> {
     use speccoder_core::ReasonCount;
+    use speccoder_core::regression::RegressionReason as R;
     let ticks = r.totals.verified + r.totals.regression_only;
-    let regression = r.totals.regression_only;
+    // A story's task that turned none of its scenarios, or closed a story
+    // others turned, is progress the oracle shows — not missing evidence.
+    let reason_of = |t: &&speccoder_core::TaskStatus| {
+        t.regression
+            .as_ref()
+            .map_or(R::Unrecorded, |g| g.reason.clone())
+    };
+    let unproven: Vec<&speccoder_core::TaskStatus> = r
+        .tasks
+        .iter()
+        .filter(|t| t.state == "regression_only")
+        .filter(|t| {
+            !matches!(
+                reason_of(t),
+                R::InProgress | R::StoryVerified | R::PlanningWork
+            )
+        })
+        .collect();
+    let regression = unproven.len();
     if ticks < 3 || regression * 2 <= ticks || handed_off(r, path) {
         return None;
     }
     let mut counts: Vec<ReasonCount> = Vec::new();
-    for t in r.tasks.iter().filter(|t| t.state == "regression_only") {
-        let reason = t
-            .regression
-            .as_ref()
-            .map(|g| g.reason.clone())
-            .unwrap_or(speccoder_core::regression::RegressionReason::Unrecorded);
+    for t in unproven {
+        let reason = reason_of(&t);
         let name = reason.name().to_owned();
-        let by = match &reason {
-            speccoder_core::regression::RegressionReason::AlreadyPassing {
-                implemented_by: Some(speccoder_core::regression::ImplementedBy::Task { task, .. }),
-            } => Some(task.clone()),
-            _ => None,
-        };
         let c = match counts.iter_mut().position(|c| c.reason == name) {
             Some(i) => &mut counts[i],
             None => {
@@ -1218,7 +1223,6 @@ fn unverified(r: &StatusReport, path: &Path) -> Option<speccoder_core::Unverifie
                     reason: name,
                     n: 0,
                     tasks: Vec::new(),
-                    implemented_by: Vec::new(),
                     text: String::new(),
                 });
                 let last = counts.len() - 1;
@@ -1227,9 +1231,6 @@ fn unverified(r: &StatusReport, path: &Path) -> Option<speccoder_core::Unverifie
         };
         c.n += 1;
         c.tasks.push(t.id.clone());
-        if let Some(b) = by.filter(|b| !c.implemented_by.contains(b)) {
-            c.implemented_by.push(b);
-        }
     }
     counts.sort_by(|a, b| b.n.cmp(&a.n).then(a.reason.cmp(&b.reason)));
     for c in &mut counts {
@@ -1242,7 +1243,7 @@ fn unverified(r: &StatusReport, path: &Path) -> Option<speccoder_core::Unverifie
     })
 }
 
-/// `7 had no user story`, `7 were already passing — implemented by T003`.
+/// `7 had no user story`, `2 were already passing`.
 fn reason_count_words(c: &speccoder_core::ReasonCount) -> String {
     let n = c.n;
     let were = if n == 1 { "was" } else { "were" };
@@ -1252,19 +1253,17 @@ fn reason_count_words(c: &speccoder_core::ReasonCount) -> String {
         "acceptance_off" => format!("{were} ticked with acceptance tests off"),
         "author_wrote_none" => "got no test from the test author".to_owned(),
         "author_failed" => "had acceptance tests that could not be used".to_owned(),
-        "already_passing" if c.implemented_by.is_empty() => format!("{were} already passing"),
-        "already_passing" => format!(
-            "{were} already passing — implemented by {}",
-            c.implemented_by.join(", ")
-        ),
+        "already_passing" => format!("{were} already passing"),
         "not_red" => "had acceptance tests that did not fail first".to_owned(),
         "tests_not_collected" => "had acceptance tests that never ran".to_owned(),
         "planning_work" => format!("{were} planning work (design documents)"),
         "story_verified" => {
             format!("{were} their story's checkpoint, its scenarios verified earlier")
         }
-        "deferred_to_checkpoint" => {
-            format!("{were} judged at their story's checkpoint, as you decided")
+        "regression_unchecked" => {
+            format!(
+                "{were} ticked on checks that failed before and after, without per-test results"
+            )
         }
         _ => format!("{were} ticked before reasons were recorded"),
     };
@@ -1654,7 +1653,7 @@ mod try_with_tests {
             reason: String::new(),
             run_id: Some(run.to_owned()),
             reference: String::new(),
-            defer_to: None,
+            story_open: Vec::new(),
         };
         let flag = |c: String| c;
         let both = |x: &str| x == "copilot" || x == "opencode";

@@ -78,7 +78,6 @@ pub const REGISTRY: &[Name] = &[
     d("oracle.frozen"),
     d("oracle.lapsed"),
     d("collection.checked"),
-    p("regression.bisected"),
     d("project.created"),
     d("project.undone"),
     p("scaffold.started"),

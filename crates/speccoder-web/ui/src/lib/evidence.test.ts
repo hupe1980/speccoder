@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { implementedBy, neverRan, regressionLabel } from "./evidence";
+import { neverRan, regressionLabel } from "./evidence";
 import type { Task } from "./types";
 
 const task = (over: Partial<Task>): Task => ({
@@ -20,12 +20,11 @@ describe("evidence words", () => {
   it("names the reason of a regression-only tick, and says when none was recorded", () => {
     const t = task({
       regression: {
-        reason: { reason: "already_passing", implemented_by: { task: "T003", commit: "d433d77" } },
-        text: "already passing before the attempt — implemented by T003",
+        reason: { reason: "in_progress" },
+        text: "turned none of its story's scenarios green and broke none: the story goes on",
       },
     });
-    expect(regressionLabel(t)).toBe("Regression only: already passing before the attempt — implemented by T003");
-    expect(implementedBy(t)).toBe("T003");
+    expect(regressionLabel(t)).toBe("Regression only: turned none of its story's scenarios green and broke none: the story goes on");
     expect(regressionLabel(task({}))).toBe("Regression only: why was not recorded");
     expect(regressionLabel(task({ state: "verified" }))).toBeNull();
   });

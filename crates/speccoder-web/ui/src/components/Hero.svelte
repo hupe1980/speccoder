@@ -216,10 +216,10 @@
   /* The next step: the one card that asks for action. */
   .next {
     position: relative; display: flex; gap: 2rem; justify-content: space-between; align-items: center;
-    padding: 1.4rem 1.6rem; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-md); overflow: hidden;
+    padding: 1.4rem 1.6rem; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-md);
   }
   .next::before {
-    content: ""; position: absolute; inset: 0; pointer-events: none;
+    content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
     background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 55%);
   }
   .next.warned::before { background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--danger-fill) 8%, transparent), transparent 55%); }

@@ -159,6 +159,7 @@ fn project(state: &Path) -> tempfile::TempDir {
             count: 1,
             manifest_sha256: Some(format!("sha256:{}", sealed.manifest_sha256)),
             reason: None,
+            discarded: Vec::new(),
         },
         sealed: Some(sealed),
         notes: Vec::new(),
@@ -183,6 +184,7 @@ fn project(state: &Path) -> tempfile::TempDir {
             via: Via::Web,
             at: 1,
         },
+        speccoder_core::acceptance::Producer::Review,
     )
     .unwrap();
     fs::write(

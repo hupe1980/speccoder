@@ -30,7 +30,7 @@ const GREP: &str = "[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.
 /// A stand-in test runner for scripted acceptance tests: one test, "the
 /// pattern is in src/lib.rs", reported with libtest's summary line so its
 /// red is an assertion failure.
-const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif [ \"$2\" = flaky ] && grep -q \"$1\" src/lib.rs && [ ! -e .flaky-seen ]; then\n  touch .flaky-seen\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nelif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelif [ \"$2\" = absent ]; then\n  echo 'error[E0425]: cannot find function `login` in this scope' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nelif [ \"$2\" = syntax ]; then\n  echo 'error: expected one of `,`, `:`, or `}`, found `=`' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\ncase \"$1\" in tests/*) [ -f \"$1\" ] || { echo \"error: no test file $1\" >&2; exit 2; }; shift;; esac\nif [ \"$2\" = flaky ] && grep -q \"$1\" src/lib.rs && [ ! -e .flaky-seen ]; then\n  touch .flaky-seen\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nelif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelif [ \"$2\" = absent ]; then\n  echo 'error[E0425]: cannot find function `login` in this scope' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nelif [ \"$2\" = syntax ]; then\n  echo 'error: expected one of `,`, `:`, or `}`, found `=`' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 fn write_accept_sh(root: &Path) {
     use std::os::unix::fs::PermissionsExt;
@@ -1024,43 +1024,60 @@ const ACCEPTANCE_SPEC: (&str, &str) = (
     "# Spec\n\n### User Story 1 - Login\n\nUsers log in.\n\n**Acceptance**: a `login` function exists.\n",
 );
 
+/// The story's oracle as the author writes it: one test of US1-1 with its
+/// command, and what it must hold.
 fn acceptance(path: &str, argv: &[&str]) -> Value {
-    json!({ "files": [{ "path": path, "content": "acceptance: login exists\n", "scenarios": [] }], "argv": argv, "notes": [] })
+    // Each oracle test runs by its own command, which names its file.
+    let mut own: Vec<&str> = argv.to_vec();
+    if own.first() == Some(&"./accept.sh") {
+        own.insert(2.min(own.len()), path);
+    }
+    json!({
+        "files": [{ "path": path, "content": "acceptance: login exists\n", "scenarios": ["US1-1"], "argv": own }],
+        "argv": argv,
+        "notes": [],
+        "expectations": [{ "scenario": "US1-1", "given": "a user", "expect": "a login function exists" }],
+        "untestable": [],
+    })
 }
 
 const GREP_LOGIN: &[&str] = &["./accept.sh", "--", "fn login"];
 
+/// A task's own acceptance tests, outside a story's oracle (no numbered
+/// scenarios, a planning task turned code, a convergence gap).
+fn per_task_acceptance(path: &str, argv: &[&str]) -> Value {
+    json!({ "files": [{ "path": path, "content": "acceptance: login exists\n", "scenarios": [] }], "argv": argv, "notes": [] })
+}
+
+/// A test of the story's oracle that does not build is asked for once
+/// more, then left out: with none usable, the story has nothing to judge
+/// by and the task stops before any code is written.
 #[test]
-fn a_build_error_is_not_red_and_cannot_verify() {
-    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+fn a_test_that_does_not_build_is_asked_for_again_then_the_task_stops() {
+    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_structure(acceptance(
+    let broken = acceptance(
         "tests/acceptance_login.txt",
         &["./accept.sh", "--", "fn login", "syntax"],
-    ));
-    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
-    f.will_structure(done("login"));
-    let res = run(r.path(), state.path(), "T005", d);
-    let rep = report(&res);
-    let a = rep.acceptance.as_ref().unwrap();
-    assert_eq!(a["red"], json!(false), "{a}");
-    assert_eq!(a["red_class"], json!("build_error"));
-    assert!(
-        a["excerpt"].as_str().unwrap().contains("expected one of"),
-        "{a}"
     );
-    // Green afterwards proves nothing without a red before it.
-    assert_eq!(rep.verdict, Some(Verdict::RegressionOnly));
+    f.will_structure(broken.clone());
+    f.will_structure(broken);
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert_eq!(res.code().map(|c| c.name), Some("ORACLE-UNWRITTEN"));
+    assert_eq!(f.asked().len(), 2, "two author calls, no attempt");
+    assert!(f.asked().iter().all(|a| a.tools.is_empty()));
 }
 
 #[test]
 fn a_missing_symbol_is_absent_red_and_can_verify() {
+    // A compiled test of what does not exist yet cannot build: kept.
     let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_structure(acceptance(
-        "tests/acceptance_login.txt",
+        "tests/acceptance_login.rs",
         &["./accept.sh", "--", "fn login", "absent"],
     ));
     f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
@@ -1085,28 +1102,37 @@ fn a_missing_symbol_is_absent_red_and_can_verify() {
     assert!(String::from_utf8_lossy(&message.stdout).contains("Red: absent"));
 }
 
+/// A test that fails once and passes when run again is no evidence: the
+/// oracle never keeps it.
 #[test]
-fn a_flaky_acceptance_check_is_never_verified() {
+fn a_flaky_test_never_enters_the_oracle() {
     let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
+    // Already there, so the second red run passes: flaky.
+    fs::write(
+        r.path().join("src/lib.rs"),
+        "pub fn ok() {}\npub fn login() {}\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "login"]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_structure(acceptance(
+    let flaky = acceptance(
         "tests/acceptance_login.txt",
         &["./accept.sh", "--", "fn login", "flaky"],
-    ));
-    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
-    f.will_structure(done("login"));
-    let res = run(r.path(), state.path(), "T005", d);
-    let rep = report(&res);
-    let a = rep.acceptance.as_ref().unwrap();
-    assert_eq!(
-        (a["red"].clone(), a["green_flaky"].clone()),
-        (json!(true), json!(true)),
-        "{a}"
     );
-    assert_eq!(rep.verdict, Some(Verdict::RegressionOnly));
-    let checks = &rep.verification.as_ref().unwrap().checks;
-    assert!(checks.iter().any(|c| c.name == "acceptance" && c.flaky));
+    f.will_structure(flaky);
+    // Asked again: a test that does not build either.
+    f.will_structure(acceptance(
+        "tests/acceptance_login_b.txt",
+        &["./accept.sh", "--", "fn nope", "syntax"],
+    ));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("ORACLE-UNWRITTEN"),
+        "{}",
+        res.message()
+    );
 }
 
 #[test]
@@ -1123,7 +1149,10 @@ fn a_planning_task_that_changes_code_runs_again_as_code_and_can_verify() {
     f.will_call_tool("p1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
     f.will_structure(done("login"));
     // Then a code attempt: its acceptance tests first, red, then green.
-    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
+    f.will_structure(per_task_acceptance(
+        "tests/acceptance_login.txt",
+        GREP_LOGIN,
+    ));
     f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
     f.will_structure(done("login"));
     let res = run(r.path(), state.path(), "T005", d);
@@ -1166,9 +1195,15 @@ fn red_then_green_acceptance_makes_the_verdict_verified() {
     assert!(!f.asked()[1].tools.is_empty());
 }
 
+/// A wrong implementation at the story's last task leaves the story open:
+/// retried once, the same failure again stops it for a person.
 #[test]
 fn a_wrong_implementation_fails_acceptance() {
-    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
+    let tasks = "# Tasks: Graph\n\n## Phase 3: User Story 1 - Login (Priority: P1)\n\n- [ ] T005 [US1] Implement login in src/lib.rs\n";
+    let r = repo_with(
+        "[acceptance]\nheld_out = false\n",
+        &[ACCEPTANCE_SPEC, ("specs/001-graph/tasks.md", tasks)],
+    );
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
@@ -1177,18 +1212,9 @@ fn a_wrong_implementation_fails_acceptance() {
         f.will_structure(done("login, I promise"));
     }
     let res = run(r.path(), state.path(), "T005", d);
-    assert_eq!(
-        res.status(),
-        CommandStatus::VerificationFailed,
-        "{}",
-        res.message()
-    );
-    assert!(
-        matches!(&report(&res).verdict, Some(Verdict::Failed { reasons }) if reasons.iter().any(|r| r.contains("acceptance")))
-    );
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert_eq!(res.code().map(|c| c.name), Some("STORY-OPEN"));
     assert!(!report(&res).ticked);
-    // Retried once from the same checkpoint (the second edit applied to the
-    // original file), the same failure again stops it.
     assert_eq!(report(&res).earlier.len(), 1);
     assert!(
         report(&res)
@@ -1199,43 +1225,77 @@ fn a_wrong_implementation_fails_acceptance() {
         "{:?}",
         report(&res).retry_stop
     );
-    // The acceptance file was not regenerated: one judge-side call only.
+    // The oracle was written once: one judge-side call only.
     assert_eq!(f.asked().iter().filter(|a| a.tools.is_empty()).count(), 1);
 }
 
+/// A scenario already green when the oracle is written is shown so, and
+/// claimed by no task: the work turns nothing.
 #[test]
 fn acceptance_that_is_already_green_is_no_evidence() {
-    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let r = repo_with(
+        "[acceptance]\nheld_out = false\nstrength = false\n",
+        &[ACCEPTANCE_SPEC],
+    );
+    fs::write(
+        r.path().join("src/lib.rs"),
+        "pub fn ok() {}\npub fn login() {}\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "login"]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_structure(acceptance(
-        "tests/acceptance_ok.txt",
-        &["grep", "-q", "fn ok", "src/lib.rs"],
-    ));
-    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
-    f.will_structure(done("login"));
+    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\n// tidy" }));
+    f.will_structure(done("tidy"));
     let res = run(r.path(), state.path(), "T005", d);
     let rep = report(&res);
-    assert_eq!(rep.verdict, Some(Verdict::RegressionOnly));
-    assert_eq!(rep.acceptance.as_ref().unwrap()["red"], false);
+    assert_eq!(
+        rep.verdict,
+        Some(Verdict::RegressionOnly),
+        "{}",
+        res.message()
+    );
+    assert_ne!(
+        rep.progress,
+        Some(speccoder_core::story::Progress::Verified {
+            turned: vec!["US1-1".into()]
+        })
+    );
 }
 
 #[test]
 fn acceptance_files_outside_test_paths_are_refused() {
-    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_structure(acceptance("src/sneaky.rs", GREP_LOGIN));
-    f.will_structure(done("nothing"));
+    f.will_structure(acceptance("src/sneaky.rs", GREP_LOGIN));
     let res = run(r.path(), state.path(), "T005", d);
-    let rep = report(&res);
-    assert!(
-        rep.acceptance.as_ref().unwrap()["skipped"]
-            .as_str()
-            .unwrap()
-            .contains("not a new test file")
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("ORACLE-UNWRITTEN"),
+        "{}",
+        res.message()
     );
-    assert!(!Path::new(&rep.worktree).join("src/sneaky.rs").exists());
+    let wt = state.path();
+    assert!(
+        !walk(wt).iter().any(|p| p.ends_with("src/sneaky.rs")),
+        "the refused file was never written"
+    );
+}
+
+fn walk(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for e in fs::read_dir(dir).into_iter().flatten().flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            out.extend(walk(&p));
+        } else {
+            out.push(p);
+        }
+    }
+    out
 }
 
 // ── retries with a failure digest ───────────────────────────────────
@@ -2305,7 +2365,6 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
             Event::Bug { step, .. } => step.name().to_owned(),
             Event::Oracle { .. } => "oracle".to_owned(),
             Event::CollectionChecked { .. } => "collection".to_owned(),
-            Event::RegressionBisected { .. } => "bisected".to_owned(),
             Event::PlanningStopped { .. } => "planning".to_owned(),
             Event::LadderOffered { .. } => "offered".to_owned(),
             Event::UnitPromoted { .. } => "promoted".to_owned(),
@@ -2550,7 +2609,10 @@ fn a_spec_without_template_story_headings_still_yields_acceptance_tests() {
     let r = repo_with("", &[spec]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
+    f.will_structure(per_task_acceptance(
+        "tests/acceptance_login.txt",
+        GREP_LOGIN,
+    ));
     f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
     f.will_structure(done("login"));
     let res = run(r.path(), state.path(), "T005", d);
@@ -4170,74 +4232,6 @@ fn acceptance_off_is_the_reason_whatever_else_holds() {
 }
 
 #[test]
-fn already_passing_tests_name_the_tick_that_made_them_pass() {
-    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
-    let state = tempfile::tempdir().unwrap();
-    // T005 implements login, red then green.
-    let (f, d) = fake();
-    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
-    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
-    f.will_structure(done("login"));
-    let first = run(r.path(), state.path(), "T005", d);
-    assert_eq!(
-        report(&first).verdict,
-        Some(Verdict::Verified),
-        "{}",
-        first.message()
-    );
-    let t005 = report(&first).commit.clone().unwrap();
-    // T006's acceptance tests already pass: T005 did it.
-    let (f, d) = fake();
-    f.will_structure(acceptance("tests/acceptance_session.txt", GREP_LOGIN));
-    f.will_structure(done("nothing left"));
-    let second = run(r.path(), state.path(), "T006", d);
-    let rep = report(&second);
-    assert_eq!(
-        rep.verdict,
-        Some(Verdict::RegressionOnly),
-        "{}",
-        second.message()
-    );
-    let why = rep.regression.as_ref().unwrap();
-    assert_eq!(
-        why.text,
-        "already passing before the attempt — implemented by T005"
-    );
-    let short: String = t005.chars().take(7).collect();
-    assert!(
-        last_message(&rep.worktree).contains(&format!(
-            "Regression-Only: already_passing implemented_by=T005 commit={short}\n"
-        )),
-        "{}",
-        last_message(&rep.worktree)
-    );
-}
-
-#[test]
-fn tests_that_passed_before_any_tick_passed_before_the_feature() {
-    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
-    let state = tempfile::tempdir().unwrap();
-    let (f, d) = fake();
-    f.will_structure(acceptance(
-        "tests/acceptance_ok.txt",
-        &["./accept.sh", "--", "fn ok"],
-    ));
-    f.will_structure(done("nothing to do"));
-    let res = run(r.path(), state.path(), "T005", d);
-    let rep = report(&res);
-    assert_eq!(
-        rep.regression.as_ref().map(|r| r.text.as_str()),
-        Some("already passing before this feature"),
-        "{}",
-        res.message()
-    );
-    assert!(
-        last_message(&rep.worktree)
-            .contains("Regression-Only: already_passing before_feature=true\n")
-    );
-}
-
-#[test]
 fn a_mostly_unverified_feature_is_diagnosed_once_until_it_is_handed_off() {
     let r = repo("");
     let state = tempfile::tempdir().unwrap();
@@ -4296,10 +4290,10 @@ fn a_mostly_unverified_feature_is_diagnosed_once_until_it_is_handed_off() {
     assert!(inbox(r.path()).iter().all(|i| i.kind != "unverified"));
 }
 
-/// Collection, reasons, the bisection, the layout and the plan
-/// checks add no model call to judging and pass nothing that failed.
+/// Collection, reasons, the layout and the plan checks add no model call
+/// to judging and pass nothing that failed.
 #[test]
-fn nothing_of_spec_102_adds_a_model_call_or_passes_a_failure() {
+fn judging_adds_no_model_call_and_passes_no_failure() {
     // A verified task: the author's call and the attempt's turns, no more.
     let r = repo_with(
         "[acceptance]\nheld_out = false\nstrength = false\n",
@@ -4366,8 +4360,7 @@ fn a_listing_that_changes_the_tree_fails_the_attempt() {
     assert!(!rep.ticked && rep.earlier.is_empty());
 }
 
-/// Red that only failed to build has no count; a
-/// green that then collects nothing is still no evidence.
+/// A green run that collects nothing is not green: the scenario stays red.
 #[test]
 fn a_green_run_that_collects_nothing_never_verifies() {
     use std::os::unix::fs::PermissionsExt;
@@ -4379,7 +4372,7 @@ fn a_green_run_that_collects_nothing_never_verifies() {
     let zero = r.path().join("accept.sh");
     fs::write(
         &zero,
-        "#!/bin/sh\nif grep -q 'fn login' src/lib.rs; then\n  echo 'test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'error[E0425]: cannot find function `login` in this scope' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nfi\n",
+        "#!/bin/sh\n[ \"$1\" = -- ] && shift\n[ -f \"$1\" ] || exit 2\nif grep -q 'fn login' src/lib.rs; then\n  echo 'test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n",
     )
     .unwrap();
     fs::set_permissions(&zero, fs::Permissions::from_mode(0o755)).unwrap();
@@ -4395,18 +4388,13 @@ fn a_green_run_that_collects_nothing_never_verifies() {
     f.will_structure(done("login"));
     let res = run(r.path(), state.path(), "T005", d);
     let rep = report(&res);
-    assert_eq!(
-        rep.acceptance.as_ref().map(|a| a["red_class"].clone()),
-        Some(json!("absent")),
-        "{:?} {} {}",
-        rep.acceptance,
-        res.message(),
-        f.asked().len()
-    );
     assert!(
-        matches!(&rep.verdict, Some(Verdict::Failed { reasons }) if reasons[0] == "acceptance tests not collected at green"),
+        !matches!(
+            rep.progress,
+            Some(speccoder_core::story::Progress::Verified { .. })
+        ),
         "{:?} {}",
-        rep.verdict,
+        rep.progress,
         res.message()
     );
 }

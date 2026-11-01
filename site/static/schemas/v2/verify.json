@@ -241,7 +241,7 @@
           "minimum": 0
         },
         "failing_as_before": {
-          "description": "Checks failing now only because of tests that already failed in the baseline.",
+          "description": "Checks failing now only because of tests that already failed in the\nbaseline, or tests of a story's oracle (judged by the oracle's own runs).",
           "type": "array",
           "items": {
             "type": "string"

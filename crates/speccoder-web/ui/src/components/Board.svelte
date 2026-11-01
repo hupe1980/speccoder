@@ -6,7 +6,7 @@
   import { KINDS, offer, ofTask } from "../lib/actions";
   import type { Action, Task } from "../lib/types";
   import { neverRan, regressionLabel } from "../lib/evidence";
-  import { shareChip, shareWords, storyLine } from "../lib/story";
+  import { judgedChip, judgedWords, storyLine } from "../lib/story";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
   let expanded = $state<Record<string, boolean>>({});
@@ -14,7 +14,7 @@
 
   const tasks = $derived<Task[]>(app.report?.data?.tasks ?? []);
   // Each open story's scenarios: verified by a tick, or left for its checkpoint.
-  const stories = $derived(app.report?.data?.stories ?? []);
+  const stories = $derived((app.report?.data?.stories ?? []).filter((s) => !s.proven));
   const waitingFor = $derived(new Set(app.approvals.map((p) => p.task)));
   // This app's job, else another speccoder's run of this feature.
   const running = $derived(
@@ -88,9 +88,9 @@
   {#if stories.length}
     <ul class="stories" aria-label="Stories">
       {#each stories as s (s.story)}
-        <li><button class="story" disabled={!s.checkpoint} onclick={() => s.checkpoint && app.selectTask(s.checkpoint)} aria-label="{s.story}: {storyLine(s)}" title={s.checkpoint ? `Open ${s.checkpoint}, the task that judges what is left` : "No task of this story is code: see doctor"}>
+        <li><button class="story" disabled={!s.checkpoint} onclick={() => s.checkpoint && app.selectTask(s.checkpoint)} aria-label="{s.story}: {storyLine(s)}" title={s.checkpoint ? `Open ${s.checkpoint}, the task that closes the story` : "No open code task closes this story: see doctor"}>
           <strong>{s.story}</strong>
-          <span class="marks" aria-hidden="true">{#each s.scenarios as m (m.id)}<span class="mk" class:on={!!m.verified_by} title="{m.id}: {m.verified_by ? `verified by ${m.verified_by}` : `left for ${s.checkpoint ?? 'no task'}`}"></span>{/each}</span>
+          <span class="marks" aria-hidden="true">{#each s.scenarios as m (m.id)}<span class="mk" class:on={m.state === "green"} class:untested={m.state === "untested"} title="{m.id}: {m.state === 'green' ? (m.turned_by ? `turned green by ${m.turned_by}` : 'green from the start') : m.state === 'untested' ? 'no test checks it' : `red — ${m.contract ?? 'not built yet'}`}"></span>{/each}</span>
           <span class="sl">{storyLine(s)}</span>
         </button></li>
       {/each}
@@ -112,8 +112,8 @@
               {#if t.drift?.requirements.length}
                 <span class="foot changed" title="The spec changed since this tick: its evidence is for the earlier wording"><Icon name="exclaim" size={12} weight={2.2} />Spec changed: {t.drift.requirements.map((r) => r.id).join(", ")}</span>
               {/if}
-              {#if shareChip(t.share)}
-                <span class="foot share" title="Judged by {t.share ? shareWords(t.share) : ''}"><Icon name="seal" size={12} />{shareChip(t.share)}</span>
+              {#if judgedChip(t.judged)}
+                <span class="foot share" title="Judged by {t.judged ? judgedWords(t.judged) : ''}"><Icon name="seal" size={12} />{judgedChip(t.judged)}</span>
               {/if}
               {#if t.set_aside}
                 <span class="foot aside" title="Changes found in the worktree when its run started — keep or discard them in the inspector"><Icon name="tray" size={12} />Changes set aside</span>
@@ -162,6 +162,7 @@
   .marks { display: inline-flex; gap: 3px; }
   .mk { width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--faint); }
   .mk.on { background: var(--verified-fill); box-shadow: none; }
+  .mk.untested { box-shadow: inset 0 0 0 1.5px var(--faint); background: repeating-linear-gradient(45deg, transparent 0 2px, var(--faint) 2px 3px); }
   .sl { color: var(--text-2); }
   .share { color: var(--text-2); }
   .card {

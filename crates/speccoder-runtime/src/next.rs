@@ -47,72 +47,7 @@ pub fn attach(result: CommandResult, feature: Option<&str>) -> CommandResult {
             result = result.with_code(entry.name).with_fix(fix);
         }
     }
-    // A mid-story task whose acceptance tests it could not meet: judging
-    // them at the story's checkpoint instead comes first.
-    if let Some((task, checkpoint, cited)) = deferrable(&result, outcome.as_ref()) {
-        let f = feature.map_or_else(String::new, |f| format!(" --feature {f}"));
-        let command = format!("speccoder task defer {task}{f}");
-        let why = if cited.is_empty() {
-            format!("its tests need later tasks of the story? judge its scenarios at {checkpoint}")
-        } else {
-            format!(
-                "its tests need later tasks of the story? judge {} at {checkpoint}",
-                cited.join(", ")
-            )
-        };
-        let mut steps = vec![speccoder_core::next::NextStep {
-            command: command.clone(),
-            why,
-        }];
-        steps.extend(result.next().iter().cloned());
-        let mut fix = vec![command];
-        fix.extend(result.fix());
-        result = result.with_next(steps).with_fix(fix);
-    }
     result
-}
-
-/// The task, its story's checkpoint and the scenarios its tests cited,
-/// when the task can be deferred: its attempt ended incomplete, failed or
-/// blocked with acceptance tests red, and the test author chose its
-/// scenarios (no links, not the checkpoint) in a story with a later code task.
-fn deferrable(
-    result: &CommandResult,
-    outcome: Option<&Outcome>,
-) -> Option<(String, String, Vec<String>)> {
-    if !matches!(
-        outcome,
-        Some(
-            Outcome::Incomplete { .. }
-                | Outcome::VerificationFailed { .. }
-                | Outcome::Blocked { .. }
-        )
-    ) {
-        return None;
-    }
-    let Some(CommandData::Run(r)) = result.data() else {
-        return None;
-    };
-    let Some(speccoder_core::story::Share::Authored {
-        checkpoint: Some(checkpoint),
-        ..
-    }) = &r.share
-    else {
-        return None;
-    };
-    let acceptance = r.acceptance.as_ref()?;
-    if acceptance["red"] != true {
-        return None;
-    }
-    let mut cited: Vec<String> = Vec::new();
-    for t in acceptance["tests"].as_array().into_iter().flatten() {
-        for s in t["scenarios"].as_array().into_iter().flatten() {
-            if let Some(s) = s.as_str().filter(|s| !cited.iter().any(|c| c == s)) {
-                cited.push(s.to_owned());
-            }
-        }
-    }
-    Some((r.task.clone(), checkpoint.clone(), cited))
 }
 
 /// Next steps for a failure whose code names it precisely.
@@ -234,7 +169,7 @@ fn regression_fix(result: &CommandResult, feature: Option<&str>) -> Option<Vec<S
             format!("→ add an acceptance scenario to {story}, then converge"),
             converge,
         ],
-        R::AlreadyPassing { .. } | R::NoStory => vec![
+        R::AlreadyPassing | R::NoStory => vec![
             format!("{checks}  (the plan checks: behaviour planned before its story)"),
             converge,
         ],
@@ -244,7 +179,8 @@ fn regression_fix(result: &CommandResult, feature: Option<&str>) -> Option<Vec<S
         | R::TestsNotCollected
         | R::Unrecorded => vec![checks, converge],
         // Design documents, or a person's decision: nothing to do here.
-        R::PlanningWork | R::StoryVerified | R::DeferredToCheckpoint { .. } => Vec::new(),
+        R::PlanningWork | R::StoryVerified | R::InProgress => Vec::new(),
+        R::RegressionUnchecked => vec!["set `junit` on the test check in speccoder.toml, so a regression is told apart from the story's red tests".to_string()],
     })
 }
 

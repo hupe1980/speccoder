@@ -13,6 +13,7 @@
   import { comments } from "../lib/comments.svelte";
   import { get, q } from "../lib/api";
   import { passage, plain, revisedHeadings } from "../lib/review";
+  import { living } from "../lib/living";
   const docs = $derived(app.documents);
   // Review is offered when the spec names requirements to review.
   const reviewable = $derived(!!app.report?.data?.review);
@@ -26,12 +27,14 @@
   // Requirement IDs become chips that say which task cites them (the report's trace).
   const cites = $derived(new Map((app.report?.data?.trace ?? []).map((t) => [t.requirement, t.task])));
   const parsed = $derived(outline(shown?.html ?? ""));
-  const html = $derived(
+  const chipped = $derived(
     parsed.html.replace(/\b((?:FR|SC|NFR)-\d{2,4})\b/g, (id) => {
       const task = cites.get(id);
       return `<span class="req ${task ? "cited" : "uncited"}" title="${task ? `cited by ${task}` : "no task cites it"}">${id}</span>`;
     }),
   );
+  // The spec, alive: its stories as cards, each scenario with its state.
+  const html = $derived(shown?.name === "spec" ? living(chipped, app.report?.data?.stories ?? []) : chipped);
   const sections = $derived(parsed.sections);
 
   // A phase of the task list: done of total, from the report's own states.
@@ -312,6 +315,36 @@
   .prose :global(.diagram-error) { color: var(--danger); font-size: 0.82rem; text-align: left; margin: 0.5rem 0 0; }
   .prose :global(.req.uncited) { background: var(--regression-bg); color: var(--regression); }
   .empty { padding: 3rem; text-align: center; }
+  /* The living spec: a story is a card; its scenarios are steps with a state. */
+  .prose :global(section.story) { margin: 1.5rem -1.1rem; padding: 0.4rem 1.1rem 0.9rem; border-radius: var(--radius); background: var(--surface-2); box-shadow: inset 0 0 0 0.5px var(--separator); }
+  .prose :global(section.story.proven) { box-shadow: inset 3px 0 0 var(--verified-fill), inset 0 0 0 0.5px var(--separator); }
+  .prose :global(.story-head) { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .prose :global(.story-head h3) { margin-top: 0.8rem; }
+  .prose :global(.pri) { font-size: 0; vertical-align: 0.12em; }
+  .prose :global(.pri)::after { content: attr(data-p); font: 700 0.68rem/1 var(--rounded); padding: 0.22rem 0.45rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); margin-left: 0.15rem; }
+  .prose :global(.pri[data-p="P1"])::after { background: var(--accent); color: #fff; }
+  .prose :global(.strip) { display: inline-flex; align-items: center; gap: 3px; flex: none; font-size: 0.78rem; color: var(--muted); }
+  .prose :global(.strip .d) { width: 8px; height: 8px; border-radius: 50%; background: var(--fill-2); }
+  .prose :global(.strip .d.green) { background: var(--verified-fill); }
+  .prose :global(.strip .d.red) { background: transparent; box-shadow: inset 0 0 0 1.5px var(--regression-fill); }
+  .prose :global(.strip .n) { margin-left: 0.35rem; }
+  .prose :global(.story.proven .strip .n) { color: var(--verified); font-weight: 600; }
+  .prose :global(p.why) { font-size: 0.88rem; }
+  .prose :global(p.itest) { padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }
+  .prose :global(p.label) { margin-bottom: 0.3rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .prose :global(ol.scenarios) { list-style: none; padding: 0; display: grid; gap: 0.45rem; }
+  .prose :global(li.scenario) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.75rem; align-items: start; margin: 0; padding: 0.6rem 0.75rem; border-radius: var(--radius-sm); background: var(--surface); box-shadow: inset 3px 0 0 var(--fill-2); }
+  .prose :global(li.scenario.green) { box-shadow: inset 3px 0 0 var(--verified-fill); }
+  .prose :global(li.scenario.red) { box-shadow: inset 3px 0 0 var(--regression-fill); }
+  .prose :global(.sid) { font: 600 0.72rem/1.9 var(--mono); color: var(--muted); }
+  .prose :global(.steps) { display: grid; gap: 0.1rem; }
+  .prose :global(.step) { display: block; }
+  .prose :global(.step .k) { display: inline-block; min-width: 3.1rem; font: 700 0.7rem/1 var(--rounded); text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent-ink); }
+  .prose :global(.sb) { font: 600 0.72rem/1 var(--rounded); padding: 0.25rem 0.5rem; border-radius: 999px; white-space: nowrap; margin-top: 0.2rem; background: var(--fill); color: var(--muted); }
+  .prose :global(li.green .sb) { background: var(--verified-bg); color: var(--verified); }
+  .prose :global(li.red .sb) { background: var(--regression-bg); color: var(--regression); }
+  .prose :global(.kw) { font-size: 0.82em; font-weight: 700; letter-spacing: 0.03em; color: var(--text); }
+  @media (max-width: 640px) { .prose :global(li.scenario) { grid-template-columns: minmax(0, 1fr) auto; } .prose :global(.sid) { grid-column: 1 / -1; } }
   .prose { position: relative; }
   .cbtn { position: absolute; z-index: 3; transform: translateX(-100%); border: 0; cursor: pointer; padding: 0.3rem 0.65rem; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 600; font-size: 0.8rem; box-shadow: var(--shadow-lg); }
   .cbtn kbd, .cpop kbd { font: 0.66rem var(--mono); padding: 0 0.25rem; border-radius: 4px; background: rgba(255, 255, 255, 0.2); }

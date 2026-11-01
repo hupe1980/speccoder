@@ -408,6 +408,7 @@ pub fn view(
             count: 0,
             manifest_sha256: None,
             reason: None,
+            discarded: Vec::new(),
         },
         strength_target: cfg.strength_target,
         calls: cfg.samples,
@@ -453,6 +454,7 @@ pub fn view(
                 count: 0,
                 manifest_sha256: None,
                 reason: None,
+                discarded: Vec::new(),
             }
         };
         v.manifest_sha256 = d.manifest();
@@ -520,12 +522,14 @@ pub fn view(
                                 count: h.count,
                                 manifest_sha256: Some(format!("sha256:{}", h.manifest_sha256)),
                                 reason: None,
+                                discarded: Vec::new(),
                             },
                             None => HeldOutSummary {
                                 state: "absent".to_owned(),
                                 count: 0,
                                 manifest_sha256: None,
                                 reason: Some("none_kept".to_owned()),
+                                discarded: Vec::new(),
                             },
                         };
                     }
@@ -543,6 +547,14 @@ pub fn view(
             v.frozen_by = Some(e.by.clone());
             v.frozen_at = Some(e.at);
         }
+    } else if let Ok(Some((rec, _))) = crate::pre_frozen::load(project_state, unit, &req.key)
+        && rec.producer == Producer::Run
+        && rec.is_current(&digest)
+    {
+        // Written by a run nobody reviewed: the story's oracle, frozen by it.
+        v.state = OracleState::Frozen;
+        v.frozen_by = Some(rec.decided.by.clone());
+        v.frozen_at = Some(rec.decided.at);
     }
     v
 }
@@ -963,10 +975,26 @@ fn existing(ctx: &Ctx, req: &OracleRequirement) -> Result<Loaded, Box<CommandRes
 }
 
 /// The plane and runtime of the author calls.
+/// Owned at review; lent by the run whose plane already holds the journal.
+enum Held<'a, T> {
+    Own(T),
+    Lent(&'a T),
+}
+
+impl<T> std::ops::Deref for Held<'_, T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        match self {
+            Self::Own(t) => t,
+            Self::Lent(t) => t,
+        }
+    }
+}
+
 struct Author<'a> {
     ctx: &'a Ctx,
-    rt: tokio::runtime::Runtime,
-    plane: substrate::Plane,
+    rt: Held<'a, tokio::runtime::Runtime>,
+    plane: Held<'a, substrate::Plane>,
     bundle: Value,
     instructions: Vec<crate::instructions::Instruction>,
     /// The test layout's text: where the review's files are placed.
@@ -1003,6 +1031,25 @@ impl<'a> Author<'a> {
                 )
             })
             .map_err(|e| failed(e.0))?;
+        Ok(Self::with(ctx, req, Held::Own(rt), Held::Own(plane)))
+    }
+
+    /// The author of a run: the run's runtime and plane, lent.
+    fn lent(
+        ctx: &'a Ctx,
+        req: &OracleRequirement,
+        rt: &'a tokio::runtime::Runtime,
+        plane: &'a substrate::Plane,
+    ) -> Self {
+        Self::with(ctx, req, Held::Lent(rt), Held::Lent(plane))
+    }
+
+    fn with(
+        ctx: &'a Ctx,
+        req: &OracleRequirement,
+        rt: Held<'a, tokio::runtime::Runtime>,
+        plane: Held<'a, substrate::Plane>,
+    ) -> Self {
         let unit_dir = ctx.root.join(&ctx.dir);
         let [constitution, _, plan, _] = ctx.format.convergence_texts(&ctx.root, &unit_dir);
         let bundle = json!({
@@ -1022,14 +1069,14 @@ impl<'a> Author<'a> {
         });
         let instructions =
             crate::instructions::collect(&ctx.root, &ctx.root, &[], &ctx.config.instructions);
-        Ok(Self {
+        Self {
             ctx,
             rt,
             plane,
             bundle,
             instructions,
             test_layout: crate::layout::text_at(&ctx.root),
-        })
+        }
     }
 
     /// The parts a call is handed, as its context manifest lists them.
@@ -1190,7 +1237,10 @@ fn expectations(
 /// A scratch worktree of the checkout's `HEAD`, its project directory and
 /// a sandboxed runner in it.
 struct Bench {
-    scratch: worktree::Scratch,
+    /// The worktree the tests are checked in: a scratch one at review, the
+    /// task's own at a run (kept alive with it).
+    root: PathBuf,
+    _scratch: Option<worktree::Scratch>,
     project: PathBuf,
     runner: sandbox::Runner,
     tmp: PathBuf,
@@ -1248,16 +1298,29 @@ impl Bench {
             })?;
         }
         Ok(Self {
-            scratch,
+            root: scratch.path.clone(),
+            _scratch: Some(scratch),
             project,
             runner,
             tmp,
         })
     }
 
+    /// The bench of a run: the task's own worktree (`wt_root`), already
+    /// prepared, at the tree the task starts from, with the task's runner.
+    fn here(ctx: &Ctx, wt_root: &Path, runner: sandbox::Runner) -> Self {
+        Self {
+            root: wt_root.to_path_buf(),
+            _scratch: None,
+            project: ctx.root.clone(),
+            runner,
+            tmp: ctx.plane_dir.join("tmp"),
+        }
+    }
+
     fn files(&self) -> (Vec<String>, String) {
-        let files: Vec<String> = worktree::checkpoint(&self.scratch.path, &self.tmp)
-            .and_then(|c| worktree::files(&self.scratch.path, &c))
+        let files: Vec<String> = worktree::checkpoint(&self.root, &self.tmp)
+            .and_then(|c| worktree::files(&self.root, &c))
             .unwrap_or_default()
             .into_iter()
             .take(400)
@@ -1399,7 +1462,6 @@ fn write(
     let samples = ctx.config.oracle_samples.clamp(1, 2);
     let author = Author::open(ctx, req, provider, options)?;
     let bench = Bench::open(ctx)?;
-    let (files, manifest) = bench.files();
     // What the person said about earlier tests is told again; a draft
     // that cannot be read is not overwritten with its rejections lost.
     let earlier = load(&ctx.plane_dir, &ctx.feature, &req.key).map_err(|t| {
@@ -1430,10 +1492,52 @@ fn write(
         .map(|r| format!("Rejected `{}`: {}", r.path, r.reason))
         .chain(notes.iter().cloned())
         .collect();
+    let (draft, contents) = draft(
+        ctx, req, &author, &bench, samples, &told, rejected, notes, true, options,
+    )?;
+    store(&ctx.plane_dir, &ctx.feature, &draft, &contents).map_err(failed)?;
+    let red = draft.red().count();
+    let open = draft.open_ambiguities().count();
+    Ok(format!(
+        "wrote {} test(s) for {}: {red} red{}{}",
+        draft.tests.len(),
+        req.key,
+        if draft.held_out.state == "kept" {
+            format!(", {} held out", draft.held_out.count)
+        } else {
+            String::new()
+        },
+        if open > 0 {
+            format!(
+                "; {} — {open} scenario(s) read two ways: choose a reading or reword (`speccoder review tests {} --reading A|B <scenario>`)",
+                req.key, req.key
+            )
+        } else {
+            String::new()
+        }
+    ))
+}
+
+/// One author pass over `req` (`samples` calls), its tests red-checked on
+/// `bench`, the held-out set sealed: the draft and its tests' contents.
+#[allow(clippy::too_many_arguments)]
+fn draft(
+    ctx: &Ctx,
+    req: &OracleRequirement,
+    author: &Author<'_>,
+    bench: &Bench,
+    samples: u8,
+    told: &[String],
+    rejected: Vec<OracleRejected>,
+    notes: Vec<String>,
+    with_held_out: bool,
+    options: &crate::RunOptions,
+) -> Result<Loaded, Box<CommandResult>> {
+    let (files, manifest) = bench.files();
     let of = u32::from(samples);
     stage(options, &req.key, "writing", 1, of);
     let (first, run1, mut context) = author
-        .call(req, &files, &manifest, &told, None, 1)
+        .call(req, &files, &manifest, told, None, 1)
         .map_err(failed)?;
     // The comparison needs both readings; with one sample they are kept
     // as stated, for the card.
@@ -1451,7 +1555,7 @@ fn write(
     if samples >= 2 {
         stage(options, &req.key, "writing", 2, of);
         let (second, run2, more) = author
-            .call(req, &files, &manifest, &told, None, 2)
+            .call(req, &files, &manifest, told, None, 2)
             .map_err(failed)?;
         (e2, u2) = read(&second)?;
         runs.push(run2);
@@ -1467,7 +1571,7 @@ fn write(
     } else {
         Vec::new()
     };
-    let (kept, mut discarded) = keep(ctx, &bench, &first, req, &[]);
+    let (kept, mut discarded) = keep(ctx, bench, &first, req, &[]);
     stage(options, &req.key, "checking_red", 1, 1);
     let plan: Vec<(String, String, Vec<String>)> = kept
         .iter()
@@ -1496,7 +1600,21 @@ fn write(
             }),
         }
     }
-    let (held_out, sealed) = held_out(ctx, &author, &bench, req, &tests, options);
+    // An amendment keeps the story's sealed set: none is written for it.
+    let (held_out, sealed) = if with_held_out {
+        held_out(ctx, author, bench, req, &tests, options)
+    } else {
+        (
+            HeldOutSummary {
+                state: "off".to_owned(),
+                count: 0,
+                manifest_sha256: None,
+                reason: None,
+                discarded: Vec::new(),
+            },
+            None,
+        )
+    };
     let draft = Draft {
         requirement: DraftRequirement {
             key: req.key.clone(),
@@ -1523,27 +1641,7 @@ fn write(
         runs,
         context,
     };
-    store(&ctx.plane_dir, &ctx.feature, &draft, &contents).map_err(failed)?;
-    let red = draft.red().count();
-    let open = draft.open_ambiguities().count();
-    Ok(format!(
-        "wrote {} test(s) for {}: {red} red{}{}",
-        draft.tests.len(),
-        req.key,
-        if draft.held_out.state == "kept" {
-            format!(", {} held out", draft.held_out.count)
-        } else {
-            String::new()
-        },
-        if open > 0 {
-            format!(
-                "; {} — {open} scenario(s) read two ways: choose a reading or reword (`speccoder review tests {} --reading A|B <scenario>`)",
-                req.key, req.key
-            )
-        } else {
-            String::new()
-        }
-    ))
+    Ok((draft, contents))
 }
 
 /// The held-out set at review, after a red visible set: authored as at
@@ -1562,6 +1660,7 @@ fn held_out(
         count: 0,
         manifest_sha256: None,
         reason: reason.map(str::to_owned),
+        discarded: Vec::new(),
     };
     if !ctx.config.held_out {
         return (summary("off", None), None);
@@ -1588,7 +1687,7 @@ fn held_out(
             rt: &author.rt,
             plane: &author.plane,
             project: &bench.project,
-            worktree: &bench.scratch.path,
+            worktree: &bench.root,
             tmp: &bench.tmp,
             policy: &ctx.policy,
             feature: &ctx.feature,
@@ -1598,7 +1697,6 @@ fn held_out(
             instructions: &author.instructions,
             runner: &bench.runner,
             layout: None,
-            story_files: &[],
         },
         &visible,
         &req.scenarios,
@@ -1617,6 +1715,7 @@ fn held_out(
                     count,
                     manifest_sha256: Some(format!("sha256:{sha}")),
                     reason: None,
+                    discarded: Vec::new(),
                 },
                 Some(SealedRef {
                     key: req.key.clone(),
@@ -1626,10 +1725,18 @@ fn held_out(
             )
         }
         None => (
-            summary(
-                "absent",
-                Some(report["reason"].as_str().unwrap_or("none_kept")),
-            ),
+            HeldOutSummary {
+                discarded: report["discarded"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|d| d["reason"].as_str().map(str::to_owned))
+                    .collect(),
+                ..summary(
+                    "absent",
+                    Some(report["reason"].as_str().unwrap_or("none_kept")),
+                )
+            },
             None,
         ),
     }
@@ -1984,6 +2091,29 @@ pub fn freeze(
     f: &Freezable,
     approval_digest: &str,
     decided: Decided,
+    producer: Producer,
+) -> Result<PreFrozenAcceptance, String> {
+    let red: Vec<&DraftTest> = f.draft.red().collect();
+    freeze_tests(
+        project_state,
+        unit,
+        f,
+        &red,
+        approval_digest,
+        decided,
+        producer,
+    )
+}
+
+/// [`freeze`] of `tests` (red, and at a run already passing too).
+fn freeze_tests(
+    project_state: &Path,
+    unit: &str,
+    f: &Freezable,
+    red: &[&DraftTest],
+    approval_digest: &str,
+    decided: Decided,
+    producer: Producer,
 ) -> Result<PreFrozenAcceptance, String> {
     let sealed = match &f.draft.sealed {
         Some(s) => {
@@ -1993,7 +2123,6 @@ pub fn freeze(
         }
         None => None,
     };
-    let red: Vec<&DraftTest> = f.draft.red().collect();
     let record = PreFrozenAcceptance {
         unit: unit.to_owned(),
         requirement: f.req.key.clone(),
@@ -2008,7 +2137,7 @@ pub fn freeze(
             })
             .collect(),
         held_out_sealed: sealed,
-        producer: Producer::Review,
+        producer,
         decided,
     };
     crate::pre_frozen::store(project_state, &record, &f.contents)?;
@@ -2035,6 +2164,282 @@ pub fn freeze(
         &text,
     )?;
     Ok(record)
+}
+
+/// Why an oracle test cannot be kept, if it cannot. Kept: red on an
+/// assertion, already passing, or — in a compiled language, where a test of
+/// what does not exist yet cannot build — red by an absent symbol (in
+/// Python or JavaScript an absent import stops the whole run's
+/// collection). A file of several scenarios, when its story has more, is
+/// never kept: its scenarios could only turn green together.
+fn not_kept(t: &DraftTest, many: bool) -> Option<String> {
+    if many && t.scenarios.len() > 1 {
+        return Some(format!(
+            "it tests {} together — one file per scenario, so each turns green on its own",
+            t.scenarios.join(", ")
+        ));
+    }
+    (!usable(t)).then(|| format!("it did not fail on an assertion ({:?})", t.red_class))
+}
+
+fn usable(t: &DraftTest) -> bool {
+    match t.red_class {
+        RedClass::Assertion | RedClass::Passed => true,
+        RedClass::Absent => [".rs", ".go", ".java", ".kt", ".cs", ".swift"]
+            .iter()
+            .any(|e| t.path.ends_with(e)),
+        _ => false,
+    }
+}
+
+/// A story's oracle as a run wrote it: the kept tests (red, or already
+/// passing), their contents, each scenario's contract, and what could not
+/// be kept.
+#[derive(Debug)]
+pub(crate) struct RunOracle {
+    /// Each kept test with its command and scenarios (none: the author
+    /// found nothing testable).
+    pub tests: Vec<FrozenTest>,
+    /// Their contents (path, text).
+    pub contents: Vec<(String, String)>,
+    /// What each scenario must hold, as the author stated it.
+    pub contracts: Vec<Expectation>,
+    /// The scenarios the author could not test, and why.
+    pub untestable: Vec<Untestable>,
+}
+
+/// Writes `story`'s oracle for a run nobody reviewed: one author pass on
+/// the task's own worktree (`wt_root`, its project at `project`, clean at
+/// the tree the task starts from), every test checked alone; a scenario
+/// left without a usable test is asked for once more. Tests red or already
+/// passing are kept and frozen by `speccoder run`; the held-out set is
+/// sealed beside them. The worktree is left as it was.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn write_for_run(
+    project: &Path,
+    wt_root: &Path,
+    feature: &str,
+    state: &Path,
+    story: &str,
+    runner: sandbox::Runner,
+    (rt, plane): (&tokio::runtime::Runtime, &substrate::Plane),
+    (only, told): (&[String], &[String]),
+    run: &str,
+    options: &crate::RunOptions,
+) -> Result<RunOracle, Box<CommandResult>> {
+    let ctx = open(project, Some(feature), state)?;
+    let requirements = ctx.format.oracle_requirements(&ctx.snapshot);
+    // The unit as one story (OpenSpec): every requirement's scenarios.
+    let whole = (story == ctx.feature && !requirements.iter().any(|r| r.key == story)).then(|| {
+        OracleRequirement {
+            key: story.to_owned(),
+            title: ctx.feature.clone(),
+            text: requirements
+                .iter()
+                .map(|r| format!("{}: {}\n{}", r.key, r.title, r.text))
+                .collect::<Vec<_>>()
+                .join("\n\n"),
+            scenarios: requirements
+                .iter()
+                .flat_map(|r| r.scenarios.clone())
+                .collect(),
+        }
+    });
+    let Some(mut req) = whole.or_else(|| requirements.into_iter().find(|r| r.key == story)) else {
+        return Err(Box::new(refuse(
+            CommandStatus::NeedsHuman,
+            "ORACLE-UNWRITTEN",
+            &format!("{story} has no scenarios to write tests for"),
+        )));
+    };
+    // An amendment: only the scenarios a person ruled wrong, told why.
+    if !only.is_empty() {
+        req.scenarios.retain(|s| only.contains(&s.id));
+    }
+    let _lock = UnitLock::take(&ctx.plane_dir, &ctx.feature)
+        .map_err(|e| Box::new(refuse(CommandStatus::GitPrecondition, "RUN-ACTIVE", &e)))?;
+    let author = Author::lent(&ctx, &req, rt, plane);
+    let many = req.scenarios.len() > 1;
+    let bench = Bench::here(&ctx, wt_root, runner);
+    let kept = |d: &Draft| -> Vec<String> {
+        let mut covered: Vec<String> = d
+            .tests
+            .iter()
+            .filter(|t| not_kept(t, many).is_none())
+            .flat_map(|t| t.scenarios.iter().cloned())
+            .collect();
+        covered.sort();
+        covered.dedup();
+        covered
+    };
+    let (mut draft, mut contents) = draft(
+        &ctx,
+        &req,
+        &author,
+        &bench,
+        1,
+        told,
+        Vec::new(),
+        told.to_vec(),
+        only.is_empty(),
+        options,
+    )?;
+    let missing = |d: &Draft| -> Vec<String> {
+        let covered = kept(d);
+        req.scenarios
+            .iter()
+            .map(|s| s.id.clone())
+            .filter(|id| !covered.contains(id))
+            .collect()
+    };
+    // A scenario whose test broke (not kept: it did not build, collect or
+    // fail first) is asked for once more, told why; the better pass is kept.
+    // One the author found untestable, or wrote nothing for, is left so.
+    let untestable: Vec<String> = draft
+        .untestable
+        .sample1
+        .iter()
+        .map(|u| u.scenario.clone())
+        .collect();
+    let broke =
+        !draft.discarded.is_empty() || draft.tests.iter().any(|t| not_kept(t, many).is_some());
+    let left: Vec<String> = missing(&draft)
+        .into_iter()
+        .filter(|id| !untestable.contains(id))
+        .collect();
+    if broke && !left.is_empty() {
+        let told: Vec<String> = draft
+            .discarded
+            .iter()
+            .map(|d| format!("Not kept `{}`: {}", d.path, d.why))
+            .chain(draft.tests.iter().filter_map(|t| {
+                not_kept(t, many).map(|why| format!("Not kept `{}`: {why}", t.path))
+            }))
+            .chain(std::iter::once(format!(
+                "Write tests again for {} — each must build and be collected without the code it tests existing yet: exercise the story through its interface, import the code under test inside each test",
+                left.join(", ")
+            )))
+            .collect();
+        let (second, more) = self::draft(
+            &ctx,
+            &req,
+            &author,
+            &bench,
+            1,
+            &told,
+            Vec::new(),
+            told.clone(),
+            only.is_empty(),
+            options,
+        )?;
+        if missing(&second).len() < left.len() {
+            (draft, contents) = (second, more);
+        }
+    }
+    // An amendment's draft is a part: the story's own draft stays.
+    if only.is_empty() {
+        store(&ctx.plane_dir, &ctx.feature, &draft, &contents).map_err(failed)?;
+    }
+    let keep: Vec<&DraftTest> = draft
+        .tests
+        .iter()
+        .filter(|t| not_kept(t, many).is_none())
+        .collect();
+    // The author found nothing testable (no test written at all): no
+    // oracle, and no stop — the story is judged by its checks.
+    if keep.is_empty() && draft.tests.is_empty() && draft.discarded.is_empty() {
+        return Ok(RunOracle {
+            tests: Vec::new(),
+            contents: Vec::new(),
+            contracts: draft.expectations.sample1.clone(),
+            untestable: draft.untestable.sample1.clone(),
+        });
+    }
+    if keep.is_empty() {
+        return Err(Box::new(refuse(
+            CommandStatus::NeedsHuman,
+            "ORACLE-UNWRITTEN",
+            &format!(
+                "no test written for {story} could be used ({} not kept)",
+                draft.tests.len() + draft.discarded.len()
+            ),
+        )));
+    }
+    let manifest = manifest_digest(
+        keep.iter()
+            .map(|t| (t.path.as_str(), t.sha256.as_str(), t.argv.as_slice())),
+    );
+    let paths: Vec<&str> = keep.iter().map(|t| t.path.as_str()).collect();
+    let kept_contents: Vec<(String, String)> = contents
+        .iter()
+        .filter(|(p, _)| paths.contains(&p.as_str()))
+        .cloned()
+        .collect();
+    let f = Freezable {
+        req: req.clone(),
+        draft: draft.clone(),
+        contents: kept_contents.clone(),
+        manifest,
+    };
+    // An amendment is merged into the frozen oracle by its caller; the
+    // story's record and sealed set stay.
+    if only.is_empty() {
+        freeze_tests(
+            &ctx.plane_dir,
+            &ctx.feature,
+            &f,
+            &keep,
+            &format!(
+                "run:{run}{}",
+                if only.is_empty() { "" } else { ":amendment" }
+            ),
+            Decided {
+                by: "speccoder run".to_owned(),
+                via: Via::Terminal,
+                at: now(),
+            },
+            Producer::Run,
+        )
+        .map_err(failed)?;
+    }
+    Ok(RunOracle {
+        tests: keep
+            .iter()
+            .map(|t| FrozenTest {
+                path: t.path.clone(),
+                sha256: t.sha256.clone(),
+                argv: t.argv.clone(),
+                scenarios: t.scenarios.clone(),
+            })
+            .collect(),
+        contents: kept_contents,
+        contracts: draft.expectations.sample1.clone(),
+        untestable: draft.untestable.sample1.clone(),
+    })
+}
+
+/// Replaces the tests a frozen oracle runs (an amendment: the ruled
+/// scenarios' tests swapped), its manifest recomputed.
+///
+/// # Errors
+///
+/// Nothing is frozen for `key`, or it cannot be written.
+pub(crate) fn refreeze(
+    project_state: &Path,
+    unit: &str,
+    key: &str,
+    tests: Vec<FrozenTest>,
+) -> Result<(), String> {
+    let mut frozen = load_frozen(project_state, unit, key)
+        .ok_or_else(|| format!("{key} has no frozen oracle here"))?;
+    frozen.manifest_sha256 = manifest_digest(
+        tests
+            .iter()
+            .map(|t| (t.path.as_str(), t.sha256.as_str(), t.argv.as_slice())),
+    );
+    frozen.tests = tests;
+    let text = serde_json::to_string_pretty(&frozen).map_err(|e| e.to_string())?;
+    write_atomic(&dir(project_state, unit, key).join("frozen.json"), &text)
 }
 
 /// What a task's checkpoint does with a frozen oracle.
@@ -2350,6 +2755,7 @@ mod tests {
                 count: 0,
                 manifest_sha256: None,
                 reason: None,
+                discarded: Vec::new(),
             },
             sealed: None,
             notes: Vec::new(),

@@ -591,7 +591,7 @@
             {
               "key": "generate",
               "kind": "bool",
-              "about": "Derive acceptance tests from the spec before each attempt",
+              "about": "Derive acceptance tests from the spec: a story's oracle before its first code task, a convergence gap's own test",
               "default": true,
               "value": false,
               "choices": [],
@@ -602,7 +602,7 @@
             {
               "key": "held_out",
               "kind": "bool",
-              "about": "Also write held-out tests the implementer never sees; verified needs them to pass",
+              "about": "Also write held-out tests the implementer never sees; a story's last code task needs them to pass",
               "default": true,
               "value": null,
               "choices": [],

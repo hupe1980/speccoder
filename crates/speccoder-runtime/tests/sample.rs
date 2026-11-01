@@ -96,6 +96,8 @@ fn scripted_sample() -> Asset {
     };
     git(&r, &["add", "-A"]);
     git(&r, &["commit", "-q", "-m", "the recorded run"]);
+    // The run's ticks live on its own branch.
+    git(&r, &["branch", "speccoder/002-words"]);
     let bundle = dir.path().join("sample.bundle");
     git(
         &r,
@@ -133,6 +135,15 @@ fn a_build_without_the_recording_says_so_and_with_it_the_recording_reproduces() 
         assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
         assert!(report(&res).runs.iter().all(|r| r.result == "reproduced"));
         assert!(began.elapsed() < std::time::Duration::from_secs(10));
+        // What the playback shows: the recorded ticks.
+        let status = speccoder_runtime::status::report(Path::new(&report(&res).path), None);
+        let Some(CommandData::Report(st)) = status.data() else {
+            panic!("{}", status.message());
+        };
+        assert!(
+            st.tasks.iter().any(|t| t.commit.is_some()),
+            "the sample's ticks are not on its board"
+        );
     } else {
         eprintln!("no recorded sample in this build: `just record-sample` makes one");
         assert_eq!(res.status(), CommandStatus::NotFound);
@@ -157,6 +168,20 @@ fn a_sample_is_copied_into_the_state_directory_and_replayed_strictly() {
         copy.starts_with(fs::canonicalize(state.path()).unwrap()) || copy.starts_with(state.path())
     );
     assert!(copy.join("specs/002-words/spec.md").is_file());
+    // Its ticks are local, as recorded: the board shows them.
+    assert!(
+        Command::new("git")
+            .args([
+                "rev-parse",
+                "--verify",
+                "-q",
+                "refs/heads/speccoder/002-words"
+            ])
+            .current_dir(&copy)
+            .status()
+            .unwrap()
+            .success()
+    );
     // Opened again: the copy is kept as it is.
     fs::write(copy.join("mine.txt"), "a change of mine\n").unwrap();
     let again = open_from(&asset, state.path(), false);

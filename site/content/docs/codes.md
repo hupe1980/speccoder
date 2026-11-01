@@ -114,6 +114,8 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`BUDGET-EXHAUSTED`](#budget-exhausted) | stop | 23 | the attempt ran out of turns, calls or tokens |
 | [`NOT-DEMONSTRATED`](#not-demonstrated) | stop | 23 | the evidence the task needs could not be produced |
 | [`TESTS-COLLECTION-UNKNOWN`](#tests-collection-unknown) | stop | 23 | speccoder cannot tell whether the runner ran a test file |
+| [`STORY-OPEN`](#story-open) | stop | 23 | the story's last task left scenarios of its oracle red |
+| [`ORACLE-UNWRITTEN`](#oracle-unwritten) | stop | 23 | the story's oracle got no usable test for any scenario |
 | [`ACCEPTANCE-UNWRITTEN`](#acceptance-unwritten) | stop | 23 | the acceptance tests could not be written, so nothing was attempted |
 | [`SUSPECTED-GAMING`](#suspected-gaming) | stop | 23 | the gaming monitor suspects a shortcut |
 | [`TESTS-OVER-STRICT`](#tests-over-strict) | stop | 23 | an acceptance test rejects an implementation the spec appears to allow |
@@ -756,7 +758,7 @@ Every task of the story is planning work (design documents) or a step only a per
 
 A task names a scenario its story does not have.
 
-A task names the scenarios it makes hold, `(scenarios US3-1)`; this one names an id that is not a scenario of its story (ids are the story's number and the scenario's position in it). The link is ignored: the task's test author chooses from the story, and the story's checkpoint judges what is left.
+A task names the scenarios it makes hold, `(scenarios US3-1)`; this one names an id that is not a scenario of its story (ids are the story's number and the scenario's position in it). The link is ignored: the task is judged by the scenarios it turns green on its story's oracle.
 
 - `speccoder spec tasks`
 
@@ -1024,6 +1026,23 @@ The attempt changed a test file, and neither the toolchain's static rule, the ch
 
 - Declare a JUnit report for the check (`junit = "…"`)
 - Set the check's `list` command in speccoder.toml
+
+### STORY-OPEN
+
+The story's last task left scenarios of its oracle red.
+
+The story's last open code task must leave every scenario of the story's oracle green (and its held-out tests passing); these are still red after the attempts. Leave the model a note, or — when a test asserts what the spec does not say — rule that scenario's tests wrong: the next run writes them again, and nothing else.
+
+- `speccoder task nudge <task> --note "…"`
+- `speccoder task rule <task> --tests-wrong --scenario <id> --reason "…"`
+
+### ORACLE-UNWRITTEN
+
+The story's oracle got no usable test for any scenario.
+
+Before a story's first code task, speccoder writes the story's acceptance tests through its interface. None of them could be used (they did not build or collect, twice), so the story has nothing to be judged by and the task stops before any code is written.
+
+- `speccoder review tests <story> --write`
 
 ### ACCEPTANCE-UNWRITTEN
 

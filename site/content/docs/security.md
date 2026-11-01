@@ -98,7 +98,7 @@ profile speccoder /usr/local/bin/speccoder flags=(unconfined) {
 
 ## Held-out tests
 
-Held-out tests are sealed in the state directory ([where they are kept](@/docs/evidence.md#where-they-are-kept)). The web interface's file view serves project paths only, follows no symbolic link, and reads an untracked file only when its real path is inside the feature's worktree and no held-out set is overlaid; the diff view shows only commits a branch, `HEAD` or a saved attempt reaches. Comments, revisions, nudges and every author call but the held-out author's own never carry held-out material.
+Held-out tests are kept in the state directory, out of the model's reach — withheld, not sealed, from an external agent, which runs as you ([where they are kept](@/docs/evidence.md#where-they-are-kept)); once a finished feature publishes them, they are no longer held out. The web interface's file view serves project paths only, follows no symbolic link, and reads an untracked file only when its real path is inside the feature's worktree and no held-out set is overlaid; the diff view shows only commits a branch, `HEAD` or a saved attempt reaches. Comments, revisions, nudges and every author call but the held-out author's own never carry held-out material.
 
 ## Secrets
 

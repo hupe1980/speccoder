@@ -6,8 +6,49 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **The living spec.** Spec & Plan shows each user story as a card with
+  its priority and its oracle's progress, and each acceptance scenario as
+  Given / When / Then steps with its state and the task that turned it
+  green. MUST, SHOULD and MAY stand out.
+
+### Changed
+
+- **One oracle per story** (breaking). A story's acceptance tests are
+  written once, before its first code task implements anything, through
+  the interface its Independent Test names — a contract per scenario,
+  committed on the unit branch (`Oracle: US1`) and frozen; tests you froze
+  at review are the oracle instead. Every task of the story is judged by
+  the scenarios it turns green (`verified`, `Scenarios:`), or ticks
+  `regression_only` `in_progress`; a scenario it turns red fails it. The story's last task
+  must leave every scenario green and its held-out tests passing, or stops
+  (`STORY-OPEN`) with a ruling per scenario: `speccoder task rule T
+  --tests-wrong --scenario US3-2 --reason "…"` writes that scenario's
+  tests again. The implementer is told the story's red scenarios and their
+  contracts.
+- Payloads: `share` (report, run) is replaced by `judged` and `progress`;
+  a saved attempt lists its `story_open` scenarios.
+
+### Removed
+
+- Per-task acceptance tests inside a story, the story file grown by
+  sections (`Story-File:`), `speccoder task defer` (`Defer-To:`).
+- The already-passing bisection: the `regression.bisected` event and
+  `implemented_by` on `already_passing`.
+
+### Upgrading
+
+- A tick recorded as `deferred_to_checkpoint` reads as having no reason.
+  A verifier older than this release does not know the reasons
+  `in_progress` and `regression_unchecked`.
+
 ### Fixed
 
+- The **Run with …** menu above the spec was clipped out of sight.
+- The sample's board and playback showed none of its recorded ticks: its
+  copy fetched only `main`; it now fetches every recorded ref. The sample
+  is recorded again, each task turning scenarios of its story's oracle.
 - The model's account was empty for models that neither reason aloud nor
   comment beside their calls (GPT-5.4 mini): it now ends with how the
   attempt ended — the final report's summary, or why it stopped.
@@ -20,11 +61,7 @@ adheres to [Semantic Versioning](https://semver.org/).
   broken, not collected, timed out) were still run at green and failed
   every attempt, whatever it did. Green runs only tests that went red or
   already passed.
-- A mid-story task whose attempt spent its budget with its tests red was
-  not offered **Judge at** the story's checkpoint.
-- An acceptance file that skips or expects a test to fail, or a story
-  section that defines an earlier test again (silently replacing it in
-  Python), is refused.
+- An acceptance file that skips or expects a test to fail is refused.
 - A task naming a module without its extension (`src/services/parser`)
   saw that very file listed as changed outside its scope.
 - An attempt stopped by its budget or a crash recorded no token usage, so

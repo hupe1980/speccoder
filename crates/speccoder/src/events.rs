@@ -229,16 +229,6 @@ pub enum Body {
         #[serde(flatten)]
         public: PublicCollectionChecked,
     },
-    /// The search for the tick that made already-passing tests pass ended.
-    #[serde(rename = "regression.bisected")]
-    RegressionBisected {
-        /// Task ID.
-        task: String,
-        /// Acceptance runs it took.
-        runs: u32,
-        /// The implementing task, `before_feature`, or `null`.
-        result: Option<String>,
-    },
     /// An external agent makes the attempt: its name and permission mode
     /// (`decides_alone`: it was not put into a mode that asks first).
     #[serde(rename = "agent.started")]
@@ -1070,11 +1060,6 @@ pub fn body(event: &Event) -> Body {
                     })
                     .collect(),
             },
-        },
-        Event::RegressionBisected { task, runs, result } => Body::RegressionBisected {
-            task: clean(task),
-            runs: *runs,
-            result: result.clone(),
         },
         Event::AgentStarted {
             task,

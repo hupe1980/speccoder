@@ -62,7 +62,7 @@ describe("Inbox", () => {
               regression_only: 14,
               counts: [
                 { reason: "no_story", n: 7, tasks: ["T001", "T002"], text: "7 had no user story" },
-                { reason: "already_passing", n: 7, tasks: ["T005"], implemented_by: ["T003"], text: "7 were already passing — implemented by T003" },
+                { reason: "already_passing", n: 7, tasks: ["T005"], text: "7 were already passing" },
               ],
             },
           },
@@ -74,7 +74,7 @@ describe("Inbox", () => {
     const text = document.body.textContent ?? "";
     expect(text).toContain("Little Was Verified");
     expect(text).toContain("7 had no user story");
-    expect(text).toContain("7 were already passing — implemented by T003");
+    expect(text).toContain("7 were already passing");
     const chip = document.querySelector('button[aria-label="Open T005"]') as HTMLButtonElement;
     expect(chip).not.toBeNull();
     chip.click();

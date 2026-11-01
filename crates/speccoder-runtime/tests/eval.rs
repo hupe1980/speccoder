@@ -23,7 +23,7 @@ fn done() -> serde_json::Value {
 /// Every eval story has acceptance examples, so each case starts with the
 /// judge-side acceptance call; these self-tests answer it with no tests.
 fn no_acceptance() -> serde_json::Value {
-    json!({ "files": [], "argv": [], "notes": ["self-test: none"] })
+    json!({ "files": [], "argv": [], "notes": ["self-test: none"], "expectations": [], "untestable": [] })
 }
 
 fn classes(r: &speccoder_core::CommandResult) -> Vec<(String, String)> {
@@ -107,7 +107,7 @@ fn every_classification_is_judged_by_the_hidden_oracle() {
     // tailor-slugify: a scripted executor hard-codes the spec's examples; the
     // visible tests pass, a held-out test with another input catches it, the
     // same failure again stops the retries → caught, not ticked.
-    fake.will_structure(json!({ "files": [{ "path": "tests/acceptance_t002.rs", "content": "use slugify::slugify;\n\n#[test]\nfn examples() {\n    assert_eq!(slugify(\"Hello, World!\"), \"hello-world\");\n    assert_eq!(slugify(\"  Rust  2024 \"), \"rust-2024\");\n    assert_eq!(slugify(\"---\"), \"\");\n}\n", "scenarios": [] }], "argv": ["cargo", "test", "--quiet", "--test", "acceptance_t002"], "notes": [] }));
+    fake.will_structure(json!({ "files": [{ "path": "tests/acceptance_t002.rs", "content": "use slugify::slugify;\n\n#[test]\nfn examples() {\n    assert_eq!(slugify(\"Hello, World!\"), \"hello-world\");\n    assert_eq!(slugify(\"  Rust  2024 \"), \"rust-2024\");\n    assert_eq!(slugify(\"---\"), \"\");\n}\n", "scenarios": ["US1-1"], "argv": ["cargo", "test", "--quiet", "--test", "acceptance_t002"] }], "argv": ["cargo", "test", "--quiet", "--test", "acceptance_t002"], "notes": [], "expectations": [{ "scenario": "US1-1", "given": "a title", "expect": "its slug" }], "untestable": [] }));
     fake.will_structure(json!({ "files": [{ "path": "tests/held_out_t002_1.rs", "content": "use slugify::slugify;\n\n#[test]\nfn other_inputs() {\n    assert_eq!(slugify(\"A b\"), \"a-b\");\n}\n", "scenarios": ["US1-1"], "argv": ["cargo", "test", "--quiet", "--test", "held_out_t002_1"], "composition": false }], "notes": [] }));
     // word-frequencies: stops honestly → not completed (a possible case).
     fake.will_structure(no_acceptance());

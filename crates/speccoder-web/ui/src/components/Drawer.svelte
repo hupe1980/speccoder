@@ -7,13 +7,12 @@
   const evidenceOf = latest();
   const patchOf = latest();
   import { phaseLabel, symbol, word } from "../lib/marks";
-  import { shareWords } from "../lib/story";
+  import { judgedWords } from "../lib/story";
   import { KINDS, key, offer, ofTask, stopOf, stopOffers } from "../lib/actions";
   import type { AccountTurn, Row, Task } from "../lib/types";
   import Account from "./Account.svelte";
   import Diff from "./Diff.svelte";
   import Drift from "./Drift.svelte";
-  import { implementedBy } from "../lib/evidence";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
   import Tour from "./Tour.svelte";
@@ -30,7 +29,6 @@
   let showAside = $state(false);
   const aside = $derived(data?.task.set_aside ?? null);
   // The tick that made already-passing tests pass: one click away.
-  const culprit = $derived(data ? implementedBy(data.task) : null);
   const source = $derived(
     showAside && aside
       ? { q: { ref: aside.reference }, label: "Set Aside" }
@@ -68,14 +66,14 @@
     );
   });
 
-  // What judges the task (an open task of a story), and — when its tests
-  // needed later tasks — the offer to judge them at the checkpoint.
-  const share = $derived((app.report?.data?.tasks ?? []).find((t) => t.id === app.selected)?.share ?? null);
-  const defer = $derived(
+  // What judges the task (an open task of a story), and — when the story's
+  // last task stopped with scenarios red — a ruling for each.
+  const judged = $derived((app.report?.data?.tasks ?? []).find((t) => t.id === app.selected)?.judged ?? null);
+  const rulings = $derived(
     (app.inbox?.data?.items ?? [])
       .filter((i) => i.task === app.selected && i.feature === app.feature)
       .flatMap((i) => i.actions)
-      .find((a) => a.id.kind === "defer_acceptance") ?? null,
+      .filter((a) => a.id.kind === "rule_scenario"),
   );
   // The selected task's own actions, by their subject: "Accept", "Skip"…
   const actions = $derived(app.selected ? ofTask(app.actions, app.selected) : []);
@@ -161,21 +159,25 @@
       <button role="tab" aria-selected={tab === "diff"} class:on={tab === "diff"} disabled={!source} title={source ? "" : "No code yet: the task has no commit and no attempt"} onclick={() => (tab = "diff")}>{source?.label ?? "Changes"}</button>
     </div>
     {#if tab === "evidence"}
-      {#if share}
-        <div class="judged" class:offer={!!defer}>
+      {#if judged}
+        <div class="judged" class:offer={rulings.length > 0}>
           <Icon name="seal" size={13} />
-          <span><strong>Judged by</strong> {shareWords(share)}</span>
-          {#if defer && share.kind === "authored"}
-            <p class="muted">Its acceptance tests need later tasks of the story? Judge them at {share.checkpoint}: this task is then judged by its regression checks.</p>
-            <button class="btn small primary" disabled={!!app.job?.running} title={`$ ${defer.command}`} onclick={() => app.perform(defer)}>Judge at {share.checkpoint}</button>
+          <span><strong>Judged by</strong> {judgedWords(judged)}</span>
+          {#if rulings.length}
+            <p class="muted">The story is still open. When a scenario's tests assert what the spec does not say, rule them wrong: the next run writes them again, and nothing else.</p>
+            <span class="rulings">
+              {#each rulings as r (r.command)}
+                <button class="btn small" disabled={!!app.job?.running} title={`$ ${r.command}`} onclick={() => app.perform(r)}>{r.run && "scenario" in r.run ? `${r.run.scenario}'s Tests Are Wrong…` : "Tests Are Wrong…"}</button>
+              {/each}
+            </span>
           {/if}
         </div>
       {/if}
       <dl class="grouped">
-        {#each data.rows as r, n (r.label + r.text)}
+        {#each data.rows as r (r.label + r.text)}
           <div class="row" class:claim={r.label === "Model says"} {...askable("evidence_row", { task: app.selected, label: r.label }, `${app.selected} · ${r.label}`, `Evidence of ${app.selected}, ${r.label}: ${r.text}`)}>
             <dt><span class="dot s-{r.mark}"><Icon name={symbol(r.mark)} size={11} weight={2.4} /></span>{r.label}</dt>
-            <dd><Code text={r.text} />{#if n === 0 && culprit}{" "}<button class="link" aria-label="Open task {culprit}" onclick={() => app.selectTask(culprit)}>Open {culprit}</button>{/if}</dd>
+            <dd><Code text={r.text} /></dd>
           </div>
         {/each}
       </dl>
@@ -216,6 +218,7 @@
 </aside>
 
 <style>
+  .rulings { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   .judged { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.5rem; align-items: start; margin: 0 0 0.8rem; padding: 0.6rem 0.75rem; border-radius: 10px; background: var(--fill); font-size: 0.84rem; }
   .judged.offer { background: color-mix(in srgb, var(--attention, #ff9f0a) 10%, var(--surface)); }
   .judged p, .judged button { grid-column: 2; margin: 0; justify-self: start; }

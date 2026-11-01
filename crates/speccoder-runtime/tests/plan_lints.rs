@@ -274,10 +274,13 @@ fn a_run_starts_with_one_notice_and_acceptance_at_t003_makes_it_verified() {
     );
     // T003 implements greet: red on US1's scenario first, then green.
     let f = FakeProvider::new();
+    let argv = ["cargo", "test", "--offline", "--test", "acceptance_us1"];
     f.will_structure(json!({
-        "files": [{ "path": "tests/acceptance_us1.rs", "content": T003_TEST, "scenarios": ["US1-1"] }],
-        "argv": ["cargo", "test", "--offline", "--test", "acceptance_us1"],
-        "notes": []
+        "files": [{ "path": "tests/acceptance_us1.rs", "content": T003_TEST, "scenarios": ["US1-1"], "argv": argv }],
+        "argv": argv,
+        "notes": [],
+        "expectations": [{ "scenario": "US1-1", "given": "a name", "expect": "a greeting" }],
+        "untestable": [],
     }));
     f.will_call_tool("c1", "write_file", json!({ "path": "src/lib.rs", "content": "pub fn greet(name: &str) -> String {\n    format!(\"Hello, {name}!\")\n}\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn it_works() {}\n}\n" }));
     f.will_structure(json!({ "summary": "greet", "status": "done", "files_changed": [], "checks_run": [], "notes": [] }));
@@ -292,9 +295,10 @@ fn a_run_starts_with_one_notice_and_acceptance_at_t003_makes_it_verified() {
         t003.message(),
         rep.acceptance
     );
+    // The story's oracle was written before T003, a person's decision.
     assert_eq!(
-        rep.acceptance.as_ref().unwrap()["story_file"],
-        "tests/acceptance_us1.rs"
+        rep.acceptance.as_ref().unwrap()["files"],
+        json!(["tests/acceptance_us1.rs"])
     );
     let asked = serde_json::to_string(&f.asked()[0].prompt).unwrap();
     assert!(

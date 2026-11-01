@@ -185,15 +185,6 @@ pub enum Event {
         /// Each judged file: path, state, what decided it.
         files: Vec<CollectionFile>,
     },
-    /// The bisection for an already-passing tick ended (`regression.bisected`).
-    RegressionBisected {
-        /// Task ID.
-        task: String,
-        /// Acceptance runs it took.
-        runs: u32,
-        /// The task that made the tests pass, `before_feature`, or `null`.
-        result: Option<String>,
-    },
     /// An external agent makes the attempt: its name, and what its
     /// permission mode is (`decides_alone`: calls it makes without asking
     /// never reach speccoder, so an empty Needs You proves nothing).
@@ -931,7 +922,6 @@ impl Progress for Live {
                 | Event::Bug { .. }
                 | Event::Oracle { .. }
                 | Event::CollectionChecked { .. }
-                | Event::RegressionBisected { .. }
                 | Event::PlanningStopped { .. }
                 | Event::LadderOffered { .. }
                 | Event::UnitPromoted { .. }

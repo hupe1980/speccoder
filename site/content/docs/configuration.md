@@ -134,8 +134,8 @@ speccoder config set commands.allow_prefix npm run          # shows it, then: ty
 
 | Key | Default | Meaning |
 |---|---|---|
-| `[acceptance] generate` | `true` | Derive acceptance tests from the spec before each attempt |
-| `[acceptance] held_out` | `true` | Also write [held-out tests](@/docs/evidence.md#held-out-tests) the implementer never sees; `verified` needs them to pass. Needs `generate`; costs one author call per task and one run per held-out file |
+| `[acceptance] generate` | `true` | Derive acceptance tests from the spec: a story's [oracle](@/docs/evidence.md#what-judges-each-task) before its first task, a convergence gap's own test |
+| `[acceptance] held_out` | `true` | Also write [held-out tests](@/docs/evidence.md#held-out-tests) the implementer never sees; a story's last task needs them to pass. Needs `generate`; costs one author call per story and one run per held-out file |
 | `[acceptance] strength` | `true` | Measure the [acceptance strength](@/docs/evidence.md#acceptance-strength) of every `verified` task: one model call and one test run per variant |
 | `[acceptance] min_strength` | — | `0.0`–`1.0`: below it the set is strengthened once, then the task stops for you; unset, strength never changes a verdict |
 | `[acceptance] near_miss` | `2` | Wrong variants to try (`0`–`3`) |

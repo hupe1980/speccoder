@@ -223,8 +223,6 @@ fn run_task_once(
     };
     let project = std::path::PathBuf::from(&project_dir);
     let wt_root = std::path::PathBuf::from(&wt_path);
-    // Scratch worktrees a crashed bisection left behind go first.
-    super::bisect::prune(&wt_root, &s.plane_dir.join("tmp"));
     let tmp = plane_dir.join("tmp");
 
     // 2a. A task waiting for a person holds the worktree with its attempt:
@@ -283,7 +281,7 @@ fn run_task_once(
         let _ = std::fs::remove_file(&marker_path);
         crate::strength::release(&crate::strength::dir(&s.plane_dir, &feature_name, task));
     }
-    let head_now = git::Git::at(&wt_root)
+    let mut head_now = git::Git::at(&wt_root)
         .line(&["rev-parse", "HEAD"])
         .unwrap_or_default();
     // An autopilot run has exactly the grants ticked on its sheet:
@@ -838,7 +836,8 @@ fn run_task_once(
         None,
         None,
     );
-    let baseline = match verify::run_checks(&project, Some(verify::config::Tier::Fast), &runner) {
+    let mut baseline = match verify::run_checks(&project, Some(verify::config::Tier::Fast), &runner)
+    {
         Ok(b) => b,
         Err(e) => {
             stage(
@@ -856,7 +855,9 @@ fn run_task_once(
     // running a test: not found, a build or configuration error, a file the
     // worktree lacks because it was never committed — can never judge the
     // task. Stop before any model call rather than spend attempts on it.
+    // A story's red oracle may stop the build until its tasks land.
     if !options.allow_failing_baseline
+        && !super::story::open_oracle(&wt_root)
         && let Some((c, why)) = baseline
             .checks
             .iter()
@@ -1114,73 +1115,202 @@ fn run_task_once(
     // implementer and every test author, never a judge input.
     let test_layout = crate::layout::detect(&project, &check_argvs);
     let test_layout_text = test_layout.text();
-    let story_files = super::commit::story_files(&wt_root, &feature_name);
     let story_scenarios = match &bug_fix {
         Some(f) => super::bug::scenarios(&f.bug),
         None => format.scenarios(&snap, story_task.as_deref().unwrap_or(task)),
     };
-    // What judges this task — decided by code from the plan, the story's
-    // ticks and a person's deferral, never by the test author's choice
-    // (speccoder_core::story). A bug's reproductions judge a bug.
-    let judged = format.rules().judged;
-    let share = bug_fix
-        .is_none()
-        .then(|| {
-            super::acceptance::share_of(&super::acceptance::ShareInput {
-                repo: &wt_root,
-                plane: &s.plane_dir,
-                feature: &feature_name,
-                task,
-                story: acceptance_story
-                    .as_deref()
-                    .or_else(|| parsed_task.as_ref().and_then(|t| t.story.as_deref())),
-                whole_unit: format.kind() == speccoder_core::spec::FormatKind::Openspec
-                    && acceptance_story.is_none(),
-                tasks: snap.feature.as_ref().and_then(|f| f.tasks.as_ref()),
-                unit_dir: &unit_dir,
-                judged: &judged,
-                scenarios: &story_scenarios,
-                as_deferred: false,
-            })
-        })
-        .flatten();
-    let scenarios: Vec<speccoder_core::spec::ScenarioRef> = match &share {
-        Some(sh) => story_scenarios
+    // What judges this task — decided by code from the plan, never by a
+    // test author's choice (speccoder_core::story): a task of a story by
+    // the progress it makes on the story's oracle; a task outside any
+    // story by the scenarios it cites (a convergence gap). A bug's
+    // reproductions judge a bug.
+    let rules = format.rules().judged;
+    let whole_unit = format.kind() == speccoder_core::spec::FormatKind::Openspec;
+    // The story it is judged in: its label, the story a person had its
+    // acceptance written at (`acceptance at`), or the whole unit (OpenSpec).
+    let story_key: Option<String> = if bug_fix.is_some() || story_scenarios.is_empty() {
+        None
+    } else {
+        acceptance_story
+            .clone()
+            .or_else(|| parsed_task.as_ref().and_then(|t| t.story.clone()))
+            .or_else(|| whole_unit.then(|| feature_name.clone()))
+    };
+    let parsed_tasks = snap.feature.as_ref().and_then(|f| f.tasks.as_ref());
+    let story_members: Vec<&speccoder_core::snapshot::Task> = match (&story_key, parsed_tasks) {
+        (Some(key), Some(pt)) => pt
+            .tasks
             .iter()
-            .filter(|s| sh.scenarios().contains(&s.id))
-            .cloned()
+            .filter(|t| whole_unit || t.story.as_deref() == Some(key.as_str()))
             .collect(),
-        None => story_scenarios.clone(),
+        _ => Vec::new(),
     };
-    let deferred_to = match &share {
-        Some(speccoder_core::story::Share::Deferred { checkpoint }) => Some(checkpoint.clone()),
-        _ => None,
+    let judged_by: Option<speccoder_core::story::Judged> = if bug_fix.is_some() {
+        None
+    } else if story_key.is_some() {
+        let ids: Vec<String> = story_scenarios.iter().map(|s| s.id.clone()).collect();
+        let st = super::story::story_tasks(&story_members, &unit_dir, &rules);
+        speccoder_core::story::judged(&st, task, &ids).or_else(|| {
+            acceptance_story
+                .is_some()
+                .then_some(speccoder_core::story::Judged::Progress)
+        })
+    } else {
+        parsed_task
+            .as_ref()
+            .and_then(|t| super::acceptance::outside_story(t, &story_scenarios, &unit_dir, &rules))
     };
-    let story_verified = matches!(
-        &share,
-        Some(speccoder_core::story::Share::Checkpoint { scenarios, .. }) if scenarios.is_empty()
-    );
+    // A task of a story is judged by its story's oracle: no acceptance
+    // tests of its own. Per-task tests remain outside stories.
+    let in_story =
+        story_key.is_some() && judged_by.is_some() && run_config.acceptance && planning.is_none();
+    let scenarios: Vec<speccoder_core::spec::ScenarioRef> = match &judged_by {
+        Some(speccoder_core::story::Judged::Linked { scenarios: l }) if story_key.is_none() => {
+            story_scenarios
+                .iter()
+                .filter(|s| l.contains(&s.id))
+                .cloned()
+                .collect()
+        }
+        _ => story_scenarios.clone(),
+    };
     // A requirement's oracle frozen at review: reused by the
     // first task citing its scenarios while its wording is unchanged.
     let mut review_frozen: Option<(speccoder_core::acceptance::PreFrozenAcceptance, String)> = None;
     let mut review_reuse = None;
-    // Tests frozen at review judge their whole requirement: a task linked to
-    // part of it is judged by its links alone, so it authors its own.
-    let partial_link = matches!(
-        &share,
-        Some(speccoder_core::story::Share::Linked { scenarios }) if scenarios.len() < story_scenarios.len()
-    );
-    if partial_link {
-        notices.push(format!(
-            "{task} names {} of its story's scenarios: its own acceptance tests are authored for them, not the ones frozen at review",
-            scenarios.len()
-        ));
+    // 5a. The story's oracle: written once, through the product, before
+    //     the story's first code task implements anything — committed on
+    //     the unit branch and frozen. Every task of the story is judged by
+    //     the progress it makes on it.
+    let mut story_oracle: Option<super::story::StoryOracle> = None;
+    // What the implementer is told of the story's oracle.
+    let mut oracle_note = serde_json::Value::Null;
+    // The author found nothing testable in the story: judged by its checks.
+    let mut oracle_empty = false;
+    let mut before_run = super::story::Run::default();
+    if in_story && let Some(key) = story_key.as_deref() {
+        stage(&*live, task, Stage::Red, StageState::Started, None, None);
+        match super::story::ensure(&super::story::Ensure {
+            key,
+            scenarios: &story_scenarios,
+            feature: &feature_name,
+            project: &project,
+            wt_root: &wt_root,
+            state,
+            // A story's oracle, rulings and sealed sets are the project's,
+            // never a lane's.
+            plane_dir: &s.plane_dir,
+            runner: &runner,
+            rt: &rt,
+            plane: &plane,
+            options,
+            format,
+            snapshot: &snap,
+            fresh: options.fresh_acceptance,
+            resuming: interrupted.is_some(),
+        }) {
+            Ok((oracle, wrote, said)) => {
+                notices.extend(said);
+                if wrote {
+                    notices.push(format!(
+                        "{key}'s oracle: {} test(s) for {} scenario(s), committed {}",
+                        oracle.tests.len(),
+                        oracle.scenarios.len(),
+                        oracle.commit.get(..7).unwrap_or(&oracle.commit)
+                    ));
+                    // The attempt starts on the oracle's commit: a resume
+                    // marker names it.
+                    head_now = git::Git::at(&wt_root)
+                        .line(&["rev-parse", "HEAD"])
+                        .unwrap_or_default();
+                    // The baseline is the tree the attempt starts from: with
+                    // the oracle's red tests in it.
+                    match verify::run_checks(&project, Some(verify::config::Tier::Fast), &runner) {
+                        Ok(b) => baseline = b,
+                        Err(e) => {
+                            return fail(CommandStatus::ConfigError, format!("baseline: {e}"));
+                        }
+                    }
+                }
+                // A resumed attempt is judged against the tree it started
+                // from, as recorded — never its own changed tree.
+                before_run = interrupted
+                    .as_ref()
+                    .and_then(|m| m.story_before.clone())
+                    .and_then(|v| serde_json::from_value(v).ok())
+                    .unwrap_or_else(|| super::story::run(&project, &oracle, &runner));
+                // The implementer is told the story's red scenarios, what
+                // they must hold, which this task must turn, and how to
+                // report a test that contradicts the spec.
+                if !oracle.tests.is_empty() {
+                    oracle_note = serde_json::json!({
+                        "red": oracle
+                            .scenarios
+                            .iter()
+                            .filter(|s| {
+                                before_run.states.get(&s.id)
+                                    != Some(&speccoder_core::story::ScenarioState::Green)
+                                    && !oracle.untestable.contains_key(&s.id)
+                            })
+                            .map(|s| serde_json::json!({
+                                "id": s.id,
+                                "contract": oracle.contracts.get(&s.id),
+                                "tests": oracle
+                                    .tests
+                                    .iter()
+                                    .filter(|t| t.scenarios.contains(&s.id))
+                                    .map(|t| t.path.clone())
+                                    .collect::<Vec<_>>(),
+                            }))
+                            .collect::<Vec<_>>(),
+                        "links": judged_by.as_ref().map(speccoder_core::story::Judged::links).unwrap_or_default(),
+                        "checkpoint": matches!(judged_by, Some(speccoder_core::story::Judged::Checkpoint)),
+                    });
+                }
+                // Frozen at review: the ticks name the approval and manifest.
+                if let Some((record, manifest)) = oracle.reviewed.clone() {
+                    review_frozen = Some((record, manifest));
+                }
+                if oracle.tests.is_empty() {
+                    oracle_empty = true;
+                } else {
+                    story_oracle = Some(oracle);
+                }
+            }
+            Err(r) => {
+                stage(
+                    &*live,
+                    task,
+                    Stage::Red,
+                    StageState::Failed,
+                    Some(r.message().to_owned()),
+                    None,
+                );
+                let reason = format!(
+                    "the acceptance tests could not be written ({}); nothing was attempted",
+                    r.message()
+                );
+                let report = speccoder_core::RunReport {
+                    reason: Some(redact(&reason, secret)),
+                    notices: notices.clone(),
+                    ..bare_report(&feature_name, task, &wt_path, "acceptance_failed")
+                };
+                let code = r.code().map_or("ORACLE-UNWRITTEN", |c| c.name);
+                return CommandResult::new(
+                    "run",
+                    CommandStatus::NeedsHuman,
+                    &redact(&reason, secret),
+                )
+                .with_code(code)
+                .with_data(CommandData::Run(Box::new(report)));
+            }
+        }
     }
     if bug_fix.is_none()
         && run_config.acceptance
         && !options.fresh_acceptance
         && planning.is_none()
-        && !partial_link
+        && !in_story
     {
         match crate::oracle::for_task(&s.plane_dir, &project, &wt_root, format, &snap, &scenarios) {
             Some(r @ crate::oracle::TaskReuse::Ready { .. }) => review_reuse = Some(r),
@@ -1316,8 +1446,7 @@ fn run_task_once(
         }
     } else if run_config.acceptance
         && planning.is_none()
-        && deferred_to.is_none()
-        && !story_verified
+        && !in_story
         && format.acceptance_testable(&bundle)
     {
         stage(&*live, task, Stage::Red, StageState::Started, None, None);
@@ -1335,7 +1464,6 @@ fn run_task_once(
             instructions: &instructions,
             runner: &runner,
             layout: Some(&test_layout),
-            story_files: &story_files,
         }))
     } else {
         None
@@ -1389,22 +1517,11 @@ fn run_task_once(
                     instructions: &instructions,
                     runner: &runner,
                     layout: Some(&test_layout),
-                    story_files: &story_files,
                 },
                 a,
                 &scenarios,
                 &held_out_store,
-                match &share {
-                    Some(speccoder_core::story::Share::Checkpoint { composition, .. }) => {
-                        *composition
-                    }
-                    Some(_) => false,
-                    None => story_checkpoint(
-                        snap.feature.as_ref().and_then(|f| f.tasks.as_ref()),
-                        task,
-                        &scenarios,
-                    ),
-                },
+                false,
             );
             a.report["held_out"] = held;
             a.held_out = sha;
@@ -1424,10 +1541,8 @@ fn run_task_once(
             StageState::Skipped,
             Some(if planning.is_some() {
                 "planning work: design documents".to_owned()
-            } else if let Some(at) = &deferred_to {
-                format!("judged at {at}, as you decided")
-            } else if story_verified {
-                "its story's scenarios were verified by earlier ticks".to_owned()
+            } else if in_story {
+                "judged by its story's oracle".to_owned()
             } else {
                 "no acceptance examples".to_owned()
             }),
@@ -1501,7 +1616,7 @@ fn run_task_once(
                 reason: &reason,
                 pending: None,
                 usage: None,
-                defer_to: None,
+                story_open: &[],
             },
         )
         .ok()
@@ -1600,7 +1715,7 @@ fn run_task_once(
                 .unwrap_or_default();
             // Everything the attempt's decisions depend on is in its journaled input.
             let input = substrate::attempt::input(
-                bundle_value.clone(),
+                with_oracle(&bundle_value, &oracle_note),
                 &substrate::attempt::Settings {
                     checks: &check_argvs,
                     allow: &run_config.allow,
@@ -1689,7 +1804,11 @@ fn run_task_once(
                     .chain(&run_config.allow)
                     .cloned()
                     .collect();
-                let prompt = external::prompt_in(format.wording(), &bundle_value, digest.as_ref());
+                let prompt = external::prompt_in(
+                    format.wording(),
+                    &with_oracle(&bundle_value, &oracle_note),
+                    digest.as_ref(),
+                );
                 let withheld = acceptance
                     .as_ref()
                     .and_then(|a| a.held_out.as_ref())
@@ -1789,6 +1908,9 @@ fn run_task_once(
                         attempt: attempt_no,
                         sample: samples.len(),
                         acceptance: acceptance_saved.clone(),
+                        story_before: story_oracle
+                            .as_ref()
+                            .and_then(|_| serde_json::to_value(&before_run).ok()),
                         run_id: Some(this_run.to_string()),
                         asked: options.asked_now(),
                         run_grants: run_approved.clone(),
@@ -1843,7 +1965,7 @@ fn run_task_once(
                     marker_guard.keep();
                     let action = &task_row.justification.proposed_action;
                     let mut report = bare_report(&feature_name, task, &wt_path, "needs_approval");
-                    report.share.clone_from(&share);
+                    report.judged.clone_from(&judged_by);
                     report.run_id = outcome.run_id.to_string();
                     report.notices = notices;
                     report.tool_calls = action["log"].as_array().cloned().unwrap_or_default();
@@ -2010,7 +2132,7 @@ fn run_task_once(
                                 reason: &reason,
                                 pending: None,
                                 usage: output.get("usage"),
-                                defer_to: None,
+                                story_open: &[],
                             },
                         )
                         .and_then(|saved| {
@@ -2121,7 +2243,7 @@ fn run_task_once(
                 set_aside: set_aside.clone(),
                 notices: notices.clone(),
                 agent: external::agent_attempt(&output),
-                share: share.clone(),
+                judged: judged_by.clone(),
                 ..bare_report(&feature_name, task, &wt_path, &attempt_status)
             };
             if let Err(e) = record_inline_approvals(
@@ -2175,10 +2297,14 @@ fn run_task_once(
             if judged {
                 let began = std::time::Instant::now();
                 stage(&*live, task, Stage::Verify, StageState::Started, None, None);
+                let oracle_files: Vec<String> = story_oracle
+                    .iter()
+                    .flat_map(|o| o.tests.iter().map(|t| t.path.clone()))
+                    .collect();
                 if let Err(e) = judge_checks(
                     &project,
                     &runner,
-                    &baseline,
+                    (&baseline, &oracle_files),
                     acceptance.as_ref(),
                     &findings,
                     &mut report,
@@ -2192,6 +2318,44 @@ fn run_task_once(
                         Some(began),
                     );
                     return fail(CommandStatus::ConfigError, format!("verification: {e}"));
+                }
+                // 7a. A task of a story: the progress it made on the story's
+                //     oracle decides what its tick claims.
+                if let Some(o) = &story_oracle {
+                    // The oracle judges only as frozen: a test the attempt
+                    // changed — even by adding lines — fails it.
+                    let touched = super::story::changed(&project, o);
+                    if !touched.is_empty() {
+                        let why = format!(
+                            "the story's oracle tests were changed: {}",
+                            touched.join(", ")
+                        );
+                        report.verdict = Some(match report.verdict.take() {
+                            Some(speccoder_core::verify::Verdict::Failed { mut reasons }) => {
+                                reasons.push(why);
+                                speccoder_core::verify::Verdict::Failed { reasons }
+                            }
+                            _ => speccoder_core::verify::Verdict::Failed { reasons: vec![why] },
+                        });
+                    }
+                    let after = super::story::states(&project, o, &runner);
+                    super::story::judge(
+                        o,
+                        &before_run.states,
+                        &after,
+                        judged_by
+                            .as_ref()
+                            .map(speccoder_core::story::Judged::links)
+                            .unwrap_or_default(),
+                        matches!(judged_by, Some(speccoder_core::story::Judged::Checkpoint)),
+                        &mut report,
+                    );
+                    // The evidence of what it turned: red before, green after.
+                    if let Some(speccoder_core::story::Progress::Verified { turned }) =
+                        &report.progress
+                    {
+                        report.acceptance = Some(super::story::evidence(o, turned, &before_run));
+                    }
                 }
                 // 7''. A planning task writes documents of its unit only:
                 //      one that changed anything else, or wrote nothing
@@ -2316,11 +2480,70 @@ fn run_task_once(
                             | speccoder_core::verify::Verdict::RegressionOnly
                     )
                 );
-            if let Some(sha) = acceptance
+            // A task's own held-out set, or — at its story's checkpoint —
+            // the story oracle's sealed one.
+            let held = acceptance
                 .as_ref()
                 .and_then(|a| a.held_out.clone())
-                .filter(|_| visibly_passed)
+                .map(|sha| (held_out_store.clone(), sha))
+                .or_else(|| {
+                    story_oracle
+                        .as_ref()
+                        .filter(|_| {
+                            matches!(judged_by, Some(speccoder_core::story::Judged::Checkpoint))
+                        })
+                        .and_then(|o| o.held_out.as_ref())
+                        .map(|h| {
+                            (
+                                crate::held_out::sealed_dir(&s.plane_dir, &feature_name, &h.key),
+                                h.manifest_sha256.clone(),
+                            )
+                        })
+                });
+            // The story's held-out set at its checkpoint: the report and the
+            // tick name it as a task's own set is named — or why there is none.
+            let at_checkpoint =
+                matches!(judged_by, Some(speccoder_core::story::Judged::Checkpoint));
+            if at_checkpoint
+                && visibly_passed
+                && held.is_none()
+                && let Some(summary) = story_oracle
+                    .as_ref()
+                    .and_then(|o| o.held_out_summary.as_ref())
             {
+                let entry = report
+                    .acceptance
+                    .get_or_insert_with(|| serde_json::json!({ "source": "authored" }));
+                entry["held_out"] = match summary.state.as_str() {
+                    "off" => serde_json::json!({ "state": "off" }),
+                    _ => serde_json::json!({
+                        "state": "absent",
+                        "reason": summary.reason,
+                        "discarded": summary
+                            .discarded
+                            .iter()
+                            .map(|r| serde_json::json!({ "reason": r }))
+                            .collect::<Vec<_>>(),
+                    }),
+                };
+            }
+            if acceptance
+                .as_ref()
+                .and_then(|a| a.held_out.as_ref())
+                .is_none()
+                && let (Some((_, sha)), Some(o)) = (&held, &story_oracle)
+                && visibly_passed
+            {
+                let entry = report.acceptance.get_or_insert_with(
+                    || serde_json::json!({ "source": "authored", "oracle": o.commit }),
+                );
+                entry["held_out"] = serde_json::json!({
+                    "state": "on",
+                    "manifest": format!("sha256:{sha}"),
+                    "kept": o.held_out.as_ref().map_or(0, |h| h.count),
+                });
+            }
+            if let Some((store, sha)) = held.filter(|_| visibly_passed) {
                 let patch = worktree::patch(&wt_root, &before, &after).unwrap_or_default();
                 let mut known = format!(
                     "{}\n{}\n{}",
@@ -2341,17 +2564,8 @@ fn run_task_once(
                     }
                 }
                 match judge_held_out(
-                    &held_out_store,
-                    &sha,
-                    &scenarios,
-                    &known,
-                    &wt_root,
-                    &project,
-                    &tmp,
-                    &before,
-                    &patch,
-                    &runner,
-                    &policy,
+                    &store, &sha, &scenarios, &known, &wt_root, &project, &tmp, &before, &patch,
+                    &runner, &policy,
                 ) {
                     Ok(j) => {
                         let failed_ids: Vec<String> =
@@ -2644,10 +2858,25 @@ fn run_task_once(
             report.verdict,
             Some(speccoder_core::verify::Verdict::Verified)
         );
-    let visible_argv = acceptance
+    // The commands a verified verdict rests on: the task's own acceptance
+    // tests, or the story oracle's tests of the scenarios it turned.
+    let visible: Vec<Vec<String>> = match acceptance
         .as_ref()
         .filter(|a| a.red)
-        .and_then(|a| a.argv.clone());
+        .and_then(|a| a.argv.clone())
+    {
+        Some(argv) => vec![argv],
+        None => report
+            .acceptance
+            .as_ref()
+            .filter(|a| a["oracle"].is_string() && a["red"] == true)
+            .and_then(|a| a["tests"].as_array().cloned())
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|t| serde_json::from_value::<Vec<String>>(t["argv"].clone()).ok())
+            .collect(),
+    };
+    let visible_argv = visible.first().cloned();
     if verified && !run_config.strength.enabled {
         stage(
             &*live,
@@ -2676,23 +2905,46 @@ fn run_task_once(
             .and_then(|now| worktree::patch(&wt_root, &start, now).ok())
             .unwrap_or_default();
         let mut notes = Vec::new();
-        let held: Vec<(crate::held_out::HeldOutFile, String)> =
-            match acceptance.as_ref().and_then(|a| a.held_out.clone()) {
-                None => Vec::new(),
-                Some(sha) => match crate::held_out::load_verified(&held_out_store, &sha) {
-                    Ok((manifest, contents)) => manifest
-                        .files
-                        .into_iter()
-                        .zip(contents.into_iter().map(|(_, c)| c))
-                        .collect(),
-                    Err(t) => {
-                        notes.push(format!("held-out set not overlaid: {}", t.0));
-                        Vec::new()
-                    }
-                },
-            };
+        // The task's own held-out set, or at its story's checkpoint the
+        // story oracle's sealed one.
+        let held_set: Option<(std::path::PathBuf, String)> = acceptance
+            .as_ref()
+            .and_then(|a| a.held_out.clone())
+            .map(|sha| (held_out_store.clone(), sha))
+            .or_else(|| {
+                story_oracle
+                    .as_ref()
+                    .filter(|_| {
+                        matches!(judged_by, Some(speccoder_core::story::Judged::Checkpoint))
+                    })
+                    .and_then(|o| o.held_out.as_ref())
+                    .map(|h| {
+                        (
+                            crate::held_out::sealed_dir(&s.plane_dir, &feature_name, &h.key),
+                            h.manifest_sha256.clone(),
+                        )
+                    })
+            });
+        let held: Vec<(crate::held_out::HeldOutFile, String)> = match held_set {
+            None => Vec::new(),
+            Some((store, sha)) => match crate::held_out::load_verified(&store, &sha) {
+                Ok((manifest, contents)) => manifest
+                    .files
+                    .into_iter()
+                    .zip(contents.into_iter().map(|(_, c)| c))
+                    .collect(),
+                Err(t) => {
+                    notes.push(format!("held-out set not overlaid: {}", t.0));
+                    Vec::new()
+                }
+            },
+        };
         let rulings = crate::strength::rulings(&strength_dir);
-        let mut commands = vec![argv];
+        let mut commands = if visible.is_empty() {
+            vec![argv]
+        } else {
+            visible.clone()
+        };
         let measure = |commands: &[Vec<String>]| {
             crate::strength::measure(
                 &crate::strength::Setup {
@@ -2785,7 +3037,6 @@ fn run_task_once(
                 instructions: &instructions,
                 runner: &runner,
                 layout: Some(&test_layout),
-                story_files: &story_files,
             };
             let weak = crate::strength::weak(a);
             match strengthen(&setup, &visible_tests, weak, &before, fin) {
@@ -2994,115 +3245,30 @@ fn run_task_once(
                 }
             }),
         };
-        let mut reason = if planning.is_some() {
+        let reason = if planning.is_some() {
             RegressionReason::PlanningWork
-        } else if let Some(checkpoint) = deferred_to.clone() {
-            RegressionReason::DeferredToCheckpoint { checkpoint }
-        } else if story_verified {
-            RegressionReason::StoryVerified
+        } else if in_story && oracle_empty {
+            RegressionReason::AuthorWroteNone
+        } else if in_story {
+            // A task of a story: what its progress on the oracle says.
+            match &report.progress {
+                // Green before any work of the story: built earlier.
+                Some(
+                    speccoder_core::story::Progress::Closed
+                    | speccoder_core::story::Progress::InProgress,
+                ) if story_oracle
+                    .as_ref()
+                    .is_some_and(super::story::StoryOracle::green_from_the_start) =>
+                {
+                    RegressionReason::AlreadyPassing
+                }
+                Some(speccoder_core::story::Progress::Closed) => RegressionReason::StoryVerified,
+                _ if super::story::unchecked(&report) => RegressionReason::RegressionUnchecked,
+                _ => RegressionReason::InProgress,
+            }
         } else {
             decide(&facts)
         };
-        // A bug's reproductions passing already is the bug lane's own
-        // outcome (already satisfied): no tick to search for.
-        if matches!(reason, RegressionReason::AlreadyPassing { .. })
-            && bug_fix.is_none()
-            && let Some(a) = acceptance.as_ref()
-            && let Some(argv) = a.argv.as_ref()
-        {
-            let mut files: Vec<(String, String)> = a.report["files"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|f| f.as_str())
-                .filter_map(|f| {
-                    std::fs::read_to_string(project.join(f))
-                        .ok()
-                        .map(|c| (f.to_owned(), c))
-                })
-                .collect();
-            let prefix = project
-                .strip_prefix(&wt_root)
-                .map(|p| p.to_string_lossy().replace('\\', "/"))
-                .unwrap_or_default();
-            // A section added to the story's file: only that section, with
-            // the file's imports, and only its tests run.
-            let mut command = Some(argv.clone());
-            if a.report["appended"] == true
-                && let Some(story) = a.report["story_file"].as_str()
-            {
-                let at = if prefix.is_empty() {
-                    story.to_owned()
-                } else {
-                    format!("{prefix}/{story}")
-                };
-                let old = crate::git::Git::at(&wt_root)
-                    .run(&["show", &format!("HEAD:{at}")])
-                    .map(|b| String::from_utf8_lossy(&b).into_owned())
-                    .unwrap_or_default();
-                command = None;
-                if let Some((_, content)) = files.iter_mut().find(|(f, _)| f == story)
-                    && let Some(added) = content.strip_prefix(old.as_str()).map(str::to_owned)
-                {
-                    command = super::bisect::section_command(argv, story, &added);
-                    let imports: String = old
-                        .lines()
-                        .filter(|l| {
-                            let t = l.trim_start();
-                            ["use ", "import ", "from ", "package ", "extern crate "]
-                                .iter()
-                                .any(|k| t.starts_with(k))
-                        })
-                        .map(|l| format!("{l}\n"))
-                        .collect();
-                    *content = format!("{imports}{added}");
-                }
-            }
-            let timeout = std::fs::read_to_string(project.join(crate::verify::config::FILE))
-                .ok()
-                .and_then(|t| crate::verify::config::parse(&t).ok())
-                .and_then(|cs| {
-                    cs.into_iter()
-                        .filter(|c| c.tier == crate::verify::config::Tier::Fast)
-                        .map(|c| c.timeout)
-                        .max()
-                })
-                .unwrap_or(std::time::Duration::from_secs(600));
-            let found = match &command {
-                Some(argv) => super::bisect::search(&super::bisect::Search {
-                    repo: &wt_root,
-                    prefix: &prefix,
-                    feature: &feature_name,
-                    task,
-                    files: &files,
-                    argv,
-                    scratch: &s.plane_dir.join("tmp"),
-                    sandbox: &sandbox_config,
-                    timeout,
-                    worktree: &worktree_config,
-                    checkout: Path::new(&s.snapshot.root),
-                    state: Some(state),
-                }),
-                // No way to run only the section: no answer, never a guess.
-                None => super::bisect::Found {
-                    implemented_by: None,
-                    runs: 0,
-                },
-            };
-            live.event(&progress::Event::RegressionBisected {
-                task: task.to_owned(),
-                runs: found.runs,
-                result: found.implemented_by.as_ref().map(|i| match i {
-                    speccoder_core::regression::ImplementedBy::Task { task, .. } => task.clone(),
-                    speccoder_core::regression::ImplementedBy::BeforeFeature { .. } => {
-                        "before_feature".to_owned()
-                    }
-                }),
-            });
-            reason = RegressionReason::AlreadyPassing {
-                implemented_by: found.implemented_by,
-            };
-        }
         report.regression = Some(Regression::of(reason));
     }
     let recorded_from = report.integrity.len();
@@ -3117,7 +3283,8 @@ fn run_task_once(
             scenarios: &story_scenarios,
             red: acceptance
                 .as_ref()
-                .and_then(|a| a.red_class.filter(|c| a.red && c.is_red())),
+                .and_then(|a| a.red_class.filter(|c| a.red && c.is_red()))
+                .or_else(|| story_red(&report)),
             checklists_overridden,
             extra: bug_fix
                 .as_ref()
@@ -3260,7 +3427,8 @@ fn run_task_once(
             scenarios: &story_scenarios,
             red: acceptance
                 .as_ref()
-                .and_then(|a| a.red_class.filter(|c| a.red && c.is_red())),
+                .and_then(|a| a.red_class.filter(|c| a.red && c.is_red()))
+                .or_else(|| story_red(&report)),
             checklists_overridden: false,
             extra: bug_fix
                 .as_ref()
@@ -3364,20 +3532,31 @@ fn run_task_once(
         let (outcome, reason) = saved_outcome(&report, &attempt_status, suspected);
         let run = (!report.run_id.is_empty()).then_some(report.run_id.as_str());
         let reason = redact(&reason, secret);
-        // A mid-story task whose acceptance tests stayed red: a person may
-        // move them to the story's checkpoint (speccoder_core::story).
-        let defer_to = match &share {
-            Some(speccoder_core::story::Share::Authored {
-                checkpoint: Some(c),
-                ..
-            }) if matches!(
-                outcome.as_str(),
-                "incomplete" | "verification_failed" | "blocked" | "budget_exhausted"
-            ) && report.acceptance.as_ref().is_some_and(|a| a["red"] == true) =>
-            {
-                Some(c.as_str())
-            }
-            _ => None,
+        // The story's last task stopped with scenarios red: each can be
+        // ruled wrong from the stop.
+        // So can those of an oracle test the implementer named wrong
+        // (its stop, `wrong_test`: speccoder's words name the test).
+        let story_open: Vec<String> = match &report.progress {
+            Some(speccoder_core::story::Progress::StoryOpen { scenarios }) => scenarios.clone(),
+            _ if outcome == "blocked" => story_oracle
+                .as_ref()
+                .and_then(|o| {
+                    let named = report
+                        .reason
+                        .as_deref()?
+                        .split("frozen test `")
+                        .nth(1)?
+                        .split('`')
+                        .next()?
+                        .trim_start_matches("./")
+                        .to_owned();
+                    o.tests
+                        .iter()
+                        .find(|t| t.path == named)
+                        .map(|t| t.scenarios.clone())
+                })
+                .unwrap_or_default(),
+            _ => Vec::new(),
         };
         let record = attempts::Record {
             run,
@@ -3385,7 +3564,7 @@ fn run_task_once(
             reason: &reason,
             pending: report.pending.as_ref(),
             usage: report.usage.as_ref(),
-            defer_to,
+            story_open: &story_open,
         };
         match attempts::save(&wt_root, &tmp, &feature_name, task, &record)
             .and_then(|saved| worktree::restore(&wt_root, &tmp, &start).map(|_| saved))
@@ -3467,8 +3646,33 @@ fn run_task_once(
     if let Some(e) = &offered {
         live.event(e);
     }
-    let code = collection_code(&report, &attempt_status);
+    // The story's last task left scenarios red: named, with a ruling each.
+    let code = collection_code(&report, &attempt_status).or_else(|| {
+        matches!(
+            report.progress,
+            Some(speccoder_core::story::Progress::StoryOpen { .. })
+        )
+        .then_some("STORY-OPEN")
+    });
+    let story_open_fix: Vec<String> = match &report.progress {
+        Some(speccoder_core::story::Progress::StoryOpen { scenarios }) if !report.ticked => {
+            let f = feature.map_or_else(String::new, |f| format!(" --feature {f}"));
+            std::iter::once(format!("speccoder task nudge {task}{f} --note \"…\""))
+                .chain(scenarios.iter().map(|id| {
+                    format!(
+                        "speccoder task rule {task}{f} --tests-wrong --scenario {id} --reason \"…\""
+                    )
+                }))
+                .collect()
+        }
+        _ => Vec::new(),
+    };
     let result = CommandResult::new("run", status, &redact(&message, secret));
+    let result = if story_open_fix.is_empty() {
+        result
+    } else {
+        result.with_fix(story_open_fix)
+    };
     match code {
         Some(c) => result.with_code(c),
         None => refusal(result),
@@ -3743,4 +3947,26 @@ fn login(
     .with_code("EXECUTOR-LOGIN")
     .with_fix(fix)
     .with_commands(argvs)
+}
+
+/// The red class of a story task's turned scenarios, from the evidence
+/// the oracle gave it.
+fn story_red(report: &speccoder_core::RunReport) -> Option<speccoder_core::verify::RedClass> {
+    let a = report
+        .acceptance
+        .as_ref()
+        .filter(|a| a["oracle"].is_string())?;
+    serde_json::from_value::<speccoder_core::verify::RedClass>(a["red_class"].clone())
+        .ok()
+        .filter(|c| c.is_red())
+}
+
+/// The bundle the implementer is given: with the story's oracle, when the
+/// task is judged by one.
+fn with_oracle(bundle: &serde_json::Value, oracle: &serde_json::Value) -> serde_json::Value {
+    let mut b = bundle.clone();
+    if !oracle.is_null() {
+        b["oracle"] = oracle.clone();
+    }
+    b
 }

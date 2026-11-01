@@ -89,9 +89,9 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder task hint T NOTE [--no-prompt]` | Hint & retry: the note, then a new attempt of the task now |
 | `speccoder task nudge T (--note N \| --clear)` | Leave a note the next attempts read, or remove the notes |
 | `speccoder task rule T --tests-right --reason R [--variant ID]` | Rule that the tests are right ([over-strict tests](@/docs/evidence.md#over-strict-tests)); the next run ticks the held attempt without a model call |
+| `speccoder task rule T --tests-wrong --scenario ID --reason R` | Rule that a scenario's oracle tests are wrong; the next run writes that scenario's tests again, and nothing else ([what judges each task](@/docs/evidence.md#what-judges-each-task)) |
 | `speccoder task restore T` / `task drop T` | Keep or discard the [changes set aside](@/docs/running.md#changes-set-aside) |
-| `speccoder task acceptance-at T --story US [--revoke]` | Write the story's acceptance tests at this Setup or Foundational task ([plan checks](@/docs/planning.md#plan-checks)) |
-| `speccoder task defer T [--revoke]` | Judge the task by its regression checks and its story's scenarios at the story's checkpoint ([what judges each task](@/docs/evidence.md#what-judges-each-task)) |
+| `speccoder task acceptance-at T --story US [--revoke]` | Write the story's oracle before this Setup or Foundational task ([plan checks](@/docs/planning.md#plan-checks)) |
 | `speccoder task show T [--account]` | The task's state and evidence; `--account` adds what the model said in its last attempt (a claim) |
 
 ## Review

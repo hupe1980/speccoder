@@ -4,7 +4,7 @@
 
 ## Summary
 
-One public function in the crate `wordcount`: `word_count(text: &str) -> usize`, counting maximal runs of `char::is_alphanumeric` characters.
+The crate `wordcount`, built story by story: Phase 1 adds `word_count(text: &str) -> usize`, counting maximal runs of `char::is_alphanumeric` characters; Phase 2 adds `count_file(path: &Path) -> io::Result<usize>` on top of it.
 
 ## Technical Context
 
@@ -13,6 +13,6 @@ One public function in the crate `wordcount`: `word_count(text: &str) -> usize`,
 ## Project Structure
 
 ```text
-src/lib.rs        # word_count
-tests/            # acceptance tests, one file per story
+src/lib.rs        # word_count, count_file
+tests/            # acceptance tests, one file per scenario
 ```

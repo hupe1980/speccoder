@@ -38,7 +38,7 @@
     <div class="hero-copy">
       <p class="eyebrow">For Spec Kit and OpenSpec projects</p>
       <h1>Spec-driven coding,<br><span class="accent-text">decided by evidence.</span></h1>
-      <p class="lead">speccoder implements your feature task by task. Before each attempt it turns the spec's acceptance examples into tests that must fail; after it, it runs your checks and audits the diff. A task is ticked only when the evidence holds — never on the model's word.</p>
+      <p class="lead">speccoder implements your feature task by task. Before a story's first task it turns the spec's acceptance examples into tests that must fail; after each attempt it runs them, your checks and an audit of the diff. A task is ticked only when the evidence holds — never on the model's word.</p>
       <div class="cta-row">
         <a class="btn btn-primary" href="{{ get_url(path='@/docs/quickstart.md') }}">Get started</a>
         <a class="btn btn-ghost" href="{{ get_url(path='@/docs/how-it-works.md') }}">How it works</a>
@@ -74,9 +74,9 @@
     <p class="section-lead">Agents are good at writing code and too good at declaring victory. speccoder separates the two: a model proposes, and code decides.</p>
     <ol class="steps">
       <li><span class="step-n">1</span><div><h3>Ready</h3><p>The next task whose dependencies in <code>tasks.md</code> are met.</p></div></li>
-      <li><span class="step-n">2</span><div><h3>Red</h3><p>Tests derived from the spec's acceptance examples, which must fail now. The implementer cannot change them.</p></div></li>
+      <li><span class="step-n">2</span><div><h3>Red</h3><p>Once per story: tests derived from its acceptance examples, through the product, committed before any code. The implementer cannot change them.</p></div></li>
       <li><span class="step-n">3</span><div><h3>Attempt</h3><p>The model works in an isolated worktree. Every tool call is allowed, sent to you, or denied — before it runs.</p></div></li>
-      <li><span class="step-n">4</span><div><h3>Judge</h3><p>Your checks again, the acceptance tests green, and an audit that catches deleted or weakened tests.</p></div></li>
+      <li><span class="step-n">4</span><div><h3>Judge</h3><p>Which scenarios the task turned green, your checks again, and an audit that catches deleted or weakened tests.</p></div></li>
       <li><span class="step-n">5</span><div><h3>Record</h3><p>A passing task is ticked and committed. Everything else is saved in git and undone, and you decide.</p></div></li>
     </ol>
   </div>

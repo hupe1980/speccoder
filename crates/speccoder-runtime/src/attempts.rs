@@ -37,8 +37,8 @@ pub struct Saved {
     pub pending: Option<serde_json::Value>,
     /// Model tokens the attempt used.
     pub usage: Option<serde_json::Value>,
-    /// The story's checkpoint the task's acceptance may be moved to.
-    pub defer_to: Option<String>,
+    /// The story's scenarios still red when its last task stopped.
+    pub story_open: Vec<String>,
     /// The full ref name.
     pub reference: String,
     /// The commit it points at.
@@ -67,9 +67,8 @@ pub struct Record<'a> {
     pub pending: Option<&'a serde_json::Value>,
     /// Model tokens the attempt used (`cost`).
     pub usage: Option<&'a serde_json::Value>,
-    /// The story's checkpoint, when a person may move this task's
-    /// acceptance there (its tests could not be met mid-story).
-    pub defer_to: Option<&'a str>,
+    /// The story's scenarios still red, when the story's last task stopped.
+    pub story_open: &'a [String],
 }
 
 /// The `Usage:` trailer speccoder writes on its commits, or nothing.
@@ -132,7 +131,7 @@ pub fn save(
         reason,
         pending,
         usage,
-        defer_to,
+        story_open,
     } = *record;
     let git = Git::at(dir);
     let tree = worktree::checkpoint(dir, tmp)?;
@@ -153,12 +152,17 @@ pub fn save(
     let message = format!(
         "speccoder attempt: {task} {outcome}\n\n{reason}\n\nSpec-Task: {feature}/{task}\nOutcome: {outcome}\n{}{}{}{}",
         run.map(|r| format!("Run: {r}\n")).unwrap_or_default(),
-        defer_to
-            .filter(|t| t
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-'))
-            .map(|t| format!("Defer-To: {t}\n"))
-            .unwrap_or_default(),
+        Some(
+            story_open
+                .iter()
+                .filter(|t| t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+        .filter(|t| !t.is_empty())
+        .map(|t| format!("Story-Open: {t}\n"))
+        .unwrap_or_default(),
         usage_trailer(usage),
         // Compact JSON is one line: a trailer value.
         pending
@@ -186,7 +190,7 @@ pub fn save(
         run_id: run.map(str::to_owned),
         pending: pending.cloned(),
         usage: usage.cloned(),
-        defer_to: defer_to.map(str::to_owned),
+        story_open: story_open.to_vec(),
         reference,
         commit,
     })
@@ -239,7 +243,7 @@ pub fn restore_head(dir: &Path, tmp: &Path) -> Result<(), GitError> {
 /// The saved attempts of `feature`, newest first.
 pub fn list(repo: &Path, feature: &str) -> Vec<Saved> {
     let format = format!(
-        "--format=%(refname){FS}%(objectname){FS}%(trailers:key=Spec-Task,valueonly){FS}%(trailers:key=Outcome,valueonly){FS}%(trailers:key=Run,valueonly){FS}%(trailers:key=Pending,valueonly){FS}%(trailers:key=Usage,valueonly){FS}%(trailers:key=Defer-To,valueonly){FS}%(contents:body){RS}"
+        "--format=%(refname){FS}%(objectname){FS}%(trailers:key=Spec-Task,valueonly){FS}%(trailers:key=Outcome,valueonly){FS}%(trailers:key=Run,valueonly){FS}%(trailers:key=Pending,valueonly){FS}%(trailers:key=Usage,valueonly){FS}%(trailers:key=Story-Open,valueonly){FS}%(contents:body){RS}"
     );
     let out = Git::at(repo)
         .run(&[
@@ -261,7 +265,7 @@ pub fn list(repo: &Path, feature: &str) -> Vec<Saved> {
                 run,
                 pending,
                 usage,
-                defer_to,
+                story_open,
                 body,
             ] = f[..]
             else {
@@ -283,7 +287,12 @@ pub fn list(repo: &Path, feature: &str) -> Vec<Saved> {
                 run_id: (!run.is_empty()).then(|| run.to_owned()),
                 pending: serde_json::from_str(pending.trim()).ok(),
                 usage: parse_usage(usage.trim()),
-                defer_to: Some(defer_to.trim().to_owned()).filter(|t| !t.is_empty()),
+                story_open: story_open
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+                    .map(str::to_owned)
+                    .collect(),
                 reference: reference.to_owned(),
                 commit: commit.to_owned(),
             })
@@ -336,7 +345,7 @@ mod tests {
                 reason: "red",
                 pending: None,
                 usage: None,
-                defer_to: None,
+                story_open: &[],
             },
         )
         .unwrap();

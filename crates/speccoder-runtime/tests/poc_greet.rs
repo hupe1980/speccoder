@@ -118,6 +118,8 @@ const GREET: &str = "pub fn greet(name: &str) -> String {\n    if name.is_empty(
 
 const TEST: &str = "use greet::greet;\n\n#[test]\nfn greets_by_name() {\n    assert_eq!(greet(\"Ada\"), \"Hello, Ada!\");\n}\n";
 
+const KEPT: &str = "use greet::greet;\n\n#[test]\nfn keeps_the_text() {\n    assert_eq!(greet(\"Ada L., Esq.\"), \"Hello, Ada L., Esq.!\");\n}\n";
+
 #[test]
 fn the_poc_s_dead_test_files_fail_and_every_tick_says_why() {
     if !has("cargo-nextest") {
@@ -162,7 +164,6 @@ fn the_poc_s_dead_test_files_fail_and_every_tick_says_why() {
         t003.message()
     );
     assert_eq!(rep.regression.as_ref().unwrap().reason.name(), "no_story");
-    let t003_commit: String = rep.commit.clone().unwrap().chars().take(7).collect();
     let f = FakeProvider::new();
     f.will_structure(done("the rules are encoded"));
     let t004 = run(r.path(), state.path(), "T004", f);
@@ -177,10 +178,20 @@ fn the_poc_s_dead_test_files_fail_and_every_tick_says_why() {
     // `tests/unit/`, which Cargo never builds — then, told the rule, to
     // `tests/greet_name.rs`.
     let f = FakeProvider::new();
+    let argv = ["cargo", "test", "--test", "acceptance_us1"];
+    let kept = ["cargo", "test", "--test", "acceptance_us1_kept"];
     f.will_structure(json!({
-        "files": [{ "path": "tests/acceptance_us1.rs", "content": TEST, "scenarios": ["US1-1"] }],
-        "argv": ["cargo", "test", "--test", "acceptance_us1"],
-        "notes": []
+        "files": [
+            { "path": "tests/acceptance_us1.rs", "content": TEST, "scenarios": ["US1-1"], "argv": argv },
+            { "path": "tests/acceptance_us1_kept.rs", "content": KEPT, "scenarios": ["US1-2"], "argv": kept },
+        ],
+        "argv": argv,
+        "notes": [],
+        "expectations": [
+            { "scenario": "US1-1", "given": "a name", "expect": "Hello, the name!" },
+            { "scenario": "US1-2", "given": "spaces and punctuation", "expect": "kept as given" },
+        ],
+        "untestable": [],
     }));
     f.will_call_tool(
         "c1",
@@ -217,16 +228,15 @@ fn the_poc_s_dead_test_files_fail_and_every_tick_says_why() {
         Some(speccoder_core::collection::DecidedBy::Junit)
     );
     assert_eq!(c.files[0].tests, 1);
-    // Why — T003 implemented it, found by running the tests.
+    // Why — the story's oracle found it green before any of its work
+    // (T003, a Foundational task, built it).
     assert_eq!(
         rep.regression.as_ref().unwrap().text,
-        "already passing before the attempt — implemented by T003"
+        "already passing before the attempt"
     );
     let message = git(Path::new(&rep.worktree), &["log", "-1", "--format=%B"]);
     assert!(
-        message.contains(&format!(
-            "Regression-Only: already_passing implemented_by=T003 commit={t003_commit}\n"
-        )),
+        message.contains("Regression-Only: already_passing\n"),
         "{message}"
     );
 
@@ -249,13 +259,7 @@ fn the_poc_s_dead_test_files_fail_and_every_tick_says_why() {
         .iter()
         .map(|c| c.text.as_str())
         .collect();
-    assert_eq!(
-        texts,
-        [
-            "4 had no user story",
-            "1 was already passing — implemented by T003"
-        ]
-    );
+    assert_eq!(texts, ["4 had no user story", "1 was already passing"]);
 }
 
 /// The author gave its command as one string — the line its prompt shows
@@ -283,16 +287,28 @@ fn an_acceptance_command_given_as_one_string_runs() {
     }
     let f = FakeProvider::new();
     f.will_structure(json!({
-        "files": [{ "path": "tests/acceptance_us1.rs", "content": TEST, "scenarios": ["US1-1"] }],
+        "files": [{ "path": "tests/acceptance_us1.rs", "content": TEST, "scenarios": ["US1-1"], "argv": ["cargo test --test acceptance_us1"] }],
         "argv": ["cargo test --test acceptance_us1"],
-        "notes": []
+        "notes": [],
+        "expectations": [{ "scenario": "US1-1", "given": "a name", "expect": "Hello, the name!" }],
+        "untestable": [],
     }));
     f.will_structure(done("nothing to add"));
     let t005 = run(r.path(), state.path(), "T005", f);
-    let acceptance = report(&t005).acceptance.clone().unwrap();
-    assert!(acceptance.get("skipped").is_none(), "{acceptance}");
-    assert_eq!(
-        acceptance["argv"],
-        json!(["cargo", "test", "--test", "acceptance_us1"])
+    // Split into its words, the command ran: the oracle kept the test, green
+    // (T003 built `greet` earlier).
+    let oracle = git(
+        r.path(),
+        &[
+            "log",
+            "--format=%(trailers)",
+            "--grep=^Oracle: US1$",
+            "speccoder/001-greet-function",
+        ],
+    );
+    assert!(
+        oracle.contains("Oracle-Scenarios: US1-1=green") && oracle.contains("Oracle-Tests: 1"),
+        "{oracle} {}",
+        t005.message()
     );
 }

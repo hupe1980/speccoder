@@ -329,10 +329,13 @@ pub fn review_policy(w: &Wording) -> String {
         "You are the test author of speccoder, writing the acceptance tests for ONE requirement of a \
 {product} spec at review, BEFORE any code for it exists. Turn {examples} into executable tests in the \
 project's own language and test framework, exactly as the spec states them — do not invent behaviour \
-the spec does not state, and do not weaken an example. Put them in NEW files under the project's test \
-directory — paths that are not in the project's file list; name them after the requirement (for Rust: \
-tests/acceptance_<requirement>.rs, using the crate name from Cargo.toml) — and give the command that runs \
-only these tests (for Rust: cargo test --test <name>), and per file the command that runs only that file. Every file MUST cite the IDs of the scenarios it \
+the spec does not state, and do not weaken an example. Test through the interface the requirement's \
+Independent Test names (a command, an API, a page): the product as a person uses it, never an internal \
+module only. Put them in NEW files under the project's test directory — paths that are not in the \
+project's file list; one file per scenario, named after it (for Rust: tests/acceptance_<scenario>.rs, \
+using the crate name from Cargo.toml) — and per file the command that runs only that file (for Rust: \
+cargo test --test <name>). In Python and JavaScript, import the code under test inside each test, so a \
+test of what does not exist yet fails on its own and never stops the other tests from collecting. Every file MUST cite the IDs of the scenarios it \
 tests, from the list given; a file citing none is discarded. State, per scenario you cover, the given and \
 the expected outcome you assert, in the spec's terms (`expectations`); list every scenario you cannot \
 test, with why (`untestable`). The tests must fail now and pass once the requirement is implemented. An \
@@ -529,15 +532,11 @@ pub fn input(
 pub struct Placement {
     /// The file, project-relative.
     pub path: String,
-    /// Its current content, when it exists (earlier tasks' sections).
-    pub existing: Option<String>,
     /// The command that runs only it.
     pub command: String,
     /// The task.
     pub task: String,
-    /// The story, when the file is the story's.
-    pub story: Option<String>,
-    /// The scenarios the section covers.
+    /// The scenarios it covers.
     pub scenarios: Vec<String>,
     /// The comment marker of the file's language (`//`, `#`).
     pub comment: String,
@@ -559,34 +558,10 @@ fn layout_part(text: Option<&str>) -> Tainted<Value> {
 /// The placement section of the visible author's prompt (contracts/prompts.md).
 fn placement_text(p: &Value) -> String {
     let path = p["path"].as_str().unwrap_or_default();
-    let task = p["task"].as_str().unwrap_or_default();
     let command = p["command"].as_str().unwrap_or_default();
-    let c = p["comment"].as_str().unwrap_or("//");
-    let scenarios: Vec<&str> = p["scenarios"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect();
-    let head = if scenarios.is_empty() {
-        format!("{c} {task}")
-    } else {
-        format!("{c} {task} — {}", scenarios.join(", "))
-    };
-    let helper = task.to_ascii_lowercase();
-    let mut out = String::from("\n\n# Where the tests go\n\n");
-    match (p["story"].as_str(), p["existing"].as_str()) {
-        (Some(_), Some(existing)) => out.push_str(&format!(
-            "Write this story's acceptance tests into ONE file: `{path}` (the story file).\nIt already holds the tests of earlier tasks of this story (below) — you may only ADD a section at\nthe end, headed by a comment `{head}`; never change or remove an existing line. Return the whole\nfile: its current lines unchanged, your section after them. Name helpers with the task id\n(`{helper}_…`), so sections never clash. The command that runs only this file: `{command}`.\n\n```\n{existing}\n```\n"
-        )),
-        (Some(_), None) => out.push_str(&format!(
-            "Write this story's acceptance tests into ONE file: `{path}` (the story file). It does not exist\nyet: create it, its first section headed by a comment `{head}`. Later tasks of the story add their\nsections to it. Name helpers with the task id (`{helper}_…`), so sections never clash. The command\nthat runs only this file: `{command}`.\n"
-        )),
-        (None, _) => out.push_str(&format!(
-            "Write this task's acceptance tests into a NEW file: `{path}`. The command that runs only it: `{command}`.\n"
-        )),
-    }
-    out
+    format!(
+        "\n\n# Where the tests go\n\nWrite this task's acceptance tests into a NEW file: `{path}`. The command that runs only it: `{command}`.\n"
+    )
 }
 
 /// The repository's instructions, labelled as the worktree's.

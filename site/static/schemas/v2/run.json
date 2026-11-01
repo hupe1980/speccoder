@@ -227,11 +227,22 @@
         }
       ]
     },
-    "share": {
+    "judged": {
       "description": "What judged the task in its story (none for a bug fix or a task of\nno story).",
       "anyOf": [
         {
-          "$ref": "#/$defs/Share"
+          "$ref": "#/$defs/Judged"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "progress": {
+      "description": "What the attempt did to its story's oracle.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Progress"
         },
         {
           "type": "null"
@@ -519,7 +530,7 @@
           "minimum": 0
         },
         "failing_as_before": {
-          "description": "Checks failing now only because of tests that already failed in the baseline.",
+          "description": "Checks failing now only because of tests that already failed in the\nbaseline, or tests of a story's oracle (judged by the oracle's own runs).",
           "type": "array",
           "items": {
             "type": "string"
@@ -3575,26 +3586,26 @@
           ]
         },
         {
-          "description": "Judge a task by its regression checks and its story's scenarios at\nthe story's checkpoint (`revoke`: take the decision back) — a\nperson's decision in the state directory, never an edit of the plan.",
+          "description": "Rule that one scenario's oracle tests are wrong (the input is the\nreason): the next run writes that scenario's tests again.",
           "type": "object",
           "properties": {
             "kind": {
               "type": "string",
-              "const": "defer_acceptance"
+              "const": "rule_scenario"
             },
             "task": {
-              "description": "The task.",
+              "description": "The task that met them.",
               "type": "string"
             },
-            "revoke": {
-              "description": "Take the decision back.",
-              "type": "boolean"
+            "scenario": {
+              "description": "The scenario (`US3-2`).",
+              "type": "string"
             }
           },
           "required": [
             "kind",
             "task",
-            "revoke"
+            "scenario"
           ]
         },
         {
@@ -4909,22 +4920,10 @@
             "reason": {
               "type": "string",
               "const": "already_passing"
-            },
-            "implemented_by": {
-              "description": "The tick that made them pass; `null` when it could not be determined.",
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ImplementedBy"
-                },
-                {
-                  "type": "null"
-                }
-              ]
             }
           },
           "required": [
-            "reason",
-            "implemented_by"
+            "reason"
           ]
         },
         {
@@ -4972,7 +4971,7 @@
           ]
         },
         {
-          "description": "Its story's checkpoint, with every scenario of the story verified by\nearlier ticks: nothing left to show.",
+          "description": "Its story's checkpoint, with every scenario of the story turned green\nby earlier ticks: nothing left to show.",
           "type": "object",
           "properties": {
             "reason": {
@@ -4985,25 +4984,33 @@
           ]
         },
         {
-          "description": "A person moved its acceptance to its story's checkpoint.",
+          "description": "A task of a story that turned none of its scenarios green and broke\nnone: the story goes on.",
           "type": "object",
           "properties": {
             "reason": {
               "type": "string",
-              "const": "deferred_to_checkpoint"
-            },
-            "checkpoint": {
-              "description": "The task that judges its scenarios.",
-              "type": "string"
+              "const": "in_progress"
             }
           },
           "required": [
-            "reason",
-            "checkpoint"
+            "reason"
           ]
         },
         {
-          "description": "A tick made before reasons were recorded (read side only).",
+          "description": "A task of a story whose test check failed before and after it and\nreports no per-test results: a regression could not be told apart\nfrom the story's own red tests.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "regression_unchecked"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "A tick without a recorded reason (read side only).",
           "type": "object",
           "properties": {
             "reason": {
@@ -5017,47 +5024,24 @@
         }
       ]
     },
-    "ImplementedBy": {
-      "description": "Which tick made already-passing acceptance tests pass.",
-      "anyOf": [
+    "Judged": {
+      "description": "What judges one open task of a story.",
+      "oneOf": [
         {
-          "description": "A tick on the feature branch.",
+          "description": "The progress it makes on the story's oracle.",
           "type": "object",
           "properties": {
-            "task": {
-              "description": "Its task.",
-              "type": "string"
-            },
-            "commit": {
-              "description": "Its commit (short).",
-              "type": "string"
+            "kind": {
+              "type": "string",
+              "const": "progress"
             }
           },
           "required": [
-            "task",
-            "commit"
+            "kind"
           ]
         },
         {
-          "description": "They passed before the feature's first tick.",
-          "type": "object",
-          "properties": {
-            "before_feature": {
-              "description": "Always `true`.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "before_feature"
-          ]
-        }
-      ]
-    },
-    "Share": {
-      "description": "What judges one task.",
-      "oneOf": [
-        {
-          "description": "The scenarios the task names.",
+          "description": "The scenarios it names, which it must leave green.",
           "type": "object",
           "properties": {
             "kind": {
@@ -5078,52 +5062,84 @@
           ]
         },
         {
-          "description": "The story's checkpoint: every scenario no earlier tick verified,\nwith its links.",
+          "description": "The story's checkpoint: every scenario must be green after it.",
           "type": "object",
           "properties": {
             "kind": {
               "type": "string",
               "const": "checkpoint"
-            },
-            "scenarios": {
-              "description": "Their ids, in the story's order.",
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "composition": {
-              "description": "Also one test of these scenarios together (two or more left).",
-              "type": "boolean"
             }
           },
           "required": [
-            "kind",
-            "scenarios",
-            "composition"
+            "kind"
           ]
-        },
+        }
+      ]
+    },
+    "Progress": {
+      "description": "What an attempt did to its story, by the oracle's states before and\nafter it.",
+      "oneOf": [
         {
-          "description": "The story's scenarios; the test author chooses.",
+          "description": "It turned these scenarios green (in the story's order).",
           "type": "object",
           "properties": {
             "kind": {
               "type": "string",
-              "const": "authored"
+              "const": "verified"
             },
-            "scenarios": {
-              "description": "Their ids.",
+            "turned": {
+              "description": "Red before, green after.",
               "type": "array",
               "items": {
                 "type": "string"
               }
+            }
+          },
+          "required": [
+            "kind",
+            "turned"
+          ]
+        },
+        {
+          "description": "It turned none and broke none; the story goes on.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "in_progress"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "The checkpoint, every scenario green before it already.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "closed"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Scenarios green before it are red after it.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "regressed"
             },
-            "checkpoint": {
-              "description": "The story's checkpoint, where what this task leaves is judged.",
-              "type": [
-                "string",
-                "null"
-              ]
+            "scenarios": {
+              "description": "Green before, not green after.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "required": [
@@ -5132,21 +5148,45 @@
           ]
         },
         {
-          "description": "A person moved its acceptance to the checkpoint.",
+          "description": "Scenarios the task names are not green after it.",
           "type": "object",
           "properties": {
             "kind": {
               "type": "string",
-              "const": "deferred"
+              "const": "links_open"
             },
-            "checkpoint": {
-              "description": "The task that judges its scenarios.",
-              "type": "string"
+            "scenarios": {
+              "description": "Its links still not green.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "required": [
             "kind",
-            "checkpoint"
+            "scenarios"
+          ]
+        },
+        {
+          "description": "The checkpoint left scenarios not green.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "story_open"
+            },
+            "scenarios": {
+              "description": "Not green after it.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "scenarios"
           ]
         }
       ]
