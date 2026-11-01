@@ -41,6 +41,7 @@ A project without `speccoder.toml` opens in the **setup assistant**: what was fo
 - **Working** above them: the project's run in progress, in this app or in a terminal, with **Watch**. **Idle** below: features with nothing running and nothing waiting.
 - Approvals of one tool can be ticked and decided together: **Approve 3** or **Reject 3…** (one reason, told to each); each is still its own decision on its own exact object.
 - A quick change or bug fix that grew is a *Worth a Spec* row naming what was measured: **Start a spec from it** opens the New feature sheet with its requirement and the conversations that suggested it ([promotion](@/docs/running.md#promotion)); **Not now** holds until another signal holds. The task's inspector shows the same offer.
+- A task outside a story that failed on its own test names it and offers **These tests are wrong** with a field for why; at a story's checkpoint, one per red scenario. The next run writes them again, your words told to their author. The inspector shows the same offer (*Its own test failed*).
 - Each row decides in place; **Open** shows it with its evidence (a bug's row opens the [Bug sheet](#bug-sheet)). A disabled button says why on hover.
 - The sidebar and Dock badges count only *Blocked on you*; a desktop notification comes when something new lands there. **Quick Change** (`q`) opens a sheet for a [quick change](@/docs/running.md#quick-changes). The terminal's equivalent is `speccoder inbox`.
 

@@ -2293,7 +2293,7 @@
           ]
         },
         {
-          "description": "Rule that one scenario's oracle tests are wrong (the input is the\nreason): the next run writes that scenario's tests again.",
+          "description": "Rule that a task's tests are wrong (the input is the reason): one\nscenario's oracle tests, or — none named — the task's own test\noutside a story. The next run writes them again.",
           "type": "object",
           "properties": {
             "kind": {
@@ -2305,8 +2305,11 @@
               "type": "string"
             },
             "scenario": {
-              "description": "The scenario (`US3-2`).",
-              "type": "string"
+              "description": "The scenario (`US3-2`); none: the task's own test.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [

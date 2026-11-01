@@ -283,7 +283,7 @@ pub(crate) fn ensure(
                 .iter()
                 .map(|s| crate::acceptance_at::Ruling {
                     feature: e.feature.to_owned(),
-                    scenario: s.id.clone(),
+                    scenario: Some(s.id.clone()),
                     story: e.key.to_owned(),
                     task: String::new(),
                     reason: "fresh tests were asked for".to_owned(),
@@ -477,7 +477,7 @@ fn amend(
     mut o: StoryOracle,
     rulings: &[crate::acceptance_at::Ruling],
 ) -> Result<StoryOracle, Box<speccoder_core::CommandResult>> {
-    let mut ruled: Vec<String> = rulings.iter().map(|r| r.scenario.clone()).collect();
+    let mut ruled: Vec<String> = rulings.iter().filter_map(|r| r.scenario.clone()).collect();
     let (old, kept): (Vec<FrozenTest>, Vec<FrozenTest>) = std::mem::take(&mut o.tests)
         .into_iter()
         .partition(|t| t.scenarios.iter().any(|s| ruled.contains(s)));
@@ -488,7 +488,14 @@ fn amend(
     }
     let told: Vec<String> = rulings
         .iter()
-        .map(|r| format!("{} ruled {}'s tests wrong: {}", r.by, r.scenario, r.reason))
+        .map(|r| {
+            format!(
+                "{} ruled {}'s tests wrong: {}",
+                r.by,
+                r.scenario.as_deref().unwrap_or_default(),
+                r.reason
+            )
+        })
         .collect();
     let rel = |path: &str| {
         e.project
@@ -547,7 +554,7 @@ fn amend(
         Some(
             &rulings
                 .iter()
-                .map(|r| r.scenario.as_str())
+                .filter_map(|r| r.scenario.as_deref())
                 .collect::<Vec<_>>()
                 .join(", "),
         ),
@@ -561,7 +568,7 @@ fn amend(
             format!("the amendment could not be committed: {m}"),
         ))
     })?;
-    let acted: Vec<String> = rulings.iter().map(|r| r.scenario.clone()).collect();
+    let acted: Vec<String> = rulings.iter().filter_map(|r| r.scenario.clone()).collect();
     crate::acceptance_at::acted_on(e.plane_dir, e.feature, &acted)
         .map_err(|m| stop("ORACLE-UNWRITTEN", m))?;
     Ok(o)
@@ -1184,8 +1191,9 @@ pub(crate) fn story_view(
                 }
             })
             .collect();
-        let proven =
-            members.iter().all(|t| t.done) && marks.iter().all(|m| m.state == ScenarioState::Green);
+        let done = members.iter().all(|t| t.done);
+        let proven = done && marks.iter().all(|m| m.state == ScenarioState::Green);
+        let before_oracle = done && oracle.is_none();
         shown.push(StoryScenarios {
             story: key,
             scenarios: marks,
@@ -1195,6 +1203,7 @@ pub(crate) fn story_view(
                 decided_by: o.by,
             }),
             proven,
+            before_oracle,
         });
     }
     (out, shown)

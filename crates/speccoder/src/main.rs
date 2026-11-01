@@ -2992,14 +2992,14 @@ fn task_action(
             task,
             reason,
             tests_wrong: true,
-            scenario: Some(scenario),
+            scenario,
             ..
         } => match speccoder_runtime::worktree::state_dir() {
-            Some(state) => speccoder_runtime::acceptance_at::rule_scenario(
+            Some(state) => speccoder_runtime::acceptance_at::rule_tests_wrong(
                 path,
                 feature,
                 task,
-                scenario,
+                scenario.as_deref(),
                 reason,
                 speccoder_core::actions::Via::Terminal,
                 &state,

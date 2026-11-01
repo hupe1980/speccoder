@@ -27,5 +27,6 @@ describe("story words", () => {
     ).toBe("2 of 3 green · T008 turned US1-1, US1-2 · T010 closes it");
     expect(storyLine({ story: "US1", oracle, scenarios: [{ id: "US1-1", state: "green" }] })).toBe("1 of 1 green");
     expect(storyLine({ story: "US2", scenarios: [{ id: "US2-1", state: "red" }] })).toBe("0 of 1 green · its oracle is written at its first code task");
+    expect(storyLine({ story: "US3", before_oracle: true, scenarios: [{ id: "US3-1", state: "red" }] })).toBe("ticked before its oracle: 1 scenario(s) never run");
   });
 });

@@ -84,9 +84,10 @@ A story's acceptance is written once — its **oracle** — and every task of th
 - **Progress.** A task ticks `verified` for the scenarios it turned green (`Scenarios: US1-1@3f9a0c1d2e4b`, a digest of each one's wording), `regression_only` (`in_progress`) when it turned none and broke none. A scenario green before it and red after it fails the verdict. Scenarios that need later tasks may stay red, and a check never fails on them: the oracle's tests are the oracle's to judge.
 - **Linked.** A task that names its scenarios — `(scenarios US3-1, US3-2)`, or `US3/AC2` as Spec Kit's converge cites them — must leave exactly those green. A link to no scenario of the story is ignored and reported (`PLAN-SCENARIO-UNKNOWN`).
 - **Checkpoint.** The story's last open code task must leave every scenario green, and the story's held-out tests passing. Otherwise it stops (`STORY-OPEN`), naming each red scenario with its contract: leave a note (`task nudge`) and run again, or — when a test asserts what the spec does not say — `speccoder task rule T021 --tests-wrong --scenario US3-2 --reason "…"`; the next run writes that scenario's tests again, and nothing else (`Oracle-Amends: US3-2`). A scenario its author declared untestable is shown, and never blocks the story.
-- **Outside a story.** A convergence gap writes its own test, cited to the scenario it closes; a bug is judged by its reproductions.
+- **Outside a story.** A convergence gap writes its own test, cited to the scenario it closes; a bug is judged by its reproductions. When that test asserts what the spec does not say, the stop names it: `speccoder task rule T027 --tests-wrong --reason "FR-005 keeps cell whitespace"` has it written again, your words told to its author and recorded on the tick (`Ruling: tests-wrong`).
+- **The suite.** Every test author is shown the project's tests on the code its task or story names in backticks, and told not to contradict them; a scenario it could only state against them is *untested*.
 
-`speccoder report` and the board show each story on its oracle — `US1 ●●○ 2 of 3 green · T008 turned US1-1, US1-2 · T010 closes it` — and each open task what judges it. A story whose every task is documentation or yours has no checkpoint (`PLAN-STORY-UNJUDGED`).
+`speccoder report` and the board show each story on its oracle — `US1 ●●○ 2 of 3 green · T008 turned US1-1, US1-2 · T010 closes it` — and each open task what judges it. A story whose every task is documentation or yours has no checkpoint (`PLAN-STORY-UNJUDGED`); one ticked before it had an oracle reads *ticked before its oracle*, its scenarios never run.
 
 ## Why a tick is regression-only
 
@@ -163,7 +164,7 @@ When they apply:
 | `Held-Out:` | The [held-out tests](#held-out-tests) |
 | `Acceptance-Strength-Visible:` | Strength of the visible tests alone, with held-out tests on |
 | `Acceptance:` | Tests decided before the run: `<source> manifest=sha256:… approval=sha256:… wording=sha256:… by=…` (see below) |
-| `Ruling:` | A person ruled on an [over-strict test](#over-strict-tests) |
+| `Ruling:` | A person's ruling on the tests: `tests-right` on an [over-strict test](#over-strict-tests), `tests-wrong` on a task's own test |
 | `Flaky:` | Checks that passed only when run again |
 | `Scope-Outside:` | Changed files the task line did not name: reported, never a failure |
 | `Checklists: overridden` | The run was started with `--ignore-checklists` |

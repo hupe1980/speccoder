@@ -95,6 +95,7 @@ fn bundles_and_acceptance_input_are_unchanged() {
         "Cargo.toml:\n[package]",
         &[],
         None,
+        (&[], &[]),
     );
     golden(
         "acceptance-input.json",

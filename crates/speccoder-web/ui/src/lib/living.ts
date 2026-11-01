@@ -15,7 +15,8 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 type Mark = StoryScenarios["scenarios"][number];
 
 /** What a scenario's badge says, and its state class. */
-export function badge(m: Mark | undefined, written: boolean): { state: string; text: string; title: string } {
+export function badge(m: Mark | undefined, written: boolean, before = false): { state: string; text: string; title: string } {
+  if (before) return { state: "before", text: "not run", title: "The story was ticked before it had an oracle: this scenario was never run" };
   if (!written || !m) return { state: "pending", text: "no test yet", title: "Its test is written before the story's first task" };
   const contract = m.contract ? `Holds: ${m.contract}` : "";
   if (m.state === "green") return { state: "green", text: m.turned_by ? `✓ ${m.turned_by}` : "✓ green", title: [m.turned_by ? `Turned green by ${m.turned_by}` : "Green from the start", contract].filter(Boolean).join("\n") };
@@ -27,8 +28,8 @@ export function badge(m: Mark | undefined, written: boolean): { state: string; t
 function strip(st: StoryScenarios | undefined): string {
   if (!st) return "";
   const green = st.scenarios.filter((m) => m.state === "green").length;
-  const dots = st.scenarios.map((m) => `<i class="d ${st.oracle ? m.state : "pending"}"></i>`).join("");
-  const words = st.proven ? "proven" : st.oracle ? `${green} of ${st.scenarios.length} green` : "oracle not yet written";
+  const dots = st.before_oracle ? "" : st.scenarios.map((m) => `<i class="d ${st.oracle ? m.state : "pending"}"></i>`).join("");
+  const words = st.before_oracle ? "ticked before its oracle" : st.proven ? "proven" : st.oracle ? `${green} of ${st.scenarios.length} green` : "oracle not yet written";
   return `<span class="strip" title="${esc(words)}">${dots}<span class="n">${esc(words)}</span></span>`;
 }
 
@@ -98,7 +99,7 @@ export function living(html: string, stories: StoryScenarios[]): string {
         ol.classList.add("scenarios");
         Array.from(ol.children).forEach((li, i) => {
           const id = `${key}-${i + 1}`;
-          const b = badge(st?.scenarios.find((s) => s.id === id), !!st?.oracle);
+          const b = badge(st?.scenarios.find((s) => s.id === id), !!st?.oracle, !!st?.before_oracle);
           li.classList.add("scenario", b.state);
           steps(li as HTMLLIElement);
           li.insertAdjacentHTML("afterbegin", `<span class="sid">${id}</span>`);

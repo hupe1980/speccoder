@@ -274,13 +274,14 @@ pub enum Runnable {
         /// Take the decision back.
         revoke: bool,
     },
-    /// Rule that one scenario's oracle tests are wrong (the input is the
-    /// reason): the next run writes that scenario's tests again.
+    /// Rule that a task's tests are wrong (the input is the reason): one
+    /// scenario's oracle tests, or — none named — the task's own test
+    /// outside a story. The next run writes them again.
     RuleScenario {
         /// The task that met them.
         task: String,
-        /// The scenario (`US3-2`).
-        scenario: String,
+        /// The scenario (`US3-2`); none: the task's own test.
+        scenario: Option<String>,
     },
     /// Install the bundled `speccoder` Spec Kit preset through Spec Kit's
     /// own `specify preset add` (`update`: the installed one, replaced).
@@ -865,7 +866,7 @@ impl ActionKind {
             },
             Self::RuleScenario => Runnable::RuleScenario {
                 task: "T021".to_owned(),
-                scenario: "US3-2".to_owned(),
+                scenario: Some("US3-2".to_owned()),
             },
             Self::PresetAdd => Runnable::PresetAdd { update: false },
             Self::PlanThrough => Runnable::PlanThrough {

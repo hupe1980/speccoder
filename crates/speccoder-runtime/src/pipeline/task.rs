@@ -1306,11 +1306,26 @@ fn run_task_once(
             }
         }
     }
+    // A person ruled the task's own test wrong (a task outside a story):
+    // every author of its tests is told why — the visible, held-out and
+    // strengthening ones, a resumed attempt's too — and nothing frozen
+    // earlier is reused; the tick records the rulings and clears them.
+    let ruled: Vec<crate::acceptance_at::Ruling> = if bug_fix.is_none() && !in_story {
+        crate::acceptance_at::rulings_for_task(&s.plane_dir, &feature_name, task)
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let told: Vec<String> = ruled
+        .iter()
+        .map(|r| format!("{} ruled the tests wrong: {}", r.by, r.reason))
+        .collect();
     if bug_fix.is_none()
         && run_config.acceptance
         && !options.fresh_acceptance
         && planning.is_none()
         && !in_story
+        && ruled.is_empty()
     {
         match crate::oracle::for_task(&s.plane_dir, &project, &wt_root, format, &snap, &scenarios) {
             Some(r @ crate::oracle::TaskReuse::Ready { .. }) => review_reuse = Some(r),
@@ -1464,6 +1479,7 @@ fn run_task_once(
             instructions: &instructions,
             runner: &runner,
             layout: Some(&test_layout),
+            told: &told,
         }))
     } else {
         None
@@ -1517,6 +1533,7 @@ fn run_task_once(
                     instructions: &instructions,
                     runner: &runner,
                     layout: Some(&test_layout),
+                    told: &told,
                 },
                 a,
                 &scenarios,
@@ -1617,6 +1634,7 @@ fn run_task_once(
                 pending: None,
                 usage: None,
                 story_open: &[],
+                own_test: None,
             },
         )
         .ok()
@@ -2133,6 +2151,7 @@ fn run_task_once(
                                 pending: None,
                                 usage: output.get("usage"),
                                 story_open: &[],
+                                own_test: None,
                             },
                         )
                         .and_then(|saved| {
@@ -3037,6 +3056,7 @@ fn run_task_once(
                 instructions: &instructions,
                 runner: &runner,
                 layout: Some(&test_layout),
+                told: &told,
             };
             let weak = crate::strength::weak(a);
             match strengthen(&setup, &visible_tests, weak, &before, fin) {
@@ -3301,7 +3321,8 @@ fn run_task_once(
                 })
                 // A set frozen at review: the one pre-frozen trailer form.
                 .or_else(|| review_frozen.as_ref().map(|(r, m)| r.trailer(m)))
-                .unwrap_or_default(),
+                .unwrap_or_default()
+                + &ruling_trailers(&ruled),
         });
         match &options.session {
             // Worktree: tick, then commit the tick with the evidence.
@@ -3435,7 +3456,8 @@ fn run_task_once(
                 .map(|f| {
                     super::bug::trailers(f, &verdict, &crate::strength::rulings(&strength_dir))
                 })
-                .unwrap_or_default(),
+                .unwrap_or_default()
+                + &ruling_trailers(&ruled),
         });
         match commit_attempt(&wt_root, &message) {
             Ok(id) => report.commit = Some(id),
@@ -3526,6 +3548,12 @@ fn run_task_once(
         }
         marker_guard.keep();
     }
+    // A ticked task's rulings are acted on: its tests were written again.
+    if report.ticked && !ruled.is_empty() {
+        let _ = crate::acceptance_at::acted_on_task(&s.plane_dir, &feature_name, task);
+    }
+    // The task's own test at fault, when the stop names one (offered a ruling).
+    let mut conflict: Option<String> = None;
     // 9. An attempt that did not pass is saved under an attempt ref and
     //    undone: the next attempt starts where this one did.
     if !passed && attempt_status != "over_strict" && attempt_status != "repro_weak" {
@@ -3541,15 +3569,7 @@ fn run_task_once(
             _ if outcome == "blocked" => story_oracle
                 .as_ref()
                 .and_then(|o| {
-                    let named = report
-                        .reason
-                        .as_deref()?
-                        .split("frozen test `")
-                        .nth(1)?
-                        .split('`')
-                        .next()?
-                        .trim_start_matches("./")
-                        .to_owned();
+                    let named = frozen_test_named(report.reason.as_deref()?)?;
                     o.tests
                         .iter()
                         .find(|t| t.path == named)
@@ -3558,6 +3578,29 @@ fn run_task_once(
                 .unwrap_or_default(),
             _ => Vec::new(),
         };
+        // A task outside a story whose own test failed — or that the
+        // implementer called wrong — can have it ruled wrong from the stop.
+        let own_files: Vec<String> = report
+            .acceptance
+            .as_ref()
+            // Only where the ruling takes no scenario: outside any story.
+            .filter(|_| story_oracle.is_none() && story_key.is_none())
+            .and_then(|a| a["files"].as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|p| p.as_str().map(str::to_owned))
+            .collect();
+        let own_failed = report.verification.as_ref().is_some_and(|v| {
+            v.checks
+                .iter()
+                .any(|c| c.name == "acceptance" && c.status.is_failure())
+        });
+        let named = (outcome == "blocked")
+            .then(|| frozen_test_named(report.reason.as_deref()?))
+            .flatten();
+        let own_test = named
+            .filter(|n| own_files.contains(n))
+            .or_else(|| own_failed.then(|| own_files.first().cloned()).flatten());
         let record = attempts::Record {
             run,
             outcome: &outcome,
@@ -3565,7 +3608,9 @@ fn run_task_once(
             pending: report.pending.as_ref(),
             usage: report.usage.as_ref(),
             story_open: &story_open,
+            own_test: own_test.as_deref(),
         };
+        conflict.clone_from(&own_test);
         match attempts::save(&wt_root, &tmp, &feature_name, task, &record)
             .and_then(|saved| worktree::restore(&wt_root, &tmp, &start).map(|_| saved))
         {
@@ -3665,7 +3710,20 @@ fn run_task_once(
                 }))
                 .collect()
         }
-        _ => Vec::new(),
+        // The task's own test failed, or was called wrong: rule it.
+        _ => match &conflict {
+            Some(path) if !report.ticked => {
+                let f = feature.map_or_else(String::new, |f| format!(" --feature {f}"));
+                message.push_str(&format!(
+                    " — its own test `{path}` failed: if it asserts what the spec does not say, rule it wrong"
+                ));
+                vec![
+                    format!("speccoder task rule {task}{f} --tests-wrong --reason \"…\""),
+                    format!("speccoder task nudge {task}{f} --note \"…\""),
+                ]
+            }
+            _ => Vec::new(),
+        },
     };
     let result = CommandResult::new("run", status, &redact(&message, secret));
     let result = if story_open_fix.is_empty() {
@@ -3969,4 +4027,33 @@ fn with_oracle(bundle: &serde_json::Value, oracle: &serde_json::Value) -> serde_
         b["oracle"] = oracle.clone();
     }
     b
+}
+
+/// The tick's record of a person's rulings on the task's tests:
+/// `Ruling: tests-wrong by <who> — <why>`.
+fn ruling_trailers(ruled: &[crate::acceptance_at::Ruling]) -> String {
+    ruled
+        .iter()
+        .map(|r| {
+            format!(
+                "Ruling: tests-wrong by {} — {}\n",
+                r.by,
+                r.reason.replace('\n', " ")
+            )
+        })
+        .collect()
+}
+
+/// The frozen test a `wrong_test` stop names (speccoder's own words:
+/// "frozen test `tests/x.py`").
+fn frozen_test_named(reason: &str) -> Option<String> {
+    Some(
+        reason
+            .split("frozen test `")
+            .nth(1)?
+            .split('`')
+            .next()?
+            .trim_start_matches("./")
+            .to_owned(),
+    )
 }

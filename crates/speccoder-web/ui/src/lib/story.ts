@@ -35,6 +35,7 @@ export function storyLine(s: StoryScenarios): string {
   const by = new Map<string, string[]>();
   for (const m of s.scenarios) if (m.turned_by) by.set(m.turned_by, [...(by.get(m.turned_by) ?? []), m.id]);
   const turned = [...by].map(([t, ids]) => ` · ${t} turned ${ids.join(", ")}`).join("");
+  if (s.before_oracle) return `ticked before its oracle: ${n} scenario(s) never run`;
   if (!s.oracle) return `${green} of ${n} green · its oracle is written at its first code task`;
   if (green === n) return `${n} of ${n} green${turned}`;
   return `${green} of ${n} green${turned} · ${s.checkpoint ? `${s.checkpoint} closes it` : "no task closes it"}`;

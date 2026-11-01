@@ -736,11 +736,11 @@ pub enum TaskAction {
             conflicts_with = "tests_wrong"
         )]
         tests_right: bool,
-        /// A scenario's oracle tests are wrong: the next run writes them again (with --scenario).
-        #[arg(long, requires = "scenario")]
+        /// The tests are wrong: the next run writes them again, your reason told to their author.
+        #[arg(long)]
         tests_wrong: bool,
-        /// The scenario whose tests are wrong, e.g. US3-2.
-        #[arg(long, value_name = "ID")]
+        /// The scenario whose oracle tests are wrong, e.g. US3-2 (story tasks only).
+        #[arg(long, value_name = "ID", requires = "tests_wrong")]
         scenario: Option<String>,
         /// Why (recorded with the tick).
         #[arg(long)]

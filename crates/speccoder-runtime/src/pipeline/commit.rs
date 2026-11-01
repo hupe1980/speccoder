@@ -443,6 +443,7 @@ pub(crate) fn set_aside_leftovers(
             pending: None,
             usage: None,
             story_open: &[],
+            own_test: None,
         },
     )
     .and_then(|saved| crate::attempts::restore_head(wt_root, tmp).map(|()| saved.reference))

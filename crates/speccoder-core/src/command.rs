@@ -2470,6 +2470,10 @@ pub struct LastAttempt {
     /// last task stopped (`STORY-OPEN`): each can be ruled wrong.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub story_open: Vec<String>,
+    /// The task's own test (outside a story) that failed, or that the
+    /// implementer called wrong: it can be ruled wrong.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own_test: Option<String>,
 }
 
 /// Changes saved and set aside so a run could start from the branch tip.

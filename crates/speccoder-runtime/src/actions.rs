@@ -910,9 +910,15 @@ pub fn perform_in(
             None => no_state(),
         },
         Runnable::RuleScenario { task, scenario } => match (text, state) {
-            (Some(why), Some(s)) => {
-                crate::acceptance_at::rule_scenario(root, feature, task, scenario, why, via, s)
-            }
+            (Some(why), Some(s)) => crate::acceptance_at::rule_tests_wrong(
+                root,
+                feature,
+                task,
+                scenario.as_deref(),
+                why,
+                via,
+                s,
+            ),
             (None, _) => needs("a reason"),
             (_, None) => no_state(),
         },

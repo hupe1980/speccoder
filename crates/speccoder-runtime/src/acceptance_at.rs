@@ -53,15 +53,17 @@ pub fn all(plane: &Path) -> Vec<Decision> {
     read_all(plane).unwrap_or_default()
 }
 
-/// A person's ruling that one scenario's oracle tests are wrong: the next
-/// run writes that scenario's tests again (an oracle amendment), and
-/// nothing else of the story's oracle.
+/// A person's ruling that a task's tests are wrong: one scenario's oracle
+/// tests (an oracle amendment, nothing else of the oracle), or the task's
+/// own test outside a story. The next run writes them again.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ruling {
     /// The feature.
     pub feature: String,
-    /// The scenario (`US3-2`; OpenSpec: its name).
-    pub scenario: String,
+    /// The scenario (`US3-2`; OpenSpec: its name); none: the task's own
+    /// test (a task outside a story).
+    #[serde(default)]
+    pub scenario: Option<String>,
     /// Its story (`US3`; OpenSpec: the change).
     #[serde(default)]
     pub story: String,
@@ -127,7 +129,7 @@ fn write_rulings(plane: &Path, change: impl FnOnce(&mut Vec<Ruling>)) -> Result<
 pub fn rulings_for(plane: &Path, feature: &str, story: &str) -> Result<Vec<Ruling>, String> {
     Ok(rulings(plane)?
         .into_iter()
-        .filter(|r| r.feature == feature && r.story == story)
+        .filter(|r| r.feature == feature && r.story == story && r.scenario.is_some())
         .collect())
 }
 
@@ -138,7 +140,34 @@ pub fn rulings_for(plane: &Path, feature: &str, story: &str) -> Result<Vec<Rulin
 /// The list cannot be read or written.
 pub fn acted_on(plane: &Path, feature: &str, scenarios: &[String]) -> Result<(), String> {
     write_rulings(plane, |l| {
-        l.retain(|r| !(r.feature == feature && scenarios.contains(&r.scenario)));
+        l.retain(|r| {
+            !(r.feature == feature && r.scenario.as_ref().is_some_and(|s| scenarios.contains(s)))
+        });
+    })
+    .map(|_| ())
+}
+
+/// The rulings on `task`'s own test (outside a story), oldest first. An
+/// unreadable list is an error, never "none".
+///
+/// # Errors
+///
+/// The list exists but cannot be read.
+pub fn rulings_for_task(plane: &Path, feature: &str, task: &str) -> Result<Vec<Ruling>, String> {
+    Ok(rulings(plane)?
+        .into_iter()
+        .filter(|r| r.feature == feature && r.task == task && r.scenario.is_none())
+        .collect())
+}
+
+/// Forgets the rulings on `task`'s own test: written again, or ticked.
+///
+/// # Errors
+///
+/// The list cannot be read or written.
+pub fn acted_on_task(plane: &Path, feature: &str, task: &str) -> Result<(), String> {
+    write_rulings(plane, |l| {
+        l.retain(|r| !(r.feature == feature && r.task == task && r.scenario.is_none()));
     })
     .map(|_| ())
 }
@@ -270,15 +299,18 @@ pub fn decide(
     ))
 }
 
-/// Records a person's ruling that `scenario`'s oracle tests are wrong
-/// (`task` met them): the next run writes them again. Refused for an id
-/// that is not a scenario of the task's story.
+/// Records a person's ruling that a task's tests are wrong: for a story
+/// task one `scenario`'s oracle tests, for a task outside a story its own
+/// test. The next run writes them again, the reason told to their author.
+/// Refused, with the choices there are, for a scenario the task's story
+/// does not have, a story task without one, a scenario on a task outside a
+/// story, or a task without tests of its own.
 #[must_use]
-pub fn rule_scenario(
+pub fn rule_tests_wrong(
     root: &Path,
     feature: Option<&str>,
     task: &str,
-    scenario: &str,
+    scenario: Option<&str>,
     reason: &str,
     via: Via,
     state: &Path,
@@ -304,35 +336,70 @@ pub fn rule_scenario(
         );
     };
     let name = f.feature.name.clone();
-    let known = opened.adapter.scenarios(snap, task);
-    if !known.iter().any(|s| s.id == scenario) {
-        return refuse(
-            CommandStatus::NotFound,
-            format!(
-                "{scenario} is not a scenario of {task}'s story ({})",
-                known
-                    .iter()
-                    .map(|s| s.id.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        );
-    }
+    let Some(t) = f
+        .tasks
+        .as_ref()
+        .and_then(|ts| ts.tasks.iter().find(|t| t.id == task))
+    else {
+        return refuse(CommandStatus::NotFound, format!("no task {task} in {name}"));
+    };
+    let openspec = opened.adapter.kind() == speccoder_core::spec::FormatKind::Openspec;
     let plane = crate::worktree::project_state_dir(state, Path::new(&snap.root));
-    // The story the scenario is of: the task's label; OpenSpec: the change.
-    let story = if opened.adapter.kind() == speccoder_core::spec::FormatKind::Openspec {
-        name.clone()
+    // The story the run judges the task in: the one a person had its
+    // acceptance written at, its label; OpenSpec: the change.
+    let story = if openspec {
+        Some(name.clone())
     } else {
-        f.tasks
-            .as_ref()
-            .and_then(|ts| ts.tasks.iter().find(|t| t.id == task))
-            .and_then(|t| t.story.clone())
-            .unwrap_or_default()
+        story_at(&plane, &name, task).or_else(|| t.story.clone())
+    };
+    let known = opened.adapter.scenarios(snap, task);
+    let ids = || {
+        known
+            .iter()
+            .map(|s| s.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let rules = opened.adapter.rules().judged;
+    let unit_dir = f.feature.dir.clone();
+    let scenario = match (&story, scenario) {
+        (Some(_), Some(id)) if known.iter().any(|s| s.id == id) => Some(id.to_owned()),
+        (Some(_), Some(id)) => {
+            return refuse(
+                CommandStatus::NotFound,
+                format!("{id} is not a scenario of {task}'s story ({})", ids()),
+            );
+        }
+        (Some(st), None) => {
+            return refuse(
+                CommandStatus::UsageError,
+                format!(
+                    "{task} is of {st}: name the scenario whose tests are wrong with --scenario ({})",
+                    ids()
+                ),
+            );
+        }
+        (None, Some(_)) => {
+            return refuse(
+                CommandStatus::UsageError,
+                format!("{task} is in no story: its own test is ruled, without --scenario"),
+            );
+        }
+        (None, None)
+            if known.is_empty()
+                || crate::pipeline::acceptance::checks_only(t, &unit_dir, &rules) =>
+        {
+            return refuse(
+                CommandStatus::UsageError,
+                format!("{task} has no tests of its own to rule on: its checks judge it"),
+            );
+        }
+        (None, None) => None,
     };
     let ruling = Ruling {
         feature: name.clone(),
-        scenario: scenario.to_owned(),
-        story,
+        scenario: scenario.clone(),
+        story: story.unwrap_or_default(),
         task: task.to_owned(),
         reason: reason.trim().to_owned(),
         by: crate::controls::person(root),
@@ -342,7 +409,11 @@ pub fn rule_scenario(
             .map_or(0, |d| d.as_secs()),
     };
     let path = match write_rulings(&plane, |l| {
-        l.retain(|r| !(r.feature == name && r.scenario == scenario));
+        // A scenario is ruled once (the latest reason); a task's own test
+        // gathers every reason until it is written again.
+        if scenario.is_some() {
+            l.retain(|r| !(r.feature == name && r.scenario == scenario));
+        }
         l.push(ruling);
     }) {
         Ok(p) => p,
@@ -353,18 +424,28 @@ pub fn rule_scenario(
             );
         }
     };
+    let (what, rest) = match &scenario {
+        Some(id) => (
+            format!("{id}'s tests are"),
+            ", and nothing else of the story's oracle",
+        ),
+        None => (
+            format!("{task}'s own test is"),
+            ", your reason given to its author",
+        ),
+    };
     CommandResult::new(
         "task",
         CommandStatus::Ok,
         &format!(
-            "{scenario}'s tests are ruled wrong: the next run writes them again, and nothing else of the story's oracle — `speccoder run --task {task}`"
+            "{what} ruled wrong: the next run writes them again{rest} — `speccoder run --task {task}`"
         ),
     )
     .with_data(CommandData::Control(Box::new(ControlReport {
         feature: name,
         task: task.to_owned(),
         action: "tests_ruled_wrong".to_owned(),
-        text: Some(scenario.to_owned()),
+        text: scenario.or_else(|| Some(task.to_owned())),
         record: Some(path.display().to_string()),
     })))
 }

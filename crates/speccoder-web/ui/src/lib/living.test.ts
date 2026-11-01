@@ -49,4 +49,13 @@ describe("the living spec", () => {
     expect(div.querySelector(".strip")?.textContent).toBe("oracle not yet written");
     expect(div.querySelector("li.scenario .sb")?.textContent).toBe("no test yet");
   });
+
+  it("says a story ticked before its oracle never ran its scenarios, without red", () => {
+    const div = document.createElement("div");
+    div.innerHTML = living(SPEC, [{ story: "US1", before_oracle: true, scenarios: [{ id: "US1-1", state: "red" }, { id: "US1-2", state: "red" }] }]);
+    expect(div.querySelector(".strip")?.textContent).toBe("ticked before its oracle");
+    expect(div.querySelectorAll(".strip .d").length).toBe(0);
+    expect(div.querySelector("li.scenario")?.className).toContain("before");
+    expect(div.querySelector("li.scenario .sb")?.textContent).toBe("not run");
+  });
 });

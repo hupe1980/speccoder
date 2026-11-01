@@ -152,6 +152,7 @@ mod tests {
                 run_id: None,
                 reference: "refs/x".to_owned(),
                 story_open: Vec::new(),
+                own_test: None,
             }),
             note: None,
             attestation: None,

@@ -167,6 +167,7 @@ fn statuses(
                         run_id: a.run_id.clone(),
                         reference: a.reference.clone(),
                         story_open: a.story_open.clone(),
+                        own_test: a.own_test.clone(),
                     }),
                 judged: None,
                 set_aside: None,

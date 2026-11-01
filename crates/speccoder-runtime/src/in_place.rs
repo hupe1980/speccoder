@@ -544,6 +544,7 @@ impl Session {
             pending: None,
             usage: None,
             story_open: &[],
+            own_test: None,
         };
         let saved = crate::attempts::save(&self.checkout, &tmp, &self.feature, "in-place", &record)
             .map_err(|e| InPlaceError::new("RETURN-BLOCKED", e.0))?;

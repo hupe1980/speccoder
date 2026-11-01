@@ -1269,18 +1269,44 @@ pub struct AccountTurn {
 ///
 /// # Errors
 ///
-/// The journal cannot be read.
+/// The journal cannot be read, is not here, or does not hold `run`.
 pub async fn account(dir: &Path, run: &str) -> Result<Vec<AccountTurn>, PlaneError> {
     let Ok(id) = agentplane::core::RunId::parse(run) else {
-        return Ok(Vec::new());
+        return Err(PlaneError(format!("{run} is not a run id")));
     };
-    let Some(store) = open_reader(dir)? else {
-        return Ok(Vec::new());
-    };
-    let history = store
-        .read(id, 1)
-        .await
-        .map_err(|e| PlaneError(e.to_string()))?;
+    // The project's journal, then each lane's (a lane run keeps its own).
+    // No journal here, or none holding the run: said, never read as a
+    // silent model.
+    let lanes = std::fs::read_dir(dir.join("lanes"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path());
+    let mut any = false;
+    let mut history = Vec::new();
+    for d in std::iter::once(dir.to_path_buf()).chain(lanes) {
+        let Some(store) = open_reader(&d)? else {
+            continue;
+        };
+        any = true;
+        history = store
+            .read(id, 1)
+            .await
+            .map_err(|e| PlaneError(e.to_string()))?;
+        if !history.is_empty() {
+            break;
+        }
+    }
+    if !any {
+        return Err(PlaneError(
+            "no journal of this project's runs is here".to_owned(),
+        ));
+    }
+    if history.is_empty() {
+        return Err(PlaneError(format!(
+            "run {run} is not in this project's journal"
+        )));
+    }
     let text = |t: &str| {
         let t = t.trim();
         (!t.is_empty()).then(|| crate::approvals::present::escape(t))

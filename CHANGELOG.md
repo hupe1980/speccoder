@@ -6,6 +6,31 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Rule any task's tests wrong.** `speccoder task rule T --tests-wrong
+  --reason R` takes a task outside a story (a convergence gap): its own
+  test is written again, your words told to every author of its tests,
+  the tick records them (`Ruling: tests-wrong`). A stop on that test names
+  it (`Own-Test:` on the saved attempt) and offers the ruling in Needs You,
+  the inspector, the report and the run's fix lines.
+- Every test author sees the project's tests on the code its task or story
+  names, and is told not to contradict them.
+- Payloads: a saved attempt's `own_test`; a story's `before_oracle`; the
+  `rule_scenario` action's `scenario` may be null (the task's own test).
+
+### Fixed
+
+- A story ticked before it had an oracle read *0 of 2 green · no task
+  closes it — see `speccoder doctor`*; it reads *ticked before its oracle*.
+  A story no task closes points to `speccoder spec tasks`.
+- A feature with convergence tasks counted its ticks on the branch but its
+  tasks in the checkout (*26 of 25*): both come from the same list.
+- The Model's Account read a lane run, or a run whose journal was not on
+  this machine, as a silent model: it searches the lanes' journals, and
+  says when no journal holds the run.
+- The inspector's ruling buttons and long evidence rows were misaligned.
+
 ## [0.8.0] - 2026-11-01
 
 ### Added

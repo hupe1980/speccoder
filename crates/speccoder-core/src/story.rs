@@ -167,6 +167,10 @@ pub struct StoryScenarios {
     /// report and the board leave it out.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub proven: bool,
+    /// Every task done before the story had an oracle: nothing ran its
+    /// scenarios, and nothing is still to turn them.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub before_oracle: bool,
 }
 
 /// Where a story's oracle was written, and who froze it.

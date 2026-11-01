@@ -897,6 +897,13 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
                 a.outcome,
                 shorten(&a.reason, 90)
             )?;
+            if let Some(path) = &a.own_test {
+                writeln!(
+                    w,
+                    "      its own test failed: {path} — wrong? `speccoder task rule {} --tests-wrong --reason …`",
+                    t.id
+                )?;
+            }
         }
         if let Some(j) = &t.judged {
             writeln!(w, "      judged by: {}", judged_words(j))?;
@@ -905,6 +912,15 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
     // Each story's scenarios on its oracle: green (●, with the tick that
     // turned it), red (○) or untested (·), and the task that closes it.
     for st in r.stories.iter().filter(|s| !s.proven) {
+        if st.before_oracle {
+            writeln!(
+                w,
+                "Story      {} ticked before its oracle: its {} scenario(s) were never run",
+                st.story,
+                st.scenarios.len()
+            )?;
+            continue;
+        }
         use speccoder_core::story::ScenarioState as S;
         let marks: String = st
             .scenarios
@@ -933,7 +949,10 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         let rest = match (&st.checkpoint, green == n) {
             (_, true) => String::new(),
             (Some(c), false) => format!(" · {c} closes it"),
-            (None, false) => " · no task closes it — see `speccoder doctor`".to_owned(),
+            (None, false) => {
+                " · no task closes it — add the task that implements it (`speccoder spec tasks`)"
+                    .to_owned()
+            }
         };
         let oracle = if st.oracle.is_none() {
             " · its oracle is written at its first code task"

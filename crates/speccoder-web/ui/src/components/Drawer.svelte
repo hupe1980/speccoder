@@ -159,15 +159,16 @@
       <button role="tab" aria-selected={tab === "diff"} class:on={tab === "diff"} disabled={!source} title={source ? "" : "No code yet: the task has no commit and no attempt"} onclick={() => (tab = "diff")}>{source?.label ?? "Changes"}</button>
     </div>
     {#if tab === "evidence"}
-      {#if judged}
+      {#if judged || rulings.length}
+        {@const own = rulings.some((r) => r.run && "scenario" in r.run && !r.run.scenario)}
         <div class="judged" class:offer={rulings.length > 0}>
           <Icon name="seal" size={13} />
-          <span><strong>Judged by</strong> {judgedWords(judged)}</span>
+          {#if judged}<span><strong>Judged by</strong> {judgedWords(judged)}</span>{:else}<span><strong>Its own test failed</strong></span>{/if}
           {#if rulings.length}
-            <p class="muted">The story is still open. When a scenario's tests assert what the spec does not say, rule them wrong: the next run writes them again, and nothing else.</p>
+            <p class="muted">{own ? "When its test asserts what the spec does not say, rule it wrong: the next run writes it again, your reason told to its author." : "The story is still open. When a scenario's tests assert what the spec does not say, rule them wrong: the next run writes them again, and nothing else."}</p>
             <span class="rulings">
               {#each rulings as r (r.command)}
-                <button class="btn small" disabled={!!app.job?.running} title={`$ ${r.command}`} onclick={() => app.perform(r)}>{r.run && "scenario" in r.run ? `${r.run.scenario}'s Tests Are Wrong…` : "Tests Are Wrong…"}</button>
+                <button class="btn small" disabled={!!app.job?.running} title={`$ ${r.command}`} onclick={() => app.perform(r)}>{r.run && "scenario" in r.run && r.run.scenario ? `${r.run.scenario}'s Tests Are Wrong…` : "These Tests Are Wrong…"}</button>
               {/each}
             </span>
           {/if}
@@ -221,7 +222,7 @@
   .rulings { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   .judged { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.5rem; align-items: start; margin: 0 0 0.8rem; padding: 0.6rem 0.75rem; border-radius: 10px; background: var(--fill); font-size: 0.84rem; }
   .judged.offer { background: color-mix(in srgb, var(--attention, #ff9f0a) 10%, var(--surface)); }
-  .judged p, .judged button { grid-column: 2; margin: 0; justify-self: start; }
+  .judged p, .judged button, .judged .rulings { grid-column: 2; margin: 0; justify-self: start; }
   .link { border: 0; background: none; padding: 0; color: var(--accent-ink); font-weight: 600; cursor: pointer; }
   .aside-card {
     display: grid; grid-template-columns: auto 1fr; gap: 0.7rem; padding: 0.8rem 0.9rem; border-radius: var(--radius);
@@ -256,7 +257,7 @@
   .tabs button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
   .tabs button[disabled] { opacity: 0.4; cursor: default; }
   dl { margin: 0; }
-  .row { display: grid; grid-template-columns: 8.5rem 1fr; gap: 0.75rem; padding: 0.6rem 0.85rem; }
+  .row { display: grid; grid-template-columns: 8.5rem 1fr; gap: 0.75rem; align-items: start; padding: 0.6rem 0.85rem; }
   dt { font-weight: 550; display: flex; gap: 0.5rem; align-items: center; font-size: 0.88rem; }
   .dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: var(--fill-c); color: #fff; flex: none; }
   dd { margin: 0; color: var(--text-2); font-size: 0.88rem; overflow-wrap: anywhere; }

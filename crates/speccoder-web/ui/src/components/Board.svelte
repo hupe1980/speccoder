@@ -14,7 +14,7 @@
 
   const tasks = $derived<Task[]>(app.report?.data?.tasks ?? []);
   // Each open story's scenarios: verified by a tick, or left for its checkpoint.
-  const stories = $derived((app.report?.data?.stories ?? []).filter((s) => !s.proven));
+  const stories = $derived((app.report?.data?.stories ?? []).filter((s) => !s.proven && !s.before_oracle));
   const waitingFor = $derived(new Set(app.approvals.map((p) => p.task)));
   // This app's job, else another speccoder's run of this feature.
   const running = $derived(

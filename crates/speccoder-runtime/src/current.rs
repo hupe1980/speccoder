@@ -112,6 +112,11 @@ fn report(format: &dyn Adapter, snap: &ProjectSnapshot, action: &str) -> Feature
                 .map_or((0, 0), |t| {
                     (t.tasks.iter().filter(|t| t.done).count(), t.tasks.len())
                 });
+            // Both counts from the list with more ticks: the branch while it
+            // is ahead, the checkout once the branch is merged and left.
+            let (done, tasks) = branch_tasks(format, root, &f.name, &f.dir)
+                .filter(|b| b.0 > done)
+                .unwrap_or((done, tasks));
             let artifacts = detail.as_ref().map_or_else(Vec::new, |d| {
                 [
                     ("spec", d.artifacts.spec),
@@ -129,7 +134,7 @@ fn report(format: &dyn Adapter, snap: &ProjectSnapshot, action: &str) -> Feature
                 title: title(format, &root.join(&f.dir)),
                 dir: f.dir.clone(),
                 current: current.as_deref() == Some(f.name.as_str()),
-                done: done.max(branch_ticks(format, root, &f.name, &f.dir)),
+                done,
                 tasks,
                 artifacts,
             }
@@ -158,16 +163,24 @@ fn title(format: &dyn Adapter, dir: &Path) -> Option<String> {
     (!t.is_empty()).then(|| t.to_owned())
 }
 
-/// Ticked tasks on the feature's branch: speccoder ticks there, so the
-/// checkout lags until the branch is merged.
-fn branch_ticks(format: &dyn Adapter, root: &Path, name: &str, dir: &str) -> usize {
+/// Ticked and all tasks on the feature's branch: speccoder ticks (and
+/// appends convergence tasks) there, so the checkout lags until the
+/// branch is merged. `None` without the branch.
+fn branch_tasks(
+    format: &dyn Adapter,
+    root: &Path,
+    name: &str,
+    dir: &str,
+) -> Option<(usize, usize)> {
     let file = format!("{dir}/{}", format.messages().tasks_file);
-    crate::git::Git::at(root)
+    let out = crate::git::Git::at(root)
         .run(&["show", &format!("speccoder/{name}:{file}")])
-        .map_or(0, |out| {
-            let (parsed, _) = format.parse_tasks(&file, &String::from_utf8_lossy(&out));
-            parsed.tasks.iter().filter(|t| t.done).count()
-        })
+        .ok()?;
+    let (parsed, _) = format.parse_tasks(&file, &String::from_utf8_lossy(&out));
+    Some((
+        parsed.tasks.iter().filter(|t| t.done).count(),
+        parsed.tasks.len(),
+    ))
 }
 
 /// `speccoder feature`: every feature, the current one marked.

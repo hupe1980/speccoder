@@ -503,10 +503,10 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             ));
             continue;
         }
-        // The story's last task stopped with scenarios red: a person may
-        // rule a scenario's tests wrong — that scenario's tests are written
-        // again, nothing else of the oracle.
-        let rulings: Vec<_> = t
+        // A person may rule tests wrong: a red scenario's at the story's
+        // checkpoint (nothing else of the oracle), or the task's own test
+        // outside a story.
+        let mut rulings: Vec<_> = t
             .last_attempt
             .iter()
             .flat_map(|a| a.story_open.iter())
@@ -522,12 +522,30 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 )
                 .with_run(Runnable::RuleScenario {
                     task: t.id.clone(),
-                    scenario: id.clone(),
+                    scenario: Some(id.clone()),
                 });
                 a.input = Some(format!("What {id}'s tests assert that the spec does not say"));
                 a
             })
             .collect();
+        // Its own test (outside a story) failed, or was called wrong.
+        if let Some(path) = t.last_attempt.as_ref().and_then(|a| a.own_test.as_ref()) {
+            let mut a = action(
+                "decide",
+                "these tests are wrong".to_owned(),
+                format!("when `{path}` asserts what the spec does not say: the next run writes it again, your reason told to its author"),
+                flag(format!(
+                    "speccoder task rule {} --tests-wrong --reason \"…\"",
+                    t.id
+                )),
+            )
+            .with_run(Runnable::RuleScenario {
+                task: t.id.clone(),
+                scenario: None,
+            });
+            a.input = Some(format!("What `{path}` asserts that the spec does not say"));
+            rulings.push(a);
+        }
         // A step only a person can take — a `[YOU]` task that is ready, or
         // an honest stop: the agent's reason as its claim, and three ways on.
         if t.lane == speccoder_core::lane::Lane::Yours
@@ -599,7 +617,10 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             "stuck",
             Some(&t.id),
             format!("{}'s last attempt: {}", t.id, a.outcome.replace('_', " ")),
-            a.reason.clone(),
+            match &a.own_test {
+                Some(path) => format!("Its own test `{path}` failed. {}", a.reason),
+                None => a.reason.clone(),
+            },
             actions,
         ));
     }
@@ -1654,6 +1675,7 @@ mod try_with_tests {
             run_id: Some(run.to_owned()),
             reference: String::new(),
             story_open: Vec::new(),
+            own_test: None,
         };
         let flag = |c: String| c;
         let both = |x: &str| x == "copilot" || x == "opencode";

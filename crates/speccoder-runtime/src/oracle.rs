@@ -1146,6 +1146,7 @@ impl<'a> Author<'a> {
         sample: u8,
     ) -> Result<(Value, String, Vec<ContextEntry>), String> {
         let context = self.context(req, notes);
+        let suite = crate::pipeline::acceptance::suite(&self.ctx.root, &req.text);
         let input = substrate::acceptance::review_input(&substrate::acceptance::ReviewParts {
             bundle: self.bundle.clone(),
             requirement: json!({ "key": req.key, "title": req.title, "text": req.text }),
@@ -1158,6 +1159,7 @@ impl<'a> Author<'a> {
             context: &context,
             sample,
             test_layout: Some(&self.test_layout),
+            suite: &suite,
         });
         let task = format!("req-{}", req.key);
         let outcome = self
@@ -1697,6 +1699,7 @@ fn held_out(
             instructions: &author.instructions,
             runner: &bench.runner,
             layout: None,
+            told: &[],
         },
         &visible,
         &req.scenarios,

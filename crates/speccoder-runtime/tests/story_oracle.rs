@@ -304,11 +304,11 @@ fn the_story_s_last_task_must_close_it_or_stop_for_a_person() {
         Some(vec!["US1-2".to_owned()])
     );
     // The ruling is a person's decision, kept in speccoder's state.
-    let ruled = speccoder_runtime::acceptance_at::rule_scenario(
+    let ruled = speccoder_runtime::acceptance_at::rule_tests_wrong(
         r.path(),
         None,
         "T003",
-        "US1-2",
+        Some("US1-2"),
         "beta is not what the spec says",
         speccoder_core::actions::Via::Terminal,
         state.path(),
@@ -462,4 +462,174 @@ fn the_plan_says_when_a_link_names_nothing_or_no_task_judges_a_story() {
         codes.contains(&("PLAN-STORY-UNJUDGED", vec!["T005".to_owned()])),
         "{lints:?}"
     );
+}
+
+/// A task outside any story with its own test, wrong (it asserts what the
+/// spec does not say): the stop names the test and offers the ruling; the
+/// ruling's reason reaches the next author; the tick records it.
+#[test]
+fn a_task_outside_a_story_has_its_wrong_test_ruled_and_written_again() {
+    let tasks = format!(
+        "{}\n## Phase 7: Convergence\n\n- [ ] T026 Route both tables in `src/lib.rs` per US1/AC3 (partial)\n- [ ] T028 Describe it in specs/001-graph/quickstart.md\n",
+        TASKS.replace("- [ ]", "- [x]")
+    );
+    let r = repo_with(&tasks);
+    let state = tempfile::tempdir().unwrap();
+    let gap = |pattern: &str| {
+        json!({
+            "files": [{ "path": "tests/acceptance_t026.txt", "content": format!("checks {pattern}\n"), "scenarios": ["US1-3"] }],
+            "argv": ["./accept.sh", "--", "tests/acceptance_t026.txt", pattern],
+            "notes": [],
+        })
+    };
+    // Its test wants `wrongname`; the implementer writes gamma: it fails.
+    let f = FakeProvider::new();
+    f.will_structure(gap("fn wrongname"));
+    implements(&f, "pub fn gamma() {}");
+    implements(&f, "pub fn gamma() {}");
+    let res = run(r.path(), state.path(), "T026", &f);
+    assert_ne!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert!(
+        res.message()
+            .contains("its own test `tests/acceptance_t026.txt` failed"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        res.fix()
+            .iter()
+            .any(|f| f.contains("task rule T026 --tests-wrong --reason")),
+        "{:?}",
+        res.fix()
+    );
+    let saved = speccoder_runtime::attempts::list(r.path(), "001-graph");
+    assert_eq!(
+        saved.first().and_then(|a| a.own_test.clone()).as_deref(),
+        Some("tests/acceptance_t026.txt")
+    );
+    // Needs You offers the ruling, the test named.
+    let inbox = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    let Some(CommandData::Inbox(items)) = inbox.data() else {
+        panic!("{}", inbox.message());
+    };
+    let stuck = items
+        .items
+        .iter()
+        .find(|i| i.kind == "stuck" && i.task.as_deref() == Some("T026"))
+        .expect("T026 stuck");
+    assert!(
+        stuck
+            .detail
+            .contains("Its own test `tests/acceptance_t026.txt` failed"),
+        "{}",
+        stuck.detail
+    );
+    assert!(
+        stuck.actions.iter().any(|a| matches!(
+            &a.run,
+            Some(speccoder_core::actions::Runnable::RuleScenario { task, scenario: None }) if task == "T026"
+        )),
+        "{:?}",
+        stuck.actions.iter().map(|a| &a.label).collect::<Vec<_>>()
+    );
+
+    // A scenario on a task outside a story, none on a story task, any on a
+    // task without tests of its own: refused, saying what there is.
+    let rule = |task: &str, scenario: Option<&str>| {
+        speccoder_runtime::acceptance_at::rule_tests_wrong(
+            r.path(),
+            None,
+            task,
+            scenario,
+            "US1/AC3 says gamma, not wrongname",
+            speccoder_core::actions::Via::Terminal,
+            state.path(),
+        )
+    };
+    for (task, scenario, says) in [
+        ("T026", Some("US1-3"), "in no story"),
+        ("T001", None, "--scenario (US1-1, US1-2, US1-3)"),
+        ("T028", None, "no tests of its own"),
+    ] {
+        let refused = rule(task, scenario);
+        assert_ne!(refused.status(), CommandStatus::Ok, "{task}");
+        assert!(
+            refused.message().contains(says),
+            "{task}: {}",
+            refused.message()
+        );
+    }
+    let ruled = rule("T026", None);
+    assert_eq!(ruled.status(), CommandStatus::Ok, "{}", ruled.message());
+
+    // The next run: its author is told the person's words; the tick names them.
+    let f = FakeProvider::new();
+    f.will_structure(gap("fn gamma"));
+    implements(&f, "pub fn gamma() {}");
+    let res = run(r.path(), state.path(), "T026", &f);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let asked = serde_json::to_string(&f.asked()[0].prompt).unwrap();
+    assert!(
+        asked.contains("A person ruled the earlier tests wrong"),
+        "{asked}"
+    );
+    assert!(
+        asked.contains("US1/AC3 says gamma, not wrongname"),
+        "{asked}"
+    );
+    assert!(
+        trailer(r.path(), "Ruling").starts_with("tests-wrong by "),
+        "{}",
+        trailer(r.path(), "Ruling")
+    );
+    // Acted on: the next run tells no one.
+    assert!(
+        speccoder_runtime::acceptance_at::rulings(&speccoder_runtime::worktree::project_state_dir(
+            state.path(),
+            r.path()
+        ))
+        .unwrap()
+        .is_empty()
+    );
+}
+
+/// A story ticked before it had an oracle: nothing ran its scenarios, and
+/// nothing is left to turn them — said as such, never as red.
+#[test]
+fn a_story_ticked_before_its_oracle_is_said_as_such() {
+    let r = repo_with(&TASKS.replace("- [ ]", "- [x]"));
+    let status = speccoder_runtime::status::report(r.path(), None);
+    let Some(CommandData::Report(st)) = status.data() else {
+        panic!("{}", status.message());
+    };
+    let story = st.stories.first().expect("US1");
+    assert!(story.before_oracle && !story.proven, "{story:?}");
+}
+
+/// The author sees the project's tests on the code its task names, and is
+/// told not to contradict them.
+#[test]
+fn the_author_sees_the_suite_s_tests_on_the_same_code() {
+    let tasks = format!(
+        "{}\n## Phase 7: Convergence\n\n- [ ] T026 Keep whitespace in `escape_cell` in src/lib.rs per US1/AC3 (partial)\n",
+        TASKS.replace("- [ ]", "- [x]")
+    );
+    let r = repo_with(&tasks);
+    fs::create_dir_all(r.path().join("tests/unit")).unwrap();
+    fs::write(
+        r.path().join("tests/unit/test_cells.rs"),
+        "// escape_cell keeps whitespace\n#[test] fn keeps() { assert_eq!(escape_cell(\" a\"), \"\\\" a\\\"\"); }\n",
+    )
+    .unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-qm", "a unit test"]);
+    let asked = given(r.path(), "T026");
+    assert!(
+        asked.contains("The project's tests on the same code"),
+        "{asked}"
+    );
+    assert!(asked.contains("tests/unit/test_cells.rs"), "{asked}");
+    // Without a cited name it touches, no such section.
+    let plain = given(r.path(), "T001");
+    assert!(!plain.contains("The project's tests on the same code"));
 }

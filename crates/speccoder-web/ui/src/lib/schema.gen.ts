@@ -2964,6 +2964,11 @@ export interface LastAttempt {
    * last task stopped (`STORY-OPEN`): each can be ruled wrong.
    */
   story_open?: string[];
+  /**
+   * The task's own test (outside a story) that failed, or that the
+   * implementer called wrong: it can be ruled wrong.
+   */
+  own_test?: string | null;
 }
 
 /** A listing speccoder ran because the earlier sources left a file undecided. */
@@ -4997,15 +5002,16 @@ export type Runnable =
     revoke: boolean;
   }
   /**
-   * Rule that one scenario's oracle tests are wrong (the input is the
-   * reason): the next run writes that scenario's tests again.
+   * Rule that a task's tests are wrong (the input is the reason): one
+   * scenario's oracle tests, or — none named — the task's own test
+   * outside a story. The next run writes them again.
    */
   | {
     kind: "rule_scenario";
     /** The task that met them. */
     task: string;
-    /** The scenario (`US3-2`). */
-    scenario: string;
+    /** The scenario (`US3-2`); none: the task's own test. */
+    scenario: string | null;
   }
   /**
    * Install the bundled `speccoder` Spec Kit preset through Spec Kit's
@@ -5804,6 +5810,11 @@ export interface StoryScenarios {
    * report and the board leave it out.
    */
   proven?: boolean;
+  /**
+   * Every task done before the story had an oracle: nothing ran its
+   * scenarios, and nothing is still to turn them.
+   */
+  before_oracle?: boolean;
 }
 
 /** One set's strength. */

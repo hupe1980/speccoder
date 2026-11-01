@@ -393,6 +393,13 @@
           "items": {
             "type": "string"
           }
+        },
+        "own_test": {
+          "description": "The task's own test (outside a story) that failed, or that the\nimplementer called wrong: it can be ruled wrong.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -787,6 +794,10 @@
         },
         "proven": {
           "description": "Every task done and every scenario green: the spec shows it, the\nreport and the board leave it out.",
+          "type": "boolean"
+        },
+        "before_oracle": {
+          "description": "Every task done before the story had an oracle: nothing ran its\nscenarios, and nothing is still to turn them.",
           "type": "boolean"
         }
       },

@@ -829,7 +829,7 @@ fn speccoder(argv: &[String], constant: bool) -> How {
                 "rule" if a.iter().any(|w| w == "--tests-wrong") => asking(
                     Runnable::RuleScenario {
                         task: t,
-                        scenario: flag(a, "--scenario").unwrap_or_default().to_owned(),
+                        scenario: flag(a, "--scenario").map(str::to_owned),
                     },
                     a,
                     flag(a, "--reason"),

@@ -24,6 +24,9 @@ pub(crate) struct AcceptanceSetup<'a> {
     /// The project's test layout: where acceptance files go (`None`: the
     /// author places them by the old naming rule).
     pub(crate) layout: Option<&'a crate::layout::TestLayout>,
+    /// A person's rulings that the task's earlier tests were wrong: their
+    /// words, told to the author verbatim.
+    pub(crate) told: &'a [String],
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -113,6 +116,10 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
             );
         }
     };
+    let suite = suite(
+        a.worktree,
+        a.bundle["task"]["title"].as_str().unwrap_or_default(),
+    );
     let input = substrate::acceptance::input(
         a.bundle.clone(),
         a.scenarios,
@@ -120,6 +127,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         &manifest,
         a.instructions,
         placement.as_ref(),
+        (a.told, &suite),
     );
     let outcome = a.rt.block_on(a.plane.acceptance(a.feature, a.task, input));
     let outcome = match outcome {
@@ -1006,6 +1014,78 @@ pub(crate) fn strengthen(
         argv,
         report,
     })
+}
+
+/// The project's tests that name what the task line names (a backticked
+/// function, type or file's stem): at most three files, 6 KiB in all, each
+/// trimmed with a note — the tests a new test must not contradict.
+pub(crate) fn suite(worktree: &Path, title: &str) -> Vec<substrate::acceptance::SuiteTest> {
+    const FILES: usize = 3;
+    const BUDGET: usize = 6 * 1024;
+    let mut names: Vec<String> = title
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .flat_map(|span| {
+            span.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '/' || c == '.'))
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .map(|w| {
+            // A path names its file's stem; a call its function.
+            let file = w.rsplit('/').next().unwrap_or(&w).to_owned();
+            file.split('.').next().unwrap_or(&file).to_owned()
+        })
+        .filter(|w| w.len() >= 4 && w.chars().any(|c| c.is_alphabetic()))
+        .collect();
+    names.sort();
+    names.dedup();
+    if names.is_empty() {
+        return Vec::new();
+    }
+    let mut args = vec!["grep", "-l", "-w", "-I"];
+    for n in &names {
+        args.extend(["-e", n.as_str()]);
+    }
+    let Ok(out) = crate::git::Git::at(worktree).line(&args) else {
+        return Vec::new();
+    };
+    let is_test = |p: &str| {
+        p.split('/').any(|seg| {
+            let s = seg.to_ascii_lowercase();
+            s == "tests"
+                || s == "test"
+                || s == "spec"
+                || s == "__tests__"
+                || s.starts_with("test_")
+                || s.contains("_test.")
+                || s.contains(".test.")
+                || s.contains(".spec.")
+        })
+    };
+    let mut left = BUDGET;
+    out.lines()
+        .filter(|p| is_test(p))
+        .take(FILES)
+        .filter_map(|p| {
+            let text = std::fs::read_to_string(worktree.join(p)).ok()?;
+            let room = left.min(BUDGET / FILES);
+            let content = if text.len() > room {
+                let cut = (0..=room)
+                    .rev()
+                    .find(|i| text.is_char_boundary(*i))
+                    .unwrap_or(0);
+                format!("{}\n… (trimmed)", &text[..cut])
+            } else {
+                text
+            };
+            left = left.saturating_sub(content.len());
+            Some(substrate::acceptance::SuiteTest {
+                path: p.to_owned(),
+                content,
+            })
+        })
+        .collect()
 }
 
 /// What judges a task outside any story (setup, polish, convergence):

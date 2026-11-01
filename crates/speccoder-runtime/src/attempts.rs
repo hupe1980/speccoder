@@ -39,6 +39,9 @@ pub struct Saved {
     pub usage: Option<serde_json::Value>,
     /// The story's scenarios still red when its last task stopped.
     pub story_open: Vec<String>,
+    /// The task's own test that failed, or that the implementer called
+    /// wrong (a task outside a story): it can be ruled wrong.
+    pub own_test: Option<String>,
     /// The full ref name.
     pub reference: String,
     /// The commit it points at.
@@ -69,6 +72,8 @@ pub struct Record<'a> {
     pub usage: Option<&'a serde_json::Value>,
     /// The story's scenarios still red, when the story's last task stopped.
     pub story_open: &'a [String],
+    /// The task's own test that failed or was called wrong (outside a story).
+    pub own_test: Option<&'a str>,
 }
 
 /// The `Usage:` trailer speccoder writes on its commits, or nothing.
@@ -132,6 +137,7 @@ pub fn save(
         pending,
         usage,
         story_open,
+        own_test,
     } = *record;
     let git = Git::at(dir);
     let tree = worktree::checkpoint(dir, tmp)?;
@@ -150,7 +156,7 @@ pub fn save(
     };
     let reason = reason.as_str();
     let message = format!(
-        "speccoder attempt: {task} {outcome}\n\n{reason}\n\nSpec-Task: {feature}/{task}\nOutcome: {outcome}\n{}{}{}{}",
+        "speccoder attempt: {task} {outcome}\n\n{reason}\n\nSpec-Task: {feature}/{task}\nOutcome: {outcome}\n{}{}{}{}{}",
         run.map(|r| format!("Run: {r}\n")).unwrap_or_default(),
         Some(
             story_open
@@ -163,6 +169,10 @@ pub fn save(
         .filter(|t| !t.is_empty())
         .map(|t| format!("Story-Open: {t}\n"))
         .unwrap_or_default(),
+        own_test
+            .filter(|p| !p.contains('\n'))
+            .map(|p| format!("Own-Test: {p}\n"))
+            .unwrap_or_default(),
         usage_trailer(usage),
         // Compact JSON is one line: a trailer value.
         pending
@@ -191,6 +201,7 @@ pub fn save(
         pending: pending.cloned(),
         usage: usage.cloned(),
         story_open: story_open.to_vec(),
+        own_test: own_test.map(str::to_owned),
         reference,
         commit,
     })
@@ -243,7 +254,7 @@ pub fn restore_head(dir: &Path, tmp: &Path) -> Result<(), GitError> {
 /// The saved attempts of `feature`, newest first.
 pub fn list(repo: &Path, feature: &str) -> Vec<Saved> {
     let format = format!(
-        "--format=%(refname){FS}%(objectname){FS}%(trailers:key=Spec-Task,valueonly){FS}%(trailers:key=Outcome,valueonly){FS}%(trailers:key=Run,valueonly){FS}%(trailers:key=Pending,valueonly){FS}%(trailers:key=Usage,valueonly){FS}%(trailers:key=Story-Open,valueonly){FS}%(contents:body){RS}"
+        "--format=%(refname){FS}%(objectname){FS}%(trailers:key=Spec-Task,valueonly){FS}%(trailers:key=Outcome,valueonly){FS}%(trailers:key=Run,valueonly){FS}%(trailers:key=Pending,valueonly){FS}%(trailers:key=Usage,valueonly){FS}%(trailers:key=Story-Open,valueonly){FS}%(trailers:key=Own-Test,valueonly){FS}%(contents:body){RS}"
     );
     let out = Git::at(repo)
         .run(&[
@@ -266,6 +277,7 @@ pub fn list(repo: &Path, feature: &str) -> Vec<Saved> {
                 pending,
                 usage,
                 story_open,
+                own_test,
                 body,
             ] = f[..]
             else {
@@ -293,6 +305,9 @@ pub fn list(repo: &Path, feature: &str) -> Vec<Saved> {
                     .filter(|t| !t.is_empty())
                     .map(str::to_owned)
                     .collect(),
+                own_test: Some(own_test.trim())
+                    .filter(|p| !p.is_empty())
+                    .map(str::to_owned),
                 reference: reference.to_owned(),
                 commit: commit.to_owned(),
             })
@@ -346,6 +361,7 @@ mod tests {
                 pending: None,
                 usage: None,
                 story_open: &[],
+                own_test: None,
             },
         )
         .unwrap();

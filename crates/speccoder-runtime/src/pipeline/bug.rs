@@ -428,6 +428,7 @@ fn project_view(c: &Ctx<'_>) -> (Vec<String>, String) {
         instructions: c.instructions,
         runner: c.runner,
         layout: None,
+        told: &[],
     };
     let files: Vec<String> = worktree::checkpoint(setup.worktree, setup.tmp)
         .and_then(|cp| worktree::files(setup.worktree, &cp))
