@@ -661,9 +661,12 @@ fn a_run_in_another_process_leaves_the_journal_readable() {
     until(&markers.path().join("ready"));
     let before = fs::read(journal.join(speccoder_runtime::substrate::JOURNAL)).unwrap();
 
+    // A reader that waited for the writer would wait until it is told to
+    // let go (after these checks, or 30 s): 10 s tells the two apart
+    // however loaded the machine is.
     let timed = |what: &str, started: std::time::Instant| {
         assert!(
-            started.elapsed() < std::time::Duration::from_secs(1),
+            started.elapsed() < std::time::Duration::from_secs(10),
             "{what} waited {:?} for the other process",
             started.elapsed()
         );
