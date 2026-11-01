@@ -6,12 +6,15 @@
   import { KINDS, offer, ofTask } from "../lib/actions";
   import type { Action, Task } from "../lib/types";
   import { neverRan, regressionLabel } from "../lib/evidence";
+  import { shareChip, shareWords, storyLine } from "../lib/story";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
   let expanded = $state<Record<string, boolean>>({});
   const LIMIT = 5;
 
   const tasks = $derived<Task[]>(app.report?.data?.tasks ?? []);
+  // Each open story's scenarios: verified by a tick, or left for its checkpoint.
+  const stories = $derived(app.report?.data?.stories ?? []);
   const waitingFor = $derived(new Set(app.approvals.map((p) => p.task)));
   // This app's job, else another speccoder's run of this feature.
   const running = $derived(
@@ -82,7 +85,18 @@
     <p class="muted">The next step above writes the task list.</p>
   </div>
 {:else}
-  <div class="board" role="list">
+  {#if stories.length}
+    <ul class="stories" aria-label="Stories">
+      {#each stories as s (s.story)}
+        <li><button class="story" disabled={!s.checkpoint} onclick={() => s.checkpoint && app.selectTask(s.checkpoint)} aria-label="{s.story}: {storyLine(s)}" title={s.checkpoint ? `Open ${s.checkpoint}, the task that judges what is left` : "No task of this story is code: see doctor"}>
+          <strong>{s.story}</strong>
+          <span class="marks" aria-hidden="true">{#each s.scenarios as m (m.id)}<span class="mk" class:on={!!m.verified_by} title="{m.id}: {m.verified_by ? `verified by ${m.verified_by}` : `left for ${s.checkpoint ?? 'no task'}`}"></span>{/each}</span>
+          <span class="sl">{storyLine(s)}</span>
+        </button></li>
+      {/each}
+    </ul>
+  {/if}
+  <div class="board">
     {#each grouped as lane (lane.key)}
       <section class="lane" aria-label={lane.title}>
         <h3 class="s-{lane.key}"><Icon name={symbol(lane.key)} size={14} weight={2} /><span class="title">{lane.title}</span><span class="count">{lane.tasks.length}</span></h3>
@@ -91,12 +105,15 @@
           {@const live = running === t.id}
           {@const why = regressionLabel(t)}
           {@const never = neverRan(t)}
-          <article class="card" class:on={app.selected === t.id} class:live role="listitem" oncontextmenu={(e) => menu(t, e)} {...askable("task", { task: t.id, feature: app.feature }, `${t.id} ${t.title}`)}>
+          <article class="card" class:on={app.selected === t.id} class:live oncontextmenu={(e) => menu(t, e)} {...askable("task", { task: t.id, feature: app.feature }, `${t.id} ${t.title}`)}>
             <button class="open" onclick={() => app.selectTask(t.id)} aria-label="{t.id} {t.title}, {why ?? word(laneOf(t))}" title={why ?? undefined}>
               <span class="row"><span class="id mono">{t.id}</span>{#if t.lane === "planning"}<span class="who planning" title="Planning work: design documents in the feature's folder, judged by the checks">📐 Planning</span>{:else if t.lane === "yours"}<span class="who yours" title="A step only you can take: open it to say you did it, give a hint, or skip it">🙋 Yours</span>{/if}{#if t.phase}<span class="phase" title={t.phase}>{short(t.phase)}</span>{/if}</span>
               <span class="t"><Code text={t.title} /></span>
               {#if t.drift?.requirements.length}
                 <span class="foot changed" title="The spec changed since this tick: its evidence is for the earlier wording"><Icon name="exclaim" size={12} weight={2.2} />Spec changed: {t.drift.requirements.map((r) => r.id).join(", ")}</span>
+              {/if}
+              {#if shareChip(t.share)}
+                <span class="foot share" title="Judged by {t.share ? shareWords(t.share) : ''}"><Icon name="seal" size={12} />{shareChip(t.share)}</span>
               {/if}
               {#if t.set_aside}
                 <span class="foot aside" title="Changes found in the worktree when its run started — keep or discard them in the inspector"><Icon name="tray" size={12} />Changes set aside</span>
@@ -137,6 +154,16 @@
   h3 { display: flex; align-items: center; gap: 0.4rem; margin: 0 0.25rem 0.15rem; font-size: 0.82rem; font-weight: 650; background: none; }
   h3 .title { color: var(--text); }
   .count { margin-left: auto; min-width: 1.5rem; height: 1.25rem; padding: 0 0.4rem; border-radius: 999px; display: grid; place-items: center; background: var(--fill); color: var(--muted); font: 600 0.72rem/1 var(--rounded); }
+  .stories { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 0.9rem; padding: 0; list-style: none; }
+  .story { all: unset; display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.7rem; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); font-size: 0.8rem; cursor: pointer; }
+  .story:disabled { cursor: default; opacity: 0.8; }
+  .story:not(:disabled):hover { box-shadow: var(--shadow-md); }
+  .story:focus-visible { box-shadow: 0 0 0 3.5px var(--focus); }
+  .marks { display: inline-flex; gap: 3px; }
+  .mk { width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--faint); }
+  .mk.on { background: var(--verified-fill); box-shadow: none; }
+  .sl { color: var(--text-2); }
+  .share { color: var(--text-2); }
   .card {
     position: relative; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
     transition: transform 260ms var(--spring), box-shadow var(--speed) var(--ease);

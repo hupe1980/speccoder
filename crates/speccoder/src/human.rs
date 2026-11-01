@@ -898,6 +898,40 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
                 shorten(&a.reason, 90)
             )?;
         }
+        if let Some(sh) = &t.share {
+            writeln!(w, "      judged by: {}", share_words(sh))?;
+        }
+    }
+    // Each story's scenarios: verified by a tick (●) or left (○), and the
+    // task that judges what is left.
+    for st in &r.stories {
+        let marks: String = st
+            .scenarios
+            .iter()
+            .map(|m| {
+                if m.verified_by.is_some() {
+                    '●'
+                } else {
+                    '○'
+                }
+            })
+            .collect();
+        let done = st
+            .scenarios
+            .iter()
+            .filter(|m| m.verified_by.is_some())
+            .count();
+        let n = st.scenarios.len();
+        let rest = match (&st.checkpoint, done == n) {
+            (_, true) => "every scenario verified".to_owned(),
+            (Some(c), false) => format!("{c} judges the rest"),
+            (None, false) => "no task judges the rest — see `speccoder doctor`".to_owned(),
+        };
+        writeln!(
+            w,
+            "Story      {} {marks} {done} of {n} verified · {rest}",
+            st.story
+        )?;
     }
     if !r.trace.is_empty() {
         // The rows are `--json`'s; here, how many are cited and which not.
@@ -2228,4 +2262,41 @@ pub fn ask_conversations(
             )
         })
         .collect()
+}
+
+/// What judges a task, in words: `linked US3-1`, `checkpoint: US3-2 US3-3 + together`,
+/// `the test author's choice of US3-1…US3-3`, `deferred to T021`.
+fn share_words(sh: &speccoder_core::story::Share) -> String {
+    use speccoder_core::story::Share;
+    match sh {
+        Share::Linked { scenarios } => format!("linked {}", scenarios.join(" ")),
+        Share::Checkpoint {
+            scenarios,
+            composition,
+        } => {
+            if scenarios.is_empty() {
+                "its story's checkpoint — every scenario already verified".to_owned()
+            } else {
+                format!(
+                    "its story's checkpoint: {}{}",
+                    scenarios.join(" "),
+                    if *composition { " + together" } else { "" }
+                )
+            }
+        }
+        Share::Authored {
+            scenarios,
+            checkpoint,
+        } => format!(
+            "the test author's choice of {}{}",
+            scenarios.join(" "),
+            checkpoint
+                .as_ref()
+                .map(|c| format!(" · {c} judges what it leaves"))
+                .unwrap_or_default()
+        ),
+        Share::Deferred { checkpoint } => {
+            format!("its regression checks; its scenarios at {checkpoint}")
+        }
+    }
 }

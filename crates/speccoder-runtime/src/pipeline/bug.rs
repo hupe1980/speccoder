@@ -2105,6 +2105,7 @@ impl NativeBug {
                 parallel: false,
             },
             dependencies: Vec::new(),
+            story_tasks: Vec::new(),
         }
     }
 }

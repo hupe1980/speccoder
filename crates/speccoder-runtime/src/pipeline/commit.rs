@@ -195,10 +195,104 @@ pub(crate) struct TickFacts<'a> {
     pub(crate) checklists_overridden: bool,
     /// More trailers (a bug task's `Bug:`, `Acceptance:`, `Fixes`).
     pub(crate) extra: String,
+    /// The story's scenarios as worded now: what `Scenarios:` digests.
+    pub(crate) scenarios: &'a [speccoder_core::spec::ScenarioRef],
+}
+
+/// The scenarios a verified tick's acceptance tests cite, once each in the
+/// order cited, each as a digest of its id and wording: `Scenarios:
+/// US3-1@3f9a0c1d2e4b, …` (the id kept for a reader where it is one plain
+/// word; an OpenSpec scenario's name is not). The story's checkpoint no
+/// longer has to judge them while they are worded the same.
+pub(crate) fn scenarios_trailer(
+    acceptance: Option<&serde_json::Value>,
+    scenarios: &[speccoder_core::spec::ScenarioRef],
+) -> String {
+    let mut cited: Vec<&str> = Vec::new();
+    for t in acceptance
+        .and_then(|a| a["tests"].as_array())
+        .into_iter()
+        .flatten()
+    {
+        for s in t["scenarios"].as_array().into_iter().flatten() {
+            if let Some(s) = s.as_str().filter(|s| !cited.contains(s)) {
+                cited.push(s);
+            }
+        }
+    }
+    let plain = |id: &str| {
+        !id.is_empty()
+            && id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    };
+    let marked: Vec<String> = cited
+        .iter()
+        .filter_map(|id| scenarios.iter().find(|s| s.id == *id))
+        .map(|s| {
+            let d = scenario_digest(&s.id, &s.text);
+            if plain(&s.id) {
+                format!("{}@{d}", s.id)
+            } else {
+                d
+            }
+        })
+        .collect();
+    if marked.is_empty() {
+        String::new()
+    } else {
+        format!("Scenarios: {}\n", marked.join(", "))
+    }
+}
+
+/// A scenario, digested: 12 hex of SHA-256 over its id, a NUL and its
+/// wording with runs of whitespace as one space.
+pub(crate) fn scenario_digest(id: &str, text: &str) -> String {
+    let words = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    crate::integrity::sha256_hex(format!("{id}\0{words}").as_bytes())[..12].to_owned()
+}
+
+/// Per task of `feature`, the scenario digests its ticks on `rev`'s
+/// first-parent history recorded (`Scenarios:`, read by git's trailer
+/// parser) — the one reader the pipeline and the report share.
+pub(crate) fn verified_digests(
+    repo: &Path,
+    rev: &str,
+    feature: &str,
+) -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
+    let log = crate::git::Git::at(repo)
+        .run(&[
+            "log",
+            "--first-parent",
+            "--format=%(trailers:key=Spec-Task,valueonly,separator=%x20)%x1f%(trailers:key=Scenarios,valueonly,separator=%x20)%x1e",
+            rev,
+            "--",
+        ])
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .unwrap_or_default();
+    let mut out: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
+        std::collections::BTreeMap::new();
+    for record in log.split('\u{1e}') {
+        let Some((task, marked)) = record.trim().split_once('\u{1f}') else {
+            continue;
+        };
+        let Some(task) = task.trim().strip_prefix(&format!("{feature}/")) else {
+            continue;
+        };
+        for token in marked.split(|c: char| c == ',' || c.is_whitespace()) {
+            let d = token.rsplit('@').next().unwrap_or_default();
+            if d.len() == 12 && d.bytes().all(|b| b.is_ascii_hexdigit()) {
+                out.entry(task.to_owned())
+                    .or_default()
+                    .insert(d.to_ascii_lowercase());
+            }
+        }
+    }
+    out
 }
 
 /// The commit message of a ticked task: subject, title, and the trailers
-/// `report` reads back (`Spec-Task`, `Verdict`, `Regression-Only`, `Red`, `Flaky`,
+/// `report` reads back (`Spec-Task`, `Verdict`, `Regression-Only`, `Red`, `Scenarios`, `Flaky`,
 /// `Scope-Outside`, `Checklists`, `Held-Out`, `Acceptance-Strength`,
 /// `Ruling`, `Run`, `Usage`, `Mutation`).
 pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
@@ -235,6 +329,9 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
             .unwrap_or_default(),
     );
     evidence.push_str(&held_out_trailer(report.acceptance.as_ref()));
+    if verdict_word == "verified" {
+        evidence.push_str(&scenarios_trailer(report.acceptance.as_ref(), f.scenarios));
+    }
     if let Some(story) = report
         .acceptance
         .as_ref()
@@ -375,6 +472,7 @@ pub(crate) fn set_aside_leftovers(
             reason: "the worktree had uncommitted changes when a run started (an interrupted run, or edits by hand); saved and set aside — `speccoder task restore` keeps them, `task drop` discards them",
             pending: None,
             usage: None,
+            defer_to: None,
         },
     )
     .and_then(|saved| crate::attempts::restore_head(wt_root, tmp).map(|()| saved.reference))
@@ -397,6 +495,7 @@ mod tests {
                 red: None,
                 checklists_overridden: false,
                 extra: String::new(),
+                scenarios: &[],
             })
         };
         assert_eq!(trailer(&facts(&report), "Executor"), None);

@@ -833,6 +833,13 @@ fn speccoder(argv: &[String], constant: bool) -> How {
                     "Why the tests are right",
                 ),
                 "done" => perform(Runnable::Done { task: t }, a),
+                "defer" => perform(
+                    Runnable::DeferAcceptance {
+                        task: t,
+                        revoke: a.iter().any(|w| w == "--revoke"),
+                    },
+                    a,
+                ),
                 "restore" => perform(Runnable::KeepSetAside { task: t }, a),
                 "drop" => confirmed(
                     Runnable::DropSetAside { task: t.clone() },

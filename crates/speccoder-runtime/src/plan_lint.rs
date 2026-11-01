@@ -2,7 +2,7 @@
 //! produce no evidence. Deterministic, text-level, warnings only — they
 //! never block, delay or re-order a run, and never edit the plan.
 //!
-//! [`RULES`] is the one source of the three rules: the lints' codes and
+//! [`RULES`] is the one source of the four rules: the lints' codes and
 //! titles, and the sentence the `speccoder` Spec Kit preset's tasks
 //! template states (a test holds the template to it).
 
@@ -22,8 +22,8 @@ pub struct Rule {
     pub preset: &'static str,
 }
 
-/// The three rules.
-pub const RULES: [Rule; 3] = [
+/// The four rules.
+pub const RULES: [Rule; 4] = [
     Rule {
         code: "PLAN-BEHAVIOUR-EARLY",
         preset: "Implement a story's behaviour inside that story's phase: Setup and Foundational tasks only create structure — manifests, empty modules, signatures that do not yet behave.",
@@ -31,6 +31,10 @@ pub const RULES: [Rule; 3] = [
     Rule {
         code: "PLAN-TEST-ONLY-TASKS",
         preset: "Write no task whose only output is tests: speccoder writes each story's acceptance tests from its scenarios and judges the implementing tasks by them.",
+    },
+    Rule {
+        code: "PLAN-SCENARIO-UNKNOWN",
+        preset: "Name, in each implementing task's line, the scenarios it makes hold — `(scenarios US1-1, US1-2)`: the story's number and the scenario's position in it; that task is judged by exactly them, and the story's last task that is not documentation by every scenario not yet verified.",
     },
     Rule {
         code: "PLAN-TESTS-UNCOLLECTED",
@@ -200,10 +204,96 @@ pub fn lints(adapter: &dyn Adapter, snapshot: &ProjectSnapshot, root: &Path) -> 
     if let Some(l) = uncollected(adapter, tasks, root, any_ticked) {
         out.push(l);
     }
+    out.extend(story_links(adapter, snapshot, tasks));
     if let Some(structure) = adapter.plan_structure(snapshot) {
         out.extend(behaviour_early(adapter, &structure, any_ticked));
         if let Some(l) = test_only(adapter, &structure, any_ticked) {
             out.push(l);
+        }
+    }
+    out
+}
+
+/// `PLAN-SCENARIO-UNKNOWN`: a task naming a scenario its story does not
+/// have (the link is ignored); `PLAN-STORY-UNJUDGED`: a story whose every
+/// task is planning work, so no task is judged by its scenarios.
+fn story_links(
+    adapter: &dyn Adapter,
+    snapshot: &ProjectSnapshot,
+    tasks: &speccoder_core::snapshot::ParsedTasks,
+) -> Vec<PlanLint> {
+    let unit_dir = snapshot
+        .feature
+        .as_ref()
+        .map(|f| f.feature.dir.clone())
+        .unwrap_or_default();
+    let judged = adapter.rules().judged;
+    let mut out = Vec::new();
+    for t in tasks.tasks.iter().filter(|t| !t.scenarios.is_empty()) {
+        let known: Vec<String> = adapter
+            .scenarios(snapshot, &t.id)
+            .into_iter()
+            .map(|s| s.id)
+            .collect();
+        let unknown: Vec<&str> = t
+            .scenarios
+            .iter()
+            .filter(|s| !known.contains(s))
+            .map(String::as_str)
+            .collect();
+        if unknown.is_empty() {
+            continue;
+        }
+        out.push(PlanLint {
+            code: "PLAN-SCENARIO-UNKNOWN",
+            tasks: vec![t.id.clone()],
+            detail: format!(
+                "{} names {}, not a scenario of {} — the link is ignored: its test author chooses, and the story's checkpoint judges what is left",
+                t.id,
+                unknown.join(", "),
+                t.story.as_deref().unwrap_or("its story")
+            ),
+            fix: vec![format!(
+                "→ correct the link in {}'s line (its story's scenarios: {})",
+                t.id,
+                known.join(", ")
+            )],
+            acceptance_at: None,
+        });
+    }
+    let mut stories: Vec<&str> = Vec::new();
+    for s in tasks.tasks.iter().filter_map(|t| t.story.as_deref()) {
+        if !stories.contains(&s) {
+            stories.push(s);
+        }
+    }
+    for story in stories {
+        let members: Vec<&speccoder_core::snapshot::Task> = tasks
+            .tasks
+            .iter()
+            .filter(|t| t.story.as_deref() == Some(story))
+            .collect();
+        // Planning work and a person's steps are judged by the checks alone.
+        let all_planning = members.iter().all(|t| {
+            t.yours
+                || speccoder_core::lane::by_paths(&t.title, &unit_dir, &judged)
+                    == speccoder_core::lane::Lane::Planning
+        });
+        let has_scenarios = members
+            .first()
+            .is_some_and(|t| !adapter.scenarios(snapshot, &t.id).is_empty());
+        if all_planning && has_scenarios {
+            out.push(PlanLint {
+                code: "PLAN-STORY-UNJUDGED",
+                tasks: members.iter().map(|t| t.id.clone()).collect(),
+                detail: format!(
+                    "every task of {story} is planning work or a step only you take: no task is judged by its scenarios"
+                ),
+                fix: vec![format!(
+                    "→ add the task that implements {story}, or re-plan"
+                )],
+                acceptance_at: None,
+            });
         }
     }
     out

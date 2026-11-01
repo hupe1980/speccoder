@@ -443,6 +443,7 @@ mod tests {
             commit: Some("abc".to_owned()),
             run_id: None,
             last_attempt: None,
+            share: None,
             set_aside: None,
             bug: None,
             regression: None,

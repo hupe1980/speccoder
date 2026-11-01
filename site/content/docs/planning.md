@@ -71,6 +71,8 @@ Before the creating skill runs, the description is compared with every feature's
 | `PLAN-TESTS-UNCOLLECTED` | Test paths a task names that the runner won't collect (and no task creates the file that would declare them); test files in the tree nothing runs |
 | `PLAN-BEHAVIOUR-EARLY` | A Setup or Foundational task that names, in code, a symbol a story is about: if it implements it, the story's tasks tick regression-only |
 | `PLAN-TEST-ONLY-TASKS` | Story tasks that only write tests, beside the task that implements the story |
+| `PLAN-SCENARIO-UNKNOWN` | A task that names a scenario its story does not have, `(scenarios US9-4)`: the link is ignored ([what judges each task](@/docs/evidence.md#what-judges-each-task)) |
+| `PLAN-STORY-UNJUDGED` | A story whose every task is documentation or a step only you take: no task is judged by its scenarios |
 
 For `PLAN-BEHAVIOUR-EARLY`, `speccoder task acceptance-at <TASK> --story <US>` records that the story's acceptance tests are written at that task: its tick can then be verified on the story's scenarios. It is a decision in the state directory, not an edit of the spec, and `--revoke` takes it back. Re-planning is offered only while no task of the feature is ticked.
 

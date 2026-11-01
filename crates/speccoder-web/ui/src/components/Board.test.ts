@@ -24,6 +24,7 @@ const host = vi.hoisted(() => ({
 vi.mock("../lib/app.svelte", () => ({ app: host.app }));
 
 import Board from "./Board.svelte";
+import { violations } from "../test/dom";
 
 let shown: ReturnType<typeof mount> | null = null;
 afterEach(() => {
@@ -78,5 +79,27 @@ describe("Board", () => {
     expect(yours!.textContent).toContain("🙋 Yours");
     expect(yours!.querySelector(".act")).toBeNull();
   });
-});
 
+  it("shows each open story's scenarios and what judges a task, and the strip opens the checkpoint", async () => {
+    host.app.report = {
+      data: {
+        tasks: [
+          task("T018", "ready", { share: { kind: "deferred", checkpoint: "T021" } }),
+          task("T020", "ready", { share: { kind: "linked", scenarios: ["US3-2"] } }),
+          task("T021", "blocked", { share: { kind: "checkpoint", scenarios: ["US3-1", "US3-3"], composition: true } }),
+        ],
+        stories: [{ story: "US3", scenarios: [{ id: "US3-1" }, { id: "US3-2", verified_by: "T020" }, { id: "US3-3" }], checkpoint: "T021" }],
+      },
+    };
+    shown = mount(Board, { target: document.body });
+    flushSync();
+    const strip = document.querySelector('button[aria-label^="US3"]') as HTMLButtonElement;
+    expect(strip.getAttribute("aria-label")).toBe("US3: 1 of 3 verified · T021 judges the rest");
+    expect(strip.querySelectorAll(".mk.on")).toHaveLength(1);
+    strip.click();
+    expect(host.app.selectTask).toHaveBeenCalledWith("T021");
+    const chips = [...document.querySelectorAll(".foot.share")].map((c) => c.textContent?.trim());
+    expect(chips).toEqual(expect.arrayContaining(["judged at T021", "US3-2", "checkpoint · 2 left"]));
+    expect(await violations()).toEqual([]);
+  });
+});

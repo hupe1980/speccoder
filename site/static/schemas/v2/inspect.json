@@ -405,6 +405,13 @@
             "type": "string"
           }
         },
+        "scenarios": {
+          "description": "The scenarios the task names — `(scenarios US3-1)` — upper-cased, in\nwritten order: what judges it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "phase": {
           "description": "Enclosing level-2 heading.",
           "type": [

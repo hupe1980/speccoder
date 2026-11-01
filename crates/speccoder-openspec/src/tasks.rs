@@ -286,6 +286,7 @@ pub fn parse(path: &str, text: &str) -> (ParsedTasks, Vec<Diagnostic>) {
                 yours: false,
                 title,
                 depends_on,
+                scenarios: Vec::new(),
                 phase,
                 subsection: None,
                 line: u32::try_from(no + 1).unwrap_or(u32::MAX),

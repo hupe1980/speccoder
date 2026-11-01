@@ -26,6 +26,10 @@ pub struct Bundle {
     pub task: TaskContext,
     /// Its direct dependencies, in document order.
     pub dependencies: Vec<DependencyContext>,
+    /// The other tasks of its story (OpenSpec: of its change), in document
+    /// order: what they do is theirs, not this task's.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub story_tasks: Vec<DependencyContext>,
 }
 
 /// The task as written.

@@ -571,6 +571,7 @@ mod look_tests {
 
     fn task(id: &str, state: &str, title: &str) -> TaskStatus {
         TaskStatus {
+            share: None,
             lane: speccoder_core::lane::Lane::default(),
             id: id.to_owned(),
             title: title.to_owned(),
@@ -624,6 +625,7 @@ mod look_tests {
         edit(&mut tasks);
         let r = CommandResult::ok("report", "8 tasks").with_data(CommandData::Report(Box::new(
             StatusReport {
+                stories: Vec::new(),
                 review: None,
                 issues: Vec::new(),
                 feature: "001-x".to_owned(),

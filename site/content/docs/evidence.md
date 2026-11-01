@@ -75,6 +75,17 @@ A file none of the three can decide stops the task, never ticked (`TESTS-COLLECT
 
 Acceptance and held-out tests count at green only when the green run collected at least as many tests as the red run — or, when red reported no count (it did not build), as many as the files declare — and at least one. A green run whose count cannot be read is no evidence.
 
+## What judges each task
+
+In a story of several tasks, code decides which scenarios judge each one — never the test author's choice alone:
+
+- **Linked**: a task that names its scenarios in its line, `(scenarios US3-1, US3-2)`, is judged by exactly those (ids: the story's number and the scenario's position in it). A link to no scenario of the story is ignored and reported (`PLAN-SCENARIO-UNKNOWN`).
+- **Checkpoint**: the story's last open task that is code — not documentation, not a step only you take — is judged by every scenario no earlier tick verified, and with two or more of them by one test of them together. Whatever order the tasks run in, the one that closes the story judges what is left. A verified tick records its scenarios with a digest of each one's wording (`Scenarios: US3-1@3f9a0c1d2e4b`); reworded since, a scenario counts as not verified.
+- **Deferred**: when a task's tests need later tasks of its story — its attempt stopped with them red — Needs You, the inspector and the stop offer **Judge at T021** (`speccoder task defer T018`). The task is then judged by its regression checks (`deferred_to_checkpoint`) and its scenarios move to the checkpoint. A person's decision, kept in speccoder's state; `--revoke` takes it back.
+- Otherwise the test author chooses among the story's scenarios, seeing the story's other tasks; the checkpoint judges what it leaves.
+
+`speccoder report` and the board show each story's scenarios — `US3 ●○○ 1 of 3 verified · T021 judges the rest` — and each open task what judges it. A story whose every task is documentation or yours has no checkpoint (`PLAN-STORY-UNJUDGED`); a finished story that left a scenario unjudged keeps its strip, saying so.
+
 ## Why a tick is regression-only
 
 Every `regression_only` tick carries one reason, decided by code, recorded in the commit (`Regression-Only:` trailer) and its signed statement, and worded the same everywhere:
@@ -90,6 +101,8 @@ Every `regression_only` tick carries one reason, decided by code, recorded in th
 | `not_red` | The acceptance tests did not fail first (build error, timeout, flaky, …) |
 | `already_passing` | They passed before the attempt — with the task whose tick made them pass |
 | `planning_work` | A planning task: design documents, not code ([who does a task](@/docs/running.md#who-does-a-task)) |
+| `story_verified` | Its story's checkpoint, every scenario already verified by earlier ticks |
+| `deferred_to_checkpoint` | You moved its acceptance to its story's checkpoint ([what judges each task](#what-judges-each-task)) |
 | `unrecorded` | Ticked by an earlier speccoder: the reason was not recorded |
 
 For `already_passing`, speccoder runs the acceptance tests on the feature's earlier ticks (bisected, at most five sandboxed runs, each in a scratch worktree of its own, under the checks' deadline) to find which task implemented the behaviour, or that it passed before the feature. For a section added to a story's file, only that section's tests run (Rust, pytest and Go; for others no answer is given). Any run that cannot say — a worktree that cannot be made, a timeout, output that cannot be read — ends the search with "could not be determined", never a task's name. A feature with at least three ticks of which more than half are regression-only gets one **Little Was Verified** item in Needs You, with the reasons by count and the fix, until its branch is pushed.
@@ -107,7 +120,7 @@ After an attempt passes the visible checks, speccoder writes the held-out tests 
 | `absent` | None was kept: not generated, no visible tests to vary (`no_visible_tests`), or every file discarded (`not_red`, `unknown_scenario`, `path`, `command`, `limit`, `collision`). The commit says `Held-Out: absent=<reason>`; the verdict rests on the visible tests |
 | `tampered`, `leak_suspected` | The stored set changed, or the attempt contains a literal only the held-out tests hold: stopped for a person, saved, not ticked |
 
-The last task of a story with two or more scenarios also gets a composition test that exercises them together. `[acceptance] held_out = false` turns held-out tests off; the commit says `Held-Out: off`.
+A story's checkpoint with two or more scenarios left also gets a composition test that exercises them together. `[acceptance] held_out = false` turns held-out tests off; the commit says `Held-Out: off`.
 
 ### Where they are kept
 

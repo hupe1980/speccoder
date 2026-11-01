@@ -274,6 +274,15 @@ pub enum Runnable {
         /// Take the decision back.
         revoke: bool,
     },
+    /// Judge a task by its regression checks and its story's scenarios at
+    /// the story's checkpoint (`revoke`: take the decision back) — a
+    /// person's decision in the state directory, never an edit of the plan.
+    DeferAcceptance {
+        /// The task.
+        task: String,
+        /// Take the decision back.
+        revoke: bool,
+    },
     /// Install the bundled `speccoder` Spec Kit preset through Spec Kit's
     /// own `specify preset add` (`update`: the installed one, replaced).
     PresetAdd {
@@ -593,6 +602,8 @@ pub enum ActionKind {
     CodeNudge,
     /// [`Runnable::AcceptanceAt`].
     AcceptanceAt,
+    /// [`Runnable::DeferAcceptance`].
+    DeferAcceptance,
     /// [`Runnable::PresetAdd`].
     PresetAdd,
     /// [`Runnable::PlanThrough`].
@@ -655,6 +666,7 @@ impl ActionKind {
         Self::RevisionUndo,
         Self::CodeNudge,
         Self::AcceptanceAt,
+        Self::DeferAcceptance,
         Self::PresetAdd,
         Self::PlanThrough,
         Self::NewProject,
@@ -707,6 +719,7 @@ impl ActionKind {
             Self::RevisionUndo => "revision_undo",
             Self::CodeNudge => "code_nudge",
             Self::AcceptanceAt => "acceptance_at",
+            Self::DeferAcceptance => "defer_acceptance",
             Self::PresetAdd => "preset_add",
             Self::PlanThrough => "plan_through",
             Self::NewProject => "new_project",
@@ -851,6 +864,10 @@ impl ActionKind {
                 task: "T003".to_owned(),
                 revoke: false,
             },
+            Self::DeferAcceptance => Runnable::DeferAcceptance {
+                task: "T018".to_owned(),
+                revoke: false,
+            },
             Self::PresetAdd => Runnable::PresetAdd { update: false },
             Self::PlanThrough => Runnable::PlanThrough {
                 from: PlanFrom::Create {
@@ -942,6 +959,7 @@ impl Runnable {
             Self::RevisionUndo { .. } => ActionKind::RevisionUndo,
             Self::CodeNudge { .. } => ActionKind::CodeNudge,
             Self::AcceptanceAt { .. } => ActionKind::AcceptanceAt,
+            Self::DeferAcceptance { .. } => ActionKind::DeferAcceptance,
             Self::PresetAdd { .. } => ActionKind::PresetAdd,
             Self::PlanThrough { .. } => ActionKind::PlanThrough,
             Self::NewProject { .. } => ActionKind::NewProject,
@@ -1004,6 +1022,7 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         | Runnable::AllowAlways { task, .. }
         | Runnable::CodeNudge { task, .. }
         | Runnable::AcceptanceAt { task, .. }
+        | Runnable::DeferAcceptance { task, .. }
         | Runnable::DeclinePromotion { task } => Some(task.clone()),
         Runnable::Explore { resume, .. } => resume.clone(),
         Runnable::ExploreChoose { session, .. } => Some(session.clone()),

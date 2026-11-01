@@ -260,6 +260,7 @@ fn a_held_ruling_and_a_suspected_shortcut_are_their_own_decisions() {
             reason: "the test was rewritten to assert nothing",
             pending: None,
             usage: None,
+            defer_to: None,
         },
     )
     .unwrap();

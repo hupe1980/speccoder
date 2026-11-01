@@ -638,3 +638,85 @@ fn a_skill_that_stops_incomplete_says_why() {
         assert!(res.message().ends_with(says), "{}", res.message());
     }
 }
+
+/// The change is the story: its last code task is the checkpoint, every
+/// other task's test author chooses with the change's other tasks in view.
+#[test]
+fn a_change_has_one_checkpoint_and_no_links() {
+    use speccoder_core::story::Share;
+    let r = repo("sample", "");
+    let res = speccoder_runtime::status::report(r.path(), Some(CHANGE));
+    let Some(speccoder_core::CommandData::Report(rep)) = res.data() else {
+        panic!("{}", res.message());
+    };
+    let share = |id: &str| {
+        rep.tasks
+            .iter()
+            .find(|t| t.id == id)
+            .and_then(|t| t.share.clone())
+    };
+    assert!(
+        matches!(share("2.2"), Some(Share::Checkpoint { .. })),
+        "{:?}",
+        share("2.2")
+    );
+    assert!(
+        matches!(share("1.2"), Some(Share::Authored { checkpoint: Some(ref c), .. }) if c == "2.2"),
+        "{:?}",
+        share("1.2")
+    );
+    assert_eq!(
+        rep.stories
+            .first()
+            .and_then(|s| s.checkpoint.clone())
+            .as_deref(),
+        Some("2.2")
+    );
+}
+
+/// An OpenSpec scenario's id is its name — spaces, `:` and `/` — and a
+/// tick that verified it still reads back as verified.
+#[test]
+fn a_named_scenario_verified_by_a_tick_reads_back() {
+    use sha2::Digest as _;
+    let r = repo("sample", "");
+    let opened = speccoder_runtime::format::open(r.path(), Some(CHANGE)).unwrap();
+    let sc = opened.adapter.scenarios(&opened.snapshot, "1.2");
+    let first = sc.first().expect("the change has scenarios").clone();
+    assert!(first.id.contains(' '), "{first:?}");
+    let words = first.text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let hex: String = sha2::Sha256::digest(format!("{}\0{words}", first.id).as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let branch = format!("speccoder/{CHANGE}");
+    git(r.path(), &["checkout", "-q", "-b", &branch]);
+    git(
+        r.path(),
+        &[
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            &format!(
+                "1.1 done\n\nSpec-Task: {CHANGE}/1.1\nVerdict: verified\nScenarios: {}\nRun: run_x\n",
+                &hex[..12]
+            ),
+        ],
+    );
+    git(r.path(), &["checkout", "-q", "-"]);
+    let res = speccoder_runtime::status::report(r.path(), Some(CHANGE));
+    let Some(speccoder_core::CommandData::Report(rep)) = res.data() else {
+        panic!("{}", res.message());
+    };
+    let mark = rep
+        .stories
+        .first()
+        .and_then(|s| s.scenarios.iter().find(|m| m.id == first.id));
+    assert_eq!(
+        mark.and_then(|m| m.verified_by.clone()).as_deref(),
+        Some("1.1"),
+        "{:?}",
+        rep.stories
+    );
+}

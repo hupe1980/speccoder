@@ -6,6 +6,34 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Every scenario judged.** In a story of several tasks, code decides
+  what judges each one: a task naming its scenarios in its line,
+  `(scenarios US3-1)`, is judged by exactly those; the story's last task
+  that is not documentation by every scenario no earlier tick verified,
+  together. Ticks record their scenarios with a digest of the wording
+  (`Scenarios:`). `report` and the board show each story's scenarios and
+  each open task's share.
+- **Judge it at the checkpoint** (`speccoder task defer T018`, Needs You,
+  the inspector): a task whose tests need later tasks of its story is
+  judged by its regression checks, its scenarios at the story's
+  checkpoint (`deferred_to_checkpoint`).
+- The test author and the implementer see the story's other tasks.
+- Plan checks `PLAN-SCENARIO-UNKNOWN` and `PLAN-STORY-UNJUDGED`; the
+  speccoder preset asks each implementing task to name its scenarios.
+
+### Fixed
+
+- A story task's tests could need its later tasks (an entry point, an
+  error message): its attempts could never pass.
+
+### Upgrading
+
+- Ticks made before this release record no scenarios: their stories'
+  checkpoints judge every scenario. A verifier older than this release
+  does not know the reasons `story_verified` and `deferred_to_checkpoint`.
+
 ## [0.7.0] - 2026-10-31
 
 ### Added

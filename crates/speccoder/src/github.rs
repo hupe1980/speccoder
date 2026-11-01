@@ -135,6 +135,7 @@ mod tests {
 
     fn task(id: &str, state: &str, last: Option<&str>) -> TaskStatus {
         TaskStatus {
+            share: None,
             lane: speccoder_core::lane::Lane::default(),
             id: id.to_owned(),
             title: "Parse: a, b\nc %".to_owned(),
@@ -150,6 +151,7 @@ mod tests {
                 reason: "the model's words".to_owned(),
                 run_id: None,
                 reference: "refs/x".to_owned(),
+                defer_to: None,
             }),
             note: None,
             attestation: None,
@@ -161,6 +163,7 @@ mod tests {
 
     fn report(tasks: Vec<TaskStatus>) -> CommandResult {
         CommandResult::ok("report", "x").with_data(CommandData::Report(Box::new(StatusReport {
+            stories: Vec::new(),
             review: None,
             issues: Vec::new(),
             feature: "001-x".to_owned(),

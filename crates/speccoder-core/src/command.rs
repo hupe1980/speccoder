@@ -1714,6 +1714,10 @@ pub struct RunReport {
     /// Why a regression-only verdict is one (set with that verdict only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub regression: Option<crate::regression::Regression>,
+    /// What judged the task in its story (none for a bug fix or a task of
+    /// no story).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share: Option<crate::story::Share>,
     /// What reached the implementer, by digest (constitution VIII).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<crate::context::ContextManifest>,
@@ -2373,6 +2377,10 @@ pub struct StatusReport {
     pub unmerged_commits: usize,
     /// Every task, in document order.
     pub tasks: Vec<TaskStatus>,
+    /// Each story's scenarios: verified by a tick, or left for its
+    /// checkpoint (speccoder_core::story).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stories: Vec<crate::story::StoryScenarios>,
     /// Convergence rounds, oldest first.
     pub convergence: Vec<ConvergenceRound>,
     /// Requirement → task → verdict, in the spec's order; a requirement no
@@ -2421,6 +2429,9 @@ pub struct TaskStatus {
     pub run_id: Option<String>,
     /// For an open task: its latest saved attempt.
     pub last_attempt: Option<LastAttempt>,
+    /// For an open task of a story: what will judge it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share: Option<crate::story::Share>,
     /// Changes found in the worktree when the task's run started (a person's
     /// edits, or an interrupted run's leftovers), saved and set aside.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2455,6 +2466,10 @@ pub struct LastAttempt {
     pub run_id: Option<String>,
     /// The ref holding the attempt's tree.
     pub reference: String,
+    /// The story's checkpoint this task's acceptance may be moved to: its
+    /// tests stayed red mid-story (`speccoder task defer`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub defer_to: Option<String>,
 }
 
 /// Changes saved and set aside so a run could start from the branch tip.

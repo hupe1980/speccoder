@@ -70,6 +70,7 @@ pub fn parse(path: &str, text: &str) -> (ParsedTasks, Vec<Diagnostic>) {
                             story: parsed.story,
                             yours: parsed.yours,
                             depends_on: explicit_deps(&parsed.title),
+                            scenarios: speccoder_core::spec::scenario_links(&parsed.title),
                             title: parsed.title,
                             phase: phases.last().map(|(p, _)| p.title.clone()),
                             subsection: if phases.is_empty() {

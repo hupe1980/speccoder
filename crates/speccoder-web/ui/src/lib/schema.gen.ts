@@ -100,7 +100,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "defer_acceptance" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -2959,6 +2959,11 @@ export interface LastAttempt {
   run_id: string | null;
   /** The ref holding the attempt's tree. */
   reference: string;
+  /**
+   * The story's checkpoint this task's acceptance may be moved to: its
+   * tests stayed red mid-story (`speccoder task defer`).
+   */
+  defer_to?: string | null;
 }
 
 /** A listing speccoder ran because the earlier sources left a file undecided. */
@@ -4100,6 +4105,19 @@ export type RegressionReason =
   | {
     reason: "planning_work";
   }
+  /**
+   * Its story's checkpoint, with every scenario of the story verified by
+   * earlier ticks: nothing left to show.
+   */
+  | {
+    reason: "story_verified";
+  }
+  /** A person moved its acceptance to its story's checkpoint. */
+  | {
+    reason: "deferred_to_checkpoint";
+    /** The task that judges its scenarios. */
+    checkpoint: string;
+  }
   /** A tick made before reasons were recorded (read side only). */
   | {
     reason: "unrecorded";
@@ -4537,6 +4555,11 @@ export interface RunReport {
   collection?: Collection | null;
   /** Why a regression-only verdict is one (set with that verdict only). */
   regression?: RegressionOnly | null;
+  /**
+   * What judged the task in its story (none for a bug fix or a task of
+   * no story).
+   */
+  share?: Share | null;
   /** What reached the implementer, by digest (constitution VIII). */
   context?: ContextManifest | null;
 }
@@ -4921,6 +4944,18 @@ export type Runnable =
     revoke: boolean;
   }
   /**
+   * Judge a task by its regression checks and its story's scenarios at
+   * the story's checkpoint (`revoke`: take the decision back) — a
+   * person's decision in the state directory, never an edit of the plan.
+   */
+  | {
+    kind: "defer_acceptance";
+    /** The task. */
+    task: string;
+    /** Take the decision back. */
+    revoke: boolean;
+  }
+  /**
    * Install the bundled `speccoder` Spec Kit preset through Spec Kit's
    * own `specify preset add` (`update`: the installed one, replaced).
    */
@@ -5066,6 +5101,14 @@ export interface SampleRun {
 export interface SandboxNote {
   /** `seatbelt`, `landlock`; `null`: the commands run without one. */
   backend: string | null;
+}
+
+/** One scenario of a story. */
+export interface ScenarioMark {
+  /** Its id (`US3-1`). */
+  id: string;
+  /** The task whose tick verified it, worded as it is now. */
+  verified_by?: string | null;
 }
 
 /**
@@ -5250,6 +5293,40 @@ export interface ShapeReport {
   /** Its tokens. */
   usage: unknown;
 }
+
+/** What judges one task. */
+export type Share =
+  /** The scenarios the task names. */
+  | {
+    kind: "linked";
+    /** Their ids. */
+    scenarios: string[];
+  }
+  /**
+   * The story's checkpoint: every scenario no earlier tick verified,
+   * with its links.
+   */
+  | {
+    kind: "checkpoint";
+    /** Their ids, in the story's order. */
+    scenarios: string[];
+    /** Also one test of these scenarios together (two or more left). */
+    composition: boolean;
+  }
+  /** The story's scenarios; the test author chooses. */
+  | {
+    kind: "authored";
+    /** Their ids. */
+    scenarios: string[];
+    /** The story's checkpoint, where what this task leaves is judged. */
+    checkpoint?: string | null;
+  }
+  /** A person moved its acceptance to the checkpoint. */
+  | {
+    kind: "deferred";
+    /** The task that judges its scenarios. */
+    checkpoint: string;
+  };
 
 /** A reproduction as the stream shows it. */
 export interface ShownReproduction {
@@ -5546,6 +5623,11 @@ export interface StatusReport {
   unmerged_commits: number;
   /** Every task, in document order. */
   tasks: TaskStatus[];
+  /**
+   * Each story's scenarios: verified by a tick, or left for its
+   * checkpoint (speccoder_core::story).
+   */
+  stories?: StoryScenarios[];
   /** Convergence rounds, oldest first. */
   convergence: ConvergenceRound[];
   /**
@@ -5676,6 +5758,16 @@ export type StepKind = "requirement" | "frozen_tests" | "red" | "diff" | "green"
 /** Where a step of the journey is. */
 export type StepState = "done" | "now" | "todo" | "skipped";
 
+/** A story's scenarios, each verified by a tick or left for its checkpoint. */
+export interface StoryScenarios {
+  /** The story (`US3`; for OpenSpec the change). */
+  story: string;
+  /** Its scenarios in order. */
+  scenarios: ScenarioMark[];
+  /** The task that judges what is left (none: every task is planning work). */
+  checkpoint?: string | null;
+}
+
 /** One set's strength. */
 export interface Strength {
   /** How far it got. */
@@ -5708,6 +5800,11 @@ export interface Task {
   title: string;
   /** Task IDs named after `depends on` / `after` in the text, in order. */
   depends_on: string[];
+  /**
+   * The scenarios the task names — `(scenarios US3-1)` — upper-cased, in
+   * written order: what judges it.
+   */
+  scenarios?: string[];
   /** Enclosing level-2 heading. */
   phase: string | null;
   /** Enclosing level-3 heading within the phase. */
@@ -5769,6 +5866,8 @@ export interface TaskStatus {
   run_id: string | null;
   /** For an open task: its latest saved attempt. */
   last_attempt: LastAttempt | null;
+  /** For an open task of a story: what will judge it. */
+  share?: Share | null;
   /**
    * Changes found in the worktree when the task's run started (a person's
    * edits, or an interrupted run's leftovers), saved and set aside.

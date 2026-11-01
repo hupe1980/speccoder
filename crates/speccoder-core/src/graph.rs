@@ -412,6 +412,7 @@ mod tests {
                 yours: false,
                 title: String::new(),
                 depends_on: deps.iter().map(|d| (*d).to_owned()).collect(),
+                scenarios: Vec::new(),
                 phase: Some(phase.to_owned()),
                 subsection: sub.map(str::to_owned),
                 line: u32::try_from(n + 1).unwrap(),

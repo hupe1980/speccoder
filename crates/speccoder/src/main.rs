@@ -2557,6 +2557,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Run { .. } => "run",
             C::Task { action } => match action {
                 cli::TaskAction::AcceptanceAt { .. } => "task acceptance-at",
+                cli::TaskAction::Defer { .. } => "task defer",
                 cli::TaskAction::Approve { .. } => "task approve",
                 cli::TaskAction::Reject { .. } => "task reject",
                 cli::TaskAction::Accept { .. } => "task accept",
@@ -2974,6 +2975,17 @@ fn task_action(
                 &state,
             ),
             None => no_state("task acceptance-at"),
+        },
+        T::Defer { task, revoke } => match speccoder_runtime::worktree::state_dir() {
+            Some(state) => speccoder_runtime::acceptance_at::defer(
+                path,
+                feature,
+                task,
+                *revoke,
+                speccoder_core::actions::Via::Terminal,
+                &state,
+            ),
+            None => no_state("task defer"),
         },
         T::Skip { task, reason, .. } => {
             speccoder_runtime::controls::skip(path, feature, task, reason.as_deref())

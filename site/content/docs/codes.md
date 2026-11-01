@@ -81,6 +81,8 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`ATTESTATION-FAILED`](#attestation-failed) | error | 26 | an attestation is missing, unsigned where required, or does not hold |
 | [`TESTS-NOT-COLLECTED`](#tests-not-collected) | error | 20 | a test file the attempt wrote never ran |
 | [`PLAN-TESTS-UNCOLLECTED`](#plan-tests-uncollected) | warning | 0 | the plan puts tests where the runner won't collect them |
+| [`PLAN-STORY-UNJUDGED`](#plan-story-unjudged) | warning | 0 | no task of a story is judged by its scenarios |
+| [`PLAN-SCENARIO-UNKNOWN`](#plan-scenario-unknown) | warning | 0 | a task names a scenario its story does not have |
 | [`PLAN-BEHAVIOUR-EARLY`](#plan-behaviour-early) | warning | 0 | a story's behaviour is planned before the story |
 | [`PLAN-TEST-ONLY-TASKS`](#plan-test-only-tasks) | warning | 0 | tasks that only write tests |
 | [`PRESET-NOT-SPECKIT`](#preset-not-speckit) | error | 2 | presets are a Spec Kit mechanism |
@@ -740,6 +742,22 @@ The plan puts tests where the runner won't collect them.
 A task names a test path the project's runner would not collect (Cargo builds only `tests/*.rs` and `tests/<dir>/main.rs`), and no task creates the file that would declare it; or a test file in the tree is collected by nothing. Tests written there would never run. A warning: the run is not stopped.
 
 - `speccoder doctor`
+- `speccoder spec tasks`
+
+### PLAN-STORY-UNJUDGED
+
+No task of a story is judged by its scenarios.
+
+Every task of the story is planning work (design documents) or a step only a person takes, so none is judged by the story's acceptance scenarios: a story's last open code task is its checkpoint, and this story has none. Add the task that implements the story, or re-plan.
+
+- `speccoder spec tasks`
+
+### PLAN-SCENARIO-UNKNOWN
+
+A task names a scenario its story does not have.
+
+A task names the scenarios it makes hold, `(scenarios US3-1)`; this one names an id that is not a scenario of its story (ids are the story's number and the scenario's position in it). The link is ignored: the task's test author chooses from the story, and the story's checkpoint judges what is left.
+
 - `speccoder spec tasks`
 
 ### PLAN-BEHAVIOUR-EARLY

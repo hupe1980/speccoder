@@ -21,6 +21,8 @@
     "PLAN-TESTS-UNCOLLECTED": "The plan puts tests where the runner won't collect them",
     "PLAN-BEHAVIOUR-EARLY": "A story's behaviour is planned before the story",
     "PLAN-TEST-ONLY-TASKS": "Tasks that only write tests",
+    "PLAN-SCENARIO-UNKNOWN": "A task names a scenario its story does not have",
+    "PLAN-STORY-UNJUDGED": "No task of a story is judged by its scenarios",
   };
   const title = (i: { check: string; code?: string | null }) =>
     i.check === "lanes" ? "Who does what" : ((i.code && PLAN[i.code]) ?? i.check.charAt(0).toUpperCase() + i.check.slice(1));

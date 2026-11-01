@@ -1115,15 +1115,72 @@ fn run_task_once(
     let test_layout = crate::layout::detect(&project, &check_argvs);
     let test_layout_text = test_layout.text();
     let story_files = super::commit::story_files(&wt_root, &feature_name);
-    let scenarios = match &bug_fix {
+    let story_scenarios = match &bug_fix {
         Some(f) => super::bug::scenarios(&f.bug),
         None => format.scenarios(&snap, story_task.as_deref().unwrap_or(task)),
     };
+    // What judges this task — decided by code from the plan, the story's
+    // ticks and a person's deferral, never by the test author's choice
+    // (speccoder_core::story). A bug's reproductions judge a bug.
+    let judged = format.rules().judged;
+    let share = bug_fix
+        .is_none()
+        .then(|| {
+            super::acceptance::share_of(&super::acceptance::ShareInput {
+                repo: &wt_root,
+                plane: &s.plane_dir,
+                feature: &feature_name,
+                task,
+                story: acceptance_story
+                    .as_deref()
+                    .or_else(|| parsed_task.as_ref().and_then(|t| t.story.as_deref())),
+                whole_unit: format.kind() == speccoder_core::spec::FormatKind::Openspec
+                    && acceptance_story.is_none(),
+                tasks: snap.feature.as_ref().and_then(|f| f.tasks.as_ref()),
+                unit_dir: &unit_dir,
+                judged: &judged,
+                scenarios: &story_scenarios,
+                as_deferred: false,
+            })
+        })
+        .flatten();
+    let scenarios: Vec<speccoder_core::spec::ScenarioRef> = match &share {
+        Some(sh) => story_scenarios
+            .iter()
+            .filter(|s| sh.scenarios().contains(&s.id))
+            .cloned()
+            .collect(),
+        None => story_scenarios.clone(),
+    };
+    let deferred_to = match &share {
+        Some(speccoder_core::story::Share::Deferred { checkpoint }) => Some(checkpoint.clone()),
+        _ => None,
+    };
+    let story_verified = matches!(
+        &share,
+        Some(speccoder_core::story::Share::Checkpoint { scenarios, .. }) if scenarios.is_empty()
+    );
     // A requirement's oracle frozen at review: reused by the
     // first task citing its scenarios while its wording is unchanged.
     let mut review_frozen: Option<(speccoder_core::acceptance::PreFrozenAcceptance, String)> = None;
     let mut review_reuse = None;
-    if bug_fix.is_none() && run_config.acceptance && !options.fresh_acceptance && planning.is_none()
+    // Tests frozen at review judge their whole requirement: a task linked to
+    // part of it is judged by its links alone, so it authors its own.
+    let partial_link = matches!(
+        &share,
+        Some(speccoder_core::story::Share::Linked { scenarios }) if scenarios.len() < story_scenarios.len()
+    );
+    if partial_link {
+        notices.push(format!(
+            "{task} names {} of its story's scenarios: its own acceptance tests are authored for them, not the ones frozen at review",
+            scenarios.len()
+        ));
+    }
+    if bug_fix.is_none()
+        && run_config.acceptance
+        && !options.fresh_acceptance
+        && planning.is_none()
+        && !partial_link
     {
         match crate::oracle::for_task(&s.plane_dir, &project, &wt_root, format, &snap, &scenarios) {
             Some(r @ crate::oracle::TaskReuse::Ready { .. }) => review_reuse = Some(r),
@@ -1257,7 +1314,12 @@ fn run_task_once(
                 return fail(CommandStatus::NeedsHuman, e).with_code("ORACLE-TAMPERED");
             }
         }
-    } else if run_config.acceptance && planning.is_none() && format.acceptance_testable(&bundle) {
+    } else if run_config.acceptance
+        && planning.is_none()
+        && deferred_to.is_none()
+        && !story_verified
+        && format.acceptance_testable(&bundle)
+    {
         stage(&*live, task, Stage::Red, StageState::Started, None, None);
         Some(prepare_acceptance(&AcceptanceSetup {
             rt: &rt,
@@ -1332,11 +1394,17 @@ fn run_task_once(
                 a,
                 &scenarios,
                 &held_out_store,
-                story_checkpoint(
-                    snap.feature.as_ref().and_then(|f| f.tasks.as_ref()),
-                    task,
-                    &scenarios,
-                ),
+                match &share {
+                    Some(speccoder_core::story::Share::Checkpoint { composition, .. }) => {
+                        *composition
+                    }
+                    Some(_) => false,
+                    None => story_checkpoint(
+                        snap.feature.as_ref().and_then(|f| f.tasks.as_ref()),
+                        task,
+                        &scenarios,
+                    ),
+                },
             );
             a.report["held_out"] = held;
             a.held_out = sha;
@@ -1356,6 +1424,10 @@ fn run_task_once(
             StageState::Skipped,
             Some(if planning.is_some() {
                 "planning work: design documents".to_owned()
+            } else if let Some(at) = &deferred_to {
+                format!("judged at {at}, as you decided")
+            } else if story_verified {
+                "its story's scenarios were verified by earlier ticks".to_owned()
             } else {
                 "no acceptance examples".to_owned()
             }),
@@ -1429,6 +1501,7 @@ fn run_task_once(
                 reason: &reason,
                 pending: None,
                 usage: None,
+                defer_to: None,
             },
         )
         .ok()
@@ -1768,6 +1841,7 @@ fn run_task_once(
                     marker_guard.keep();
                     let action = &task_row.justification.proposed_action;
                     let mut report = bare_report(&feature_name, task, &wt_path, "needs_approval");
+                    report.share.clone_from(&share);
                     report.run_id = outcome.run_id.to_string();
                     report.notices = notices;
                     report.tool_calls = action["log"].as_array().cloned().unwrap_or_default();
@@ -1926,6 +2000,7 @@ fn run_task_once(
                                 reason: &reason,
                                 pending: None,
                                 usage: output.get("usage"),
+                                defer_to: None,
                             },
                         )
                         .and_then(|saved| {
@@ -2029,6 +2104,7 @@ fn run_task_once(
                 set_aside: set_aside.clone(),
                 notices: notices.clone(),
                 agent: external::agent_attempt(&output),
+                share: share.clone(),
                 ..bare_report(&feature_name, task, &wt_path, &attempt_status)
             };
             if let Err(e) = record_inline_approvals(
@@ -2903,6 +2979,10 @@ fn run_task_once(
         };
         let mut reason = if planning.is_some() {
             RegressionReason::PlanningWork
+        } else if let Some(checkpoint) = deferred_to.clone() {
+            RegressionReason::DeferredToCheckpoint { checkpoint }
+        } else if story_verified {
+            RegressionReason::StoryVerified
         } else {
             decide(&facts)
         };
@@ -3016,6 +3096,7 @@ fn run_task_once(
             task,
             title: &t.title,
             report: &report,
+            scenarios: &story_scenarios,
             red: acceptance
                 .as_ref()
                 .and_then(|a| a.red_class.filter(|c| a.red && c.is_red())),
@@ -3158,6 +3239,7 @@ fn run_task_once(
             task,
             title: &n.title,
             report: &report,
+            scenarios: &story_scenarios,
             red: acceptance
                 .as_ref()
                 .and_then(|a| a.red_class.filter(|c| a.red && c.is_red())),
@@ -3252,12 +3334,28 @@ fn run_task_once(
         let (outcome, reason) = saved_outcome(&report, &attempt_status, suspected);
         let run = (!report.run_id.is_empty()).then_some(report.run_id.as_str());
         let reason = redact(&reason, secret);
+        // A mid-story task whose acceptance tests stayed red: a person may
+        // move them to the story's checkpoint (speccoder_core::story).
+        let defer_to = match &share {
+            Some(speccoder_core::story::Share::Authored {
+                checkpoint: Some(c),
+                ..
+            }) if matches!(
+                outcome.as_str(),
+                "incomplete" | "verification_failed" | "blocked"
+            ) && report.acceptance.as_ref().is_some_and(|a| a["red"] == true) =>
+            {
+                Some(c.as_str())
+            }
+            _ => None,
+        };
         let record = attempts::Record {
             run,
             outcome: &outcome,
             reason: &reason,
             pending: report.pending.as_ref(),
             usage: report.usage.as_ref(),
+            defer_to,
         };
         match attempts::save(&wt_root, &tmp, &feature_name, task, &record)
             .and_then(|saved| worktree::restore(&wt_root, &tmp, &start).map(|_| saved))

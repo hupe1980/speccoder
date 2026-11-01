@@ -62,6 +62,14 @@ pub enum RegressionReason {
     TestsNotCollected,
     /// A planning task: design documents, judged by the checks alone.
     PlanningWork,
+    /// Its story's checkpoint, with every scenario of the story verified by
+    /// earlier ticks: nothing left to show.
+    StoryVerified,
+    /// A person moved its acceptance to its story's checkpoint.
+    DeferredToCheckpoint {
+        /// The task that judges its scenarios.
+        checkpoint: String,
+    },
     /// A tick made before reasons were recorded (read side only).
     Unrecorded,
 }
@@ -99,6 +107,8 @@ impl RegressionReason {
             Self::NotRed { .. } => "not_red",
             Self::TestsNotCollected => "tests_not_collected",
             Self::PlanningWork => "planning_work",
+            Self::StoryVerified => "story_verified",
+            Self::DeferredToCheckpoint { .. } => "deferred_to_checkpoint",
             Self::Unrecorded => "unrecorded",
         }
     }
@@ -297,6 +307,12 @@ pub fn wording(r: &RegressionReason) -> String {
         RegressionReason::PlanningWork => {
             "planning work — design documents, not code: nothing to test".to_owned()
         }
+        RegressionReason::StoryVerified => {
+            "its story's scenarios were all verified by earlier ticks".to_owned()
+        }
+        RegressionReason::DeferredToCheckpoint { checkpoint } => {
+            format!("its story's scenarios are judged at {checkpoint}, as you decided")
+        }
         RegressionReason::Unrecorded => {
             "why was not recorded (ticked by an earlier speccoder)".to_owned()
         }
@@ -324,6 +340,9 @@ pub fn trailer(r: &RegressionReason) -> String {
         },
         RegressionReason::NotRed { red_class } => {
             format!("{name} red_class={}", class_name(*red_class))
+        }
+        RegressionReason::DeferredToCheckpoint { checkpoint } => {
+            format!("{name} checkpoint={}", escape(checkpoint))
         }
         _ => name.to_owned(),
     }
@@ -370,6 +389,10 @@ pub fn parse_trailer(value: &str) -> Option<RegressionReason> {
         },
         "tests_not_collected" => RegressionReason::TestsNotCollected,
         "planning_work" => RegressionReason::PlanningWork,
+        "story_verified" => RegressionReason::StoryVerified,
+        "deferred_to_checkpoint" => RegressionReason::DeferredToCheckpoint {
+            checkpoint: get("checkpoint")?,
+        },
         _ => return None,
     })
 }
@@ -445,6 +468,9 @@ mod tests {
             class().prop_map(|red_class| RegressionReason::NotRed { red_class }),
             Just(RegressionReason::TestsNotCollected),
             Just(RegressionReason::PlanningWork),
+            Just(RegressionReason::StoryVerified),
+            "T[0-9]{3}"
+                .prop_map(|checkpoint| RegressionReason::DeferredToCheckpoint { checkpoint }),
         ]
     }
 

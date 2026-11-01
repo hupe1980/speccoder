@@ -274,6 +274,7 @@ mod tests {
 
     fn task(id: &str, state: &str, title: &str) -> TaskStatus {
         TaskStatus {
+            share: None,
             lane: speccoder_core::lane::Lane::default(),
             id: id.to_owned(),
             title: title.to_owned(),
@@ -295,6 +296,7 @@ mod tests {
 
     fn report(n: usize) -> StatusReport {
         StatusReport {
+            stories: Vec::new(),
             issues: Vec::new(),
             feature: "001-x".to_owned(),
             branch: Some("speccoder/001-x".to_owned()),

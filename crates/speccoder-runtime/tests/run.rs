@@ -2757,7 +2757,7 @@ fn lanes(
     let (a, b) = (FakeProvider::new(), FakeProvider::new());
     alpha(&a);
     beta(&b);
-    let d: Arc<dyn ModelProvider> = Arc::new(Router(vec![("Add alpha", a), ("Add beta", b)]));
+    let d: Arc<dyn ModelProvider> = Arc::new(Router(vec![("# Task T002", a), ("# Task T003", b)]));
     (r, d)
 }
 
@@ -2873,7 +2873,7 @@ fn lanes_that_fail_together_are_undone_and_run_one_at_a_time() {
         write(&a, "src/alpha.rs", "pub fn alpha() {}\n");
         write(&b, "src/beta.rs", "pub fn beta() {}\n");
     }
-    let d: Arc<dyn ModelProvider> = Arc::new(Router(vec![("Add alpha", a), ("Add beta", b)]));
+    let d: Arc<dyn ModelProvider> = Arc::new(Router(vec![("# Task T002", a), ("# Task T003", b)]));
     let state = tempfile::tempdir().unwrap();
     let options = speccoder_runtime::RunOptions {
         parallel: 2,
@@ -2909,7 +2909,7 @@ fn files_the_checks_generate_do_not_empty_a_lane_merge() {
     let (a, b) = (FakeProvider::new(), FakeProvider::new());
     write(&a, "src/alpha.rs", "pub fn alpha() {}\n");
     write(&b, "src/beta.rs", "pub fn beta() {}\n");
-    let d: Arc<dyn ModelProvider> = Arc::new(Router(vec![("Add alpha", a), ("Add beta", b)]));
+    let d: Arc<dyn ModelProvider> = Arc::new(Router(vec![("# Task T002", a), ("# Task T003", b)]));
     let state = tempfile::tempdir().unwrap();
     let options = speccoder_runtime::RunOptions {
         parallel: 2,

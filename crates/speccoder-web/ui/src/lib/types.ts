@@ -38,6 +38,8 @@ export type {
   PolicyCoverage,
   Remedy,
   RequirementDrift,
+  Share,
+  StoryScenarios,
   ReviewChange,
   ReviewItem,
   RevisionView,

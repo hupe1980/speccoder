@@ -13,6 +13,7 @@ description: "Task list template for feature implementation"
 
 - Implement a story's behaviour inside that story's phase: Setup and Foundational tasks only create structure — manifests, empty modules, signatures that do not yet behave.
 - Write no task whose only output is tests: speccoder writes each story's acceptance tests from its scenarios and judges the implementing tasks by them.
+- Name, in each implementing task's line, the scenarios it makes hold — `(scenarios US1-1, US1-2)`: the story's number and the scenario's position in it; that task is judged by exactly them, and the story's last task that is not documentation by every scenario not yet verified.
 - When a task names a test file, name a path the project's test runner collects (Cargo: `tests/<name>.rs`, or `tests/<dir>/main.rs` and the modules it declares; pytest: `test_*.py` under `testpaths`; vitest/jest: a file matching `include`, such as `<name>.test.ts`; Go: `<name>_test.go` beside the package's sources).
 
 **Who does it (speccoder)**: every task is code for the implementer unless it says otherwise.
@@ -94,7 +95,7 @@ Examples of foundational tasks (adjust based on your project) — structure only
 
 - [ ] T012 [P] [US1] Create [Entity1] model in src/models/[entity1].py
 - [ ] T013 [P] [US1] Create [Entity2] model in src/models/[entity2].py
-- [ ] T014 [US1] Implement [Service] in src/services/[service].py (depends on T012, T013)
+- [ ] T014 [US1] Implement [Service] in src/services/[service].py (depends on T012, T013) (scenarios US1-1)
 - [ ] T015 [US1] Implement [endpoint/feature] in src/[location]/[file].py
 - [ ] T016 [US1] Add validation and error handling
 - [ ] T017 [US1] Add logging for user story 1 operations

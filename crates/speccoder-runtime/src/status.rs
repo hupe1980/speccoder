@@ -166,7 +166,9 @@ fn statuses(
                         reason: a.reason.clone(),
                         run_id: a.run_id.clone(),
                         reference: a.reference.clone(),
+                        defer_to: a.defer_to.clone(),
                     }),
+                share: None,
                 set_aside: None,
                 bug: None,
                 regression: found
@@ -321,6 +323,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             ),
         )
         .with_data(CommandData::Report(Box::new(StatusReport {
+            stories: Vec::new(),
             review: crate::review::totals_of(
                 Path::new(&snapshot.root),
                 format,
@@ -603,8 +606,32 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
                 .map(|b| b.outcome.as_str().to_owned());
         }
     }
+    // What judges each open task, and each story's scenarios: from the
+    // ticks' `Scenarios:` on the unit's branch (first-parent, as a run reads them).
+    let plane = crate::worktree::state_dir().map(|s| crate::worktree::project_state_dir(&s, root));
+    let (shares, stories) =
+        crate::pipeline::acceptance::story_view(&crate::pipeline::acceptance::StoryView {
+            format,
+            snapshot,
+            plane: plane.as_deref(),
+            feature: &name,
+            unit_dir: &f.feature.dir,
+            tasks: &parsed,
+            repo: root,
+            rev: if has_branch { &branch } else { "HEAD" },
+        });
+    for t in &mut tasks {
+        let open = !matches!(
+            t.state.as_str(),
+            "verified" | "regression_only" | "attested" | "ticked_without_evidence" | "skipped"
+        );
+        if open {
+            t.share = shares.get(&t.id).cloned();
+        }
+    }
     CommandResult::new("report", CommandStatus::Ok, &message).with_data(CommandData::Report(
         Box::new(StatusReport {
+            stories,
             review: crate::review::totals_of(root, format, &name, &f.feature.dir),
             issues: issues_of(root, Some(&name)),
             feature: name,
@@ -797,6 +824,7 @@ mod tests {
             commit: None,
             run_id: None,
             last_attempt: None,
+            share: None,
             set_aside: None,
             bug: None,
             regression: None,

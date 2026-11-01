@@ -200,6 +200,10 @@ pub struct Task {
     pub title: String,
     /// Task IDs named after `depends on` / `after` in the text, in order.
     pub depends_on: Vec<String>,
+    /// The scenarios the task names — `(scenarios US3-1)` — upper-cased, in
+    /// written order: what judges it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scenarios: Vec<String>,
     /// Enclosing level-2 heading.
     pub phase: Option<String>,
     /// Enclosing level-3 heading within the phase.

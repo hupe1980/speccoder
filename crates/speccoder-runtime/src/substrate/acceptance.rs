@@ -28,7 +28,11 @@ example. Put them where the project's test runner collects them: in the file nam
 file), using the crate or package name from the manifest — and give the command that \
 runs only that file (named there too). Each file cites \
 the IDs of the scenarios it tests, from the list given (none when there is no list). The tests must \
-fail now (the task is not implemented) and pass once it is. Another model will implement \
+fail now (the task is not implemented) and pass once it is. When the task is one of several \
+in its story (listed under \"The story's other tasks\"), test only what THIS task makes hold, through the code \
+it names: a scenario, or a part of one, that needs another task of the story — an entry point, a \
+message, a selection that task adds — is that task's; leave it out and name it in notes. The \
+story's last task tests its scenarios together. Another model will implement \
 the task; it cannot change your tests. If the spec has no testable acceptance example \
 for this task, return no files. An example whose outcome depends on outside state — the \
 date or time, the network, files, randomness, a value published elsewhere (\"on a day \
@@ -678,7 +682,16 @@ impl Skill for Acceptance {
                 }
                 let scenarios = input["scenarios"].as_array().into_iter().flatten();
                 if scenarios.clone().next().is_some() {
-                    text.push_str("\n\n# Scenarios (cite these IDs)\n");
+                    // In a story of several tasks, the list is what judges
+                    // this one: the story's others are its other tasks'.
+                    let several = input["bundle"]["story_tasks"]
+                        .as_array()
+                        .is_some_and(|t| !t.is_empty());
+                    text.push_str(if several {
+                        "\n\n# Scenarios this task is judged by (cite these IDs; the story's others are judged at its other tasks)\n"
+                    } else {
+                        "\n\n# Scenarios (cite these IDs)\n"
+                    });
                     for s in scenarios {
                         text.push_str(&format!(
                             "\n- {}: {}",

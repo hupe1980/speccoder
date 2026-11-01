@@ -503,6 +503,35 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             ));
             continue;
         }
+        // Its tests needed later tasks of the story: judging them at the
+        // story's checkpoint comes first — a person's decision.
+        let undecided = |c: &&String| {
+            state.is_none_or(|s| {
+                crate::acceptance_at::deferred(
+                    &crate::worktree::project_state_dir(s, path),
+                    feature,
+                    &t.id,
+                )
+                .is_none()
+            }) && !c.is_empty()
+        };
+        let defer_offer = t
+            .last_attempt
+            .as_ref()
+            .and_then(|a| a.defer_to.as_ref())
+            .filter(undecided)
+            .map(|at| {
+                action(
+                    "decide",
+                    format!("judge it at {at}"),
+                    format!("its acceptance tests need later tasks of the story: {} is judged by its regression checks, its scenarios at {at}", t.id),
+                    flag(format!("speccoder task defer {}", t.id)),
+                )
+                .with_run(Runnable::DeferAcceptance {
+                    task: t.id.clone(),
+                    revoke: false,
+                })
+            });
         // A step only a person can take — a `[YOU]` task that is ready, or
         // an honest stop: the agent's reason as its claim, and three ways on.
         if t.lane == speccoder_core::lane::Lane::Yours
@@ -523,12 +552,16 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 Some(&t.id),
                 title,
                 detail,
-                yours_actions(
-                    t,
-                    &dependents(&r.tasks, &t.id),
-                    retry_blocked(r, &waiting),
-                    &flag,
-                ),
+                defer_offer
+                    .clone()
+                    .into_iter()
+                    .chain(yours_actions(
+                        t,
+                        &dependents(&r.tasks, &t.id),
+                        retry_blocked(r, &waiting),
+                        &flag,
+                    ))
+                    .collect(),
             ));
             continue;
         }
@@ -545,7 +578,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             ));
             continue;
         }
-        let mut actions = Vec::new();
+        let mut actions: Vec<_> = defer_offer.into_iter().collect();
         if t.state == "ready" {
             let mut again = action(
                 "work",
@@ -1227,6 +1260,12 @@ fn reason_count_words(c: &speccoder_core::ReasonCount) -> String {
         "not_red" => "had acceptance tests that did not fail first".to_owned(),
         "tests_not_collected" => "had acceptance tests that never ran".to_owned(),
         "planning_work" => format!("{were} planning work (design documents)"),
+        "story_verified" => {
+            format!("{were} their story's checkpoint, its scenarios verified earlier")
+        }
+        "deferred_to_checkpoint" => {
+            format!("{were} judged at their story's checkpoint, as you decided")
+        }
         _ => format!("{were} ticked before reasons were recorded"),
     };
     format!("{n} {what}")
@@ -1615,6 +1654,7 @@ mod try_with_tests {
             reason: String::new(),
             run_id: Some(run.to_owned()),
             reference: String::new(),
+            defer_to: None,
         };
         let flag = |c: String| c;
         let both = |x: &str| x == "copilot" || x == "opencode";

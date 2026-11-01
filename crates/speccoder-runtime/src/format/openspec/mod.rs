@@ -164,6 +164,18 @@ impl Adapter for OpenSpec {
                     .collect()
             })
             .unwrap_or_default();
+        // The format links no task to a requirement: the change is the
+        // story, and every scenario is offered to every task.
+        let story_tasks = tasks
+            .tasks
+            .iter()
+            .filter(|t| t.id != task.id)
+            .map(|t| DependencyContext {
+                id: t.id.clone(),
+                title: t.title.clone(),
+                done: t.done,
+            })
+            .collect();
         Ok(Bundle {
             feature: feature.feature.name.clone(),
             constitution: cap(&context),
@@ -178,6 +190,7 @@ impl Adapter for OpenSpec {
                 parallel: false,
             },
             dependencies,
+            story_tasks,
         })
     }
 

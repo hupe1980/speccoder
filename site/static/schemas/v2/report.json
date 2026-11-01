@@ -67,6 +67,13 @@
         "$ref": "#/$defs/TaskStatus"
       }
     },
+    "stories": {
+      "description": "Each story's scenarios: verified by a tick, or left for its\ncheckpoint (speccoder_core::story).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/StoryScenarios"
+      }
+    },
     "convergence": {
       "description": "Convergence rounds, oldest first.",
       "type": "array",
@@ -232,6 +239,17 @@
             }
           ]
         },
+        "share": {
+          "description": "For an open task of a story: what will judge it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Share"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "set_aside": {
           "description": "Changes found in the worktree when the task's run started (a person's\nedits, or an interrupted run's leftovers), saved and set aside.",
           "anyOf": [
@@ -368,6 +386,13 @@
         "reference": {
           "description": "The ref holding the attempt's tree.",
           "type": "string"
+        },
+        "defer_to": {
+          "description": "The story's checkpoint this task's acceptance may be moved to: its\ntests stayed red mid-story (`speccoder task defer`).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -375,6 +400,104 @@
         "reason",
         "run_id",
         "reference"
+      ]
+    },
+    "Share": {
+      "description": "What judges one task.",
+      "oneOf": [
+        {
+          "description": "The scenarios the task names.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "linked"
+            },
+            "scenarios": {
+              "description": "Their ids.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "scenarios"
+          ]
+        },
+        {
+          "description": "The story's checkpoint: every scenario no earlier tick verified,\nwith its links.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "checkpoint"
+            },
+            "scenarios": {
+              "description": "Their ids, in the story's order.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "composition": {
+              "description": "Also one test of these scenarios together (two or more left).",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "scenarios",
+            "composition"
+          ]
+        },
+        {
+          "description": "The story's scenarios; the test author chooses.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "authored"
+            },
+            "scenarios": {
+              "description": "Their ids.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "checkpoint": {
+              "description": "The story's checkpoint, where what this task leaves is judged.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "scenarios"
+          ]
+        },
+        {
+          "description": "A person moved its acceptance to the checkpoint.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "deferred"
+            },
+            "checkpoint": {
+              "description": "The task that judges its scenarios.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "checkpoint"
+          ]
+        }
       ]
     },
     "SetAside": {
@@ -564,6 +687,37 @@
           ]
         },
         {
+          "description": "Its story's checkpoint, with every scenario of the story verified by\nearlier ticks: nothing left to show.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "story_verified"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "A person moved its acceptance to its story's checkpoint.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "deferred_to_checkpoint"
+            },
+            "checkpoint": {
+              "description": "The task that judges its scenarios.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason",
+            "checkpoint"
+          ]
+        },
+        {
           "description": "A tick made before reasons were recorded (read side only).",
           "type": "object",
           "properties": {
@@ -682,6 +836,54 @@
           "type": "string",
           "const": "yours"
         }
+      ]
+    },
+    "StoryScenarios": {
+      "description": "A story's scenarios, each verified by a tick or left for its checkpoint.",
+      "type": "object",
+      "properties": {
+        "story": {
+          "description": "The story (`US3`; for OpenSpec the change).",
+          "type": "string"
+        },
+        "scenarios": {
+          "description": "Its scenarios in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ScenarioMark"
+          }
+        },
+        "checkpoint": {
+          "description": "The task that judges what is left (none: every task is planning work).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "story",
+        "scenarios"
+      ]
+    },
+    "ScenarioMark": {
+      "description": "One scenario of a story.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Its id (`US3-1`).",
+          "type": "string"
+        },
+        "verified_by": {
+          "description": "The task whose tick verified it, worded as it is now.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
       ]
     },
     "ConvergenceRound": {

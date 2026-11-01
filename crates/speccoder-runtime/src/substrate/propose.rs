@@ -94,6 +94,21 @@ pub fn layout(
             ));
         }
     }
+    if let Some(others) = bundle["story_tasks"].as_array().filter(|d| !d.is_empty()) {
+        task_text.push_str("\nThe story's other tasks (their work, not this task's):\n");
+        for d in others {
+            let mark = if d["done"].as_bool() == Some(true) {
+                "x"
+            } else {
+                " "
+            };
+            task_text.push_str(&format!(
+                "- [{mark}] {} {}\n",
+                d["id"].as_str().unwrap_or_default(),
+                d["title"].as_str().unwrap_or_default()
+            ));
+        }
+    }
 
     let w = format.wording();
     let constitution = format!("# {}\n\n{}", w.constitution, or_none(&text("constitution")));

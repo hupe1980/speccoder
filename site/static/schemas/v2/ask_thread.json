@@ -1375,6 +1375,29 @@
           ]
         },
         {
+          "description": "Judge a task by its regression checks and its story's scenarios at\nthe story's checkpoint (`revoke`: take the decision back) — a\nperson's decision in the state directory, never an edit of the plan.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "defer_acceptance"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            },
+            "revoke": {
+              "description": "Take the decision back.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "revoke"
+          ]
+        },
+        {
           "description": "Install the bundled `speccoder` Spec Kit preset through Spec Kit's\nown `specify preset add` (`update`: the installed one, replaced).",
           "type": "object",
           "properties": {

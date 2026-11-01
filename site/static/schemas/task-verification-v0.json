@@ -431,6 +431,37 @@
           ]
         },
         {
+          "description": "Its story's checkpoint, with every scenario of the story verified by\nearlier ticks: nothing left to show.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "story_verified"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "A person moved its acceptance to its story's checkpoint.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "deferred_to_checkpoint"
+            },
+            "checkpoint": {
+              "description": "The task that judges its scenarios.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason",
+            "checkpoint"
+          ]
+        },
+        {
           "description": "A tick made before reasons were recorded (read side only).",
           "type": "object",
           "properties": {

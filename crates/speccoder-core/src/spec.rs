@@ -151,9 +151,104 @@ pub struct DeltaRequirement {
     pub line: u32,
 }
 
+/// The scenario ids a task's line names — `(scenarios US3-1, US3-2)`, any
+/// case, separated by commas, spaces, `and` or `&` — upper-cased, in written
+/// order, once each. Inline code is quoted text, never a link.
+#[must_use]
+pub fn scenario_links(line: &str) -> Vec<String> {
+    let mut in_code = false;
+    let plain: String = line
+        .chars()
+        .map(|c| {
+            if c == '`' {
+                in_code = !in_code;
+                ' '
+            } else if in_code {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
+    // Matched on the text itself, ASCII case folded: lower-casing other
+    // characters changes their byte length (`İ`), so its offsets are not
+    // the text's.
+    const KEY: &[u8] = b"(scenarios";
+    let bytes = plain.as_bytes();
+    let starts = (0..bytes.len().saturating_sub(KEY.len() - 1))
+        .filter(|&i| bytes[i..i + KEY.len()].eq_ignore_ascii_case(KEY));
+    let mut out: Vec<String> = Vec::new();
+    for i in starts {
+        let rest = &plain[i + KEY.len()..];
+        let Some(end) = rest.find(')') else { continue };
+        for word in
+            rest[..end].split(|c: char| c == ',' || c == '&' || c == ':' || c.is_whitespace())
+        {
+            let id = word.to_uppercase();
+            if is_scenario_id(&id) && !out.contains(&id) {
+                out.push(id);
+            }
+        }
+    }
+    out
+}
+
+/// `US3-1`: letters, digits, `-`, digits.
+fn is_scenario_id(s: &str) -> bool {
+    let Some((head, n)) = s.split_once('-') else {
+        return false;
+    };
+    let letters = head.chars().take_while(char::is_ascii_alphabetic).count();
+    letters > 0
+        && head.len() > letters
+        && head[letters..].chars().all(|c| c.is_ascii_digit())
+        && !n.is_empty()
+        && n.chars().all(|c| c.is_ascii_digit())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_task_names_its_scenarios_in_its_line() {
+        assert_eq!(
+            scenario_links("Add validation in src/p.py (scenarios US3-1, us3-2 and US3-1)"),
+            ["US3-1", "US3-2"]
+        );
+        assert_eq!(
+            scenario_links("Do X (Scenarios: US1-1 & US1-3)"),
+            ["US1-1", "US1-3"]
+        );
+        assert!(scenario_links("Write `(scenarios US1-1)` in the docs").is_empty());
+        assert!(scenario_links("Cover the scenarios US1-1").is_empty());
+        assert!(scenario_links("(scenarios US1, 3-1, US-1, US1-)").is_empty());
+        // Characters whose lower case is longer or shorter keep the offsets.
+        assert_eq!(
+            scenario_links("İİİ (scenarios US1-1, US1-2)"),
+            ["US1-1", "US1-2"]
+        );
+        assert_eq!(scenario_links("İİ (scenarios ü US1-1)"), ["US1-1"]);
+        assert_eq!(
+            scenario_links("\u{212A}\u{212A} (SCENARIOS us2-3)"),
+            ["US2-3"]
+        );
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn links_written_read_back(ids in proptest::collection::vec((1u8..20, 1u8..20), 1..6)) {
+            let mut want: Vec<String> = Vec::new();
+            for (s, k) in &ids {
+                let id = format!("US{s}-{k}");
+                if !want.contains(&id) {
+                    want.push(id);
+                }
+            }
+            let line = format!("Implement it in src/x.rs (scenarios {})", want.join(", "));
+            proptest::prop_assert_eq!(scenario_links(&line), want);
+        }
+    }
 
     #[test]
     fn formats_parse_and_serialize_by_name() {

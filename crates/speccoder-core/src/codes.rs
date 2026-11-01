@@ -705,6 +705,22 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "PLAN-STORY-UNJUDGED",
+        W,
+        S::Ok,
+        "no task of a story is judged by its scenarios",
+        "Every task of the story is planning work (design documents) or a step only a person takes, so none is judged by the story's acceptance scenarios: a story's last open code task is its checkpoint, and this story has none. Add the task that implements the story, or re-plan.",
+        ["speccoder spec tasks"]
+    ),
+    entry!(
+        "PLAN-SCENARIO-UNKNOWN",
+        W,
+        S::Ok,
+        "a task names a scenario its story does not have",
+        "A task names the scenarios it makes hold, `(scenarios US3-1)`; this one names an id that is not a scenario of its story (ids are the story's number and the scenario's position in it). The link is ignored: the task's test author chooses from the story, and the story's checkpoint judges what is left.",
+        ["speccoder spec tasks"]
+    ),
+    entry!(
         "PLAN-BEHAVIOUR-EARLY",
         W,
         S::Ok,

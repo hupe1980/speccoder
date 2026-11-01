@@ -270,6 +270,22 @@ impl Adapter for SpecKit {
                     .collect()
             })
             .unwrap_or_default();
+        let story_tasks = task
+            .story
+            .as_deref()
+            .map(|label| {
+                tasks
+                    .tasks
+                    .iter()
+                    .filter(|t| t.id != task.id && t.story.as_deref() == Some(label))
+                    .map(|t| DependencyContext {
+                        id: t.id.clone(),
+                        title: t.title.clone(),
+                        done: t.done,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
 
         Ok(Bundle {
             feature: feature.feature.name.clone(),
@@ -303,6 +319,7 @@ impl Adapter for SpecKit {
                 parallel: task.parallel,
             },
             dependencies,
+            story_tasks,
         })
     }
 

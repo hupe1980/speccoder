@@ -635,6 +635,14 @@ pub enum TaskAction {
         #[arg(long)]
         revoke: bool,
     },
+    /// Judge this task by its regression checks and its story's scenarios at the story's checkpoint (a decision, not a plan edit).
+    Defer {
+        /// The task, e.g. T018.
+        task: String,
+        /// Take the decision back.
+        #[arg(long)]
+        revoke: bool,
+    },
     /// Approve the call the task stopped for (that object for the rest of the task, by default).
     Approve {
         /// The task, e.g. T005; several decide each one's waiting call on its own.

@@ -7,6 +7,7 @@
   const evidenceOf = latest();
   const patchOf = latest();
   import { phaseLabel, symbol, word } from "../lib/marks";
+  import { shareWords } from "../lib/story";
   import { KINDS, key, offer, ofTask, stopOf, stopOffers } from "../lib/actions";
   import type { AccountTurn, Row, Task } from "../lib/types";
   import Account from "./Account.svelte";
@@ -67,6 +68,15 @@
     );
   });
 
+  // What judges the task (an open task of a story), and — when its tests
+  // needed later tasks — the offer to judge them at the checkpoint.
+  const share = $derived((app.report?.data?.tasks ?? []).find((t) => t.id === app.selected)?.share ?? null);
+  const defer = $derived(
+    (app.inbox?.data?.items ?? [])
+      .filter((i) => i.task === app.selected && i.feature === app.feature)
+      .flatMap((i) => i.actions)
+      .find((a) => a.id.kind === "defer_acceptance") ?? null,
+  );
   // The selected task's own actions, by their subject: "Accept", "Skip"…
   const actions = $derived(app.selected ? ofTask(app.actions, app.selected) : []);
   // A quick change or bug fix that grew: its offer, as Needs You lists it.
@@ -151,6 +161,16 @@
       <button role="tab" aria-selected={tab === "diff"} class:on={tab === "diff"} disabled={!source} title={source ? "" : "No code yet: the task has no commit and no attempt"} onclick={() => (tab = "diff")}>{source?.label ?? "Changes"}</button>
     </div>
     {#if tab === "evidence"}
+      {#if share}
+        <div class="judged" class:offer={!!defer}>
+          <Icon name="seal" size={13} />
+          <span><strong>Judged by</strong> {shareWords(share)}</span>
+          {#if defer && share.kind === "authored"}
+            <p class="muted">Its acceptance tests need later tasks of the story? Judge them at {share.checkpoint}: this task is then judged by its regression checks.</p>
+            <button class="btn small primary" disabled={!!app.job?.running} title={`$ ${defer.command}`} onclick={() => app.perform(defer)}>Judge at {share.checkpoint}</button>
+          {/if}
+        </div>
+      {/if}
       <dl class="grouped">
         {#each data.rows as r, n (r.label + r.text)}
           <div class="row" class:claim={r.label === "Model says"} {...askable("evidence_row", { task: app.selected, label: r.label }, `${app.selected} · ${r.label}`, `Evidence of ${app.selected}, ${r.label}: ${r.text}`)}>
@@ -196,6 +216,9 @@
 </aside>
 
 <style>
+  .judged { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.5rem; align-items: start; margin: 0 0 0.8rem; padding: 0.6rem 0.75rem; border-radius: 10px; background: var(--fill); font-size: 0.84rem; }
+  .judged.offer { background: color-mix(in srgb, var(--attention, #ff9f0a) 10%, var(--surface)); }
+  .judged p, .judged button { grid-column: 2; margin: 0; justify-self: start; }
   .link { border: 0; background: none; padding: 0; color: var(--accent-ink); font-weight: 600; cursor: pointer; }
   .aside-card {
     display: grid; grid-template-columns: auto 1fr; gap: 0.7rem; padding: 0.8rem 0.9rem; border-radius: var(--radius);

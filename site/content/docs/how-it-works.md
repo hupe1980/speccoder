@@ -19,7 +19,7 @@ Your **checks** (the test, lint and type-check commands in `speccoder.toml`) run
 
 ## 3. Acceptance tests, red first
 
-If the task's user story has acceptance examples, a **separate model call with no tools** writes tests from them. They must **fail** now, since a test that already passes demonstrates nothing, and are then frozen so the implementing model cannot change them. A second set, [held out](@/docs/evidence.md#held-out-tests) from the model, checks the same scenarios with other inputs.
+If the task's user story has acceptance examples, a **separate model call with no tools** writes tests from the ones [that judge this task](@/docs/evidence.md#what-judges-each-task). They must **fail** now, since a test that already passes demonstrates nothing, and are then frozen so the implementing model cannot change them. A second set, [held out](@/docs/evidence.md#held-out-tests) from the model, checks the same scenarios with other inputs.
 
 ## 4. The attempt
 

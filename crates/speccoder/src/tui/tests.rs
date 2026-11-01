@@ -12,6 +12,7 @@ use crate::style::{Look, Theme};
 
 fn task(id: &str, state: &str) -> TaskStatus {
     TaskStatus {
+        share: None,
         lane: speccoder_core::lane::Lane::default(),
         id: id.to_owned(),
         title: format!("title of {id}"),
@@ -38,6 +39,7 @@ fn snapshot() -> Snapshot {
     blocked.blocked_by = vec!["T002".to_owned()];
     Snapshot {
         report: Some(StatusReport {
+            stories: Vec::new(),
             review: None,
             issues: Vec::new(),
             feature: "001-x".to_owned(),

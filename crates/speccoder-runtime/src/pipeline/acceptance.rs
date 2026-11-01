@@ -1070,6 +1070,184 @@ pub(crate) fn strengthen(
     })
 }
 
+/// What judges `task` (speccoder_core::story): its story's tasks with
+/// their lanes and links, the scenarios earlier ticks on `repo`'s `HEAD`
+/// verified (while worded the same), and a person's deferral. `None` for a
+/// task of no story — a Setup or Polish task of Spec Kit.
+pub(crate) struct ShareInput<'a> {
+    pub(crate) repo: &'a Path,
+    pub(crate) plane: &'a Path,
+    pub(crate) feature: &'a str,
+    pub(crate) task: &'a str,
+    /// The story label it is judged under; `None`: the whole unit is the
+    /// story (OpenSpec), or none (`whole_unit` false).
+    pub(crate) story: Option<&'a str>,
+    pub(crate) whole_unit: bool,
+    pub(crate) tasks: Option<&'a speccoder_core::snapshot::ParsedTasks>,
+    pub(crate) unit_dir: &'a str,
+    pub(crate) judged: &'a dyn Fn(&str) -> bool,
+    pub(crate) scenarios: &'a [speccoder_core::spec::ScenarioRef],
+    /// Judge as if deferred (what a deferral would mean), whatever is
+    /// recorded.
+    pub(crate) as_deferred: bool,
+}
+
+pub(crate) fn share_of(i: &ShareInput<'_>) -> Option<speccoder_core::story::Share> {
+    use speccoder_core::story::{StoryTask, share};
+    let tasks = i.tasks?;
+    if i.story.is_none() && !i.whole_unit {
+        return None;
+    }
+    let members: Vec<&speccoder_core::snapshot::Task> = tasks
+        .tasks
+        .iter()
+        .filter(|t| i.whole_unit || t.story.as_deref() == i.story)
+        .collect();
+    if !members.iter().any(|t| t.id == i.task) {
+        return None;
+    }
+    let story: Vec<StoryTask<'_>> = members
+        .iter()
+        .map(|t| StoryTask {
+            id: &t.id,
+            checks_only: checks_only(t, i.unit_dir, i.judged),
+            done: t.done,
+            links: &t.scenarios,
+        })
+        .collect();
+    let ids: Vec<String> = i.scenarios.iter().map(|s| s.id.clone()).collect();
+    let ids_of: Vec<&str> = members.iter().map(|t| t.id.as_str()).collect();
+    let digests = super::commit::verified_digests(i.repo, "HEAD", i.feature);
+    let verified: std::collections::BTreeSet<String> = verified_by(&ids_of, i.scenarios, &digests)
+        .into_keys()
+        .collect();
+    let deferred =
+        i.as_deferred || crate::acceptance_at::deferred(i.plane, i.feature, i.task).is_some();
+    share(&story, i.task, &ids, &verified, deferred)
+}
+
+/// Judged by the checks alone: planning work, or a step only a person
+/// takes (`[YOU]`) — never a story's checkpoint.
+fn checks_only(
+    t: &speccoder_core::snapshot::Task,
+    unit_dir: &str,
+    judged: &dyn Fn(&str) -> bool,
+) -> bool {
+    t.yours
+        || speccoder_core::lane::by_paths(&t.title, unit_dir, judged)
+            == speccoder_core::lane::Lane::Planning
+}
+
+/// Each scenario a tick of `tasks` verified, worded as it is now, with the
+/// task whose tick did.
+fn verified_by(
+    tasks: &[&str],
+    scenarios: &[speccoder_core::spec::ScenarioRef],
+    digests: &std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
+) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::new();
+    for t in tasks {
+        let Some(d) = digests.get(*t) else { continue };
+        for s in scenarios {
+            if d.contains(&super::commit::scenario_digest(&s.id, &s.text)) {
+                out.entry(s.id.clone()).or_insert_with(|| (*t).to_owned());
+            }
+        }
+    }
+    out
+}
+
+/// What the report shows of a feature's stories.
+pub(crate) struct StoryView<'a> {
+    pub(crate) format: &'a dyn crate::format::Adapter,
+    pub(crate) snapshot: &'a speccoder_core::snapshot::ProjectSnapshot,
+    pub(crate) plane: Option<&'a Path>,
+    pub(crate) feature: &'a str,
+    pub(crate) unit_dir: &'a str,
+    pub(crate) tasks: &'a speccoder_core::snapshot::ParsedTasks,
+    /// Where the unit's ticks are read: the repository and the revision of
+    /// its branch (or `HEAD` in place).
+    pub(crate) repo: &'a Path,
+    pub(crate) rev: &'a str,
+}
+
+/// Each story task's share and each story's scenarios.
+pub(crate) fn story_view(
+    v: &StoryView<'_>,
+) -> (
+    std::collections::BTreeMap<String, speccoder_core::story::Share>,
+    Vec<speccoder_core::story::StoryScenarios>,
+) {
+    use speccoder_core::story::{ScenarioMark, StoryScenarios, StoryTask, checkpoint, share};
+    let whole_unit = v.format.kind() == speccoder_core::spec::FormatKind::Openspec;
+    let judged = v.format.rules().judged;
+    let digests = super::commit::verified_digests(v.repo, v.rev, v.feature);
+    let mut labels: Vec<Option<&str>> = Vec::new();
+    for t in &v.tasks.tasks {
+        let l = if whole_unit { None } else { t.story.as_deref() };
+        if (whole_unit || l.is_some()) && !labels.contains(&l) {
+            labels.push(l);
+        }
+    }
+    let mut shares = std::collections::BTreeMap::new();
+    let mut stories = Vec::new();
+    for label in labels {
+        let members: Vec<&speccoder_core::snapshot::Task> = v
+            .tasks
+            .tasks
+            .iter()
+            .filter(|t| whole_unit || t.story.as_deref() == label)
+            .collect();
+        let Some(first) = members.first() else {
+            continue;
+        };
+        let scenarios = v.format.scenarios(v.snapshot, &first.id);
+        if scenarios.is_empty() {
+            continue;
+        }
+        let story: Vec<StoryTask<'_>> = members
+            .iter()
+            .map(|t| StoryTask {
+                id: &t.id,
+                checks_only: checks_only(t, v.unit_dir, &judged),
+                done: t.done,
+                links: &t.scenarios,
+            })
+            .collect();
+        let ids_of: Vec<&str> = members.iter().map(|t| t.id.as_str()).collect();
+        let verified_by = verified_by(&ids_of, &scenarios, &digests);
+        let verified: std::collections::BTreeSet<String> = verified_by.keys().cloned().collect();
+        let ids: Vec<String> = scenarios.iter().map(|s| s.id.clone()).collect();
+        for t in &members {
+            let deferred = v
+                .plane
+                .is_some_and(|p| crate::acceptance_at::deferred(p, v.feature, &t.id).is_some());
+            if let Some(sh) = share(&story, &t.id, &ids, &verified, deferred) {
+                shares.insert(t.id.clone(), sh);
+            }
+        }
+        // A finished story is shown only when it left a scenario unjudged
+        // under this rule (its ticks recorded scenarios): ticks made before
+        // scenarios were recorded would only read as left.
+        let recorded = ids_of.iter().any(|t| digests.contains_key(*t));
+        if members.iter().all(|t| t.done) && !(recorded && verified.len() < ids.len()) {
+            continue;
+        }
+        stories.push(StoryScenarios {
+            story: label.map_or_else(|| v.feature.to_owned(), str::to_owned),
+            scenarios: ids
+                .iter()
+                .map(|id| ScenarioMark {
+                    id: id.clone(),
+                    verified_by: verified_by.get(id).cloned(),
+                })
+                .collect(),
+            checkpoint: checkpoint(&story).map(str::to_owned),
+        });
+    }
+    (shares, stories)
+}
+
 /// Whether `task` completes its story: the last task carrying its story
 /// label, in a story with at least two scenarios.
 pub(crate) fn story_checkpoint(

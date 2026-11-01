@@ -287,6 +287,7 @@ pub(crate) fn bare_report(
         bug: None,
         collection: None,
         regression: None,
+        share: None,
         context: None,
     }
 }
