@@ -98,7 +98,7 @@ Every `regression_only` tick carries one reason, decided by code, recorded in th
 | `acceptance_off` | `[acceptance] generate = false` |
 | `no_story` | The task belongs to no user story: nothing to derive a test from |
 | `no_scenarios` | Its story states no acceptance scenario |
-| `author_failed` | The test author's files could not be used (refused path, command not allowed, no place the runner collects) |
+| `author_failed` | The test author's files could not be used (refused path, a skipped or placeholder test, command not allowed, no place the runner collects) |
 | `author_wrote_none` | The test author wrote no test |
 | `tests_not_collected` | The acceptance command collected no test |
 | `not_red` | The acceptance tests did not fail first (build error, timeout, flaky, …) |

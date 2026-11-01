@@ -82,7 +82,9 @@ pub(crate) struct LanesMerged {
     pub(crate) lines: Vec<String>,
     pub(crate) one_at_a_time: Vec<String>,
     pub(crate) reverted: bool,
-    pub(crate) stop: Option<(String, CommandStatus, String)>,
+    /// The first lane that stopped: its task and its whole result (its
+    /// code and fix lines are the stop's).
+    pub(crate) stop: Option<(String, CommandResult)>,
 }
 
 /// Merges each passed lane's commit into the feature branch, then runs the
@@ -125,9 +127,9 @@ pub(crate) fn merge_lanes(
                 }
             }
             (CommandStatus::Ok, None) => {}
-            (status, _) => {
+            (_, _) => {
                 if out.stop.is_none() {
-                    out.stop = Some((task.clone(), status, res.message().to_owned()));
+                    out.stop = Some((task.clone(), res.clone()));
                 }
             }
         }
@@ -321,4 +323,36 @@ pub(crate) fn lane_worktree(
         l.path.display().to_string(),
         l.path.join(rel).display().to_string(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A lane that stopped keeps its whole result: its code and the fix
+    /// lines it offers (a ruling) reach the feature run's stop.
+    #[test]
+    fn a_stopped_lane_keeps_its_code_and_fix_lines() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let stopped = CommandResult::new("run", CommandStatus::NeedsHuman, "US1-2 still red")
+            .with_code("STORY-OPEN")
+            .with_fix(vec![
+                "speccoder task rule T003 --tests-wrong --scenario US1-2 --reason \"…\"".to_owned(),
+            ]);
+        let out = merge_lanes(
+            dir.path(),
+            dir.path(),
+            dir.path(),
+            "001-graph",
+            vec![("T003".to_owned(), stopped)],
+        );
+        let (task, res) = out.stop.unwrap_or_else(|| panic!("no stop"));
+        assert_eq!(task, "T003");
+        assert_eq!(res.code().map(|c| c.name), Some("STORY-OPEN"));
+        assert!(
+            res.fix()
+                .iter()
+                .any(|f| f.contains("--tests-wrong --scenario US1-2"))
+        );
+    }
 }

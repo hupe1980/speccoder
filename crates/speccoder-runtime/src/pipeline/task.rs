@@ -3702,12 +3702,17 @@ fn run_task_once(
     let story_open_fix: Vec<String> = match &report.progress {
         Some(speccoder_core::story::Progress::StoryOpen { scenarios }) if !report.ticked => {
             let f = feature.map_or_else(String::new, |f| format!(" --feature {f}"));
-            std::iter::once(format!("speccoder task nudge {task}{f} --note \"…\""))
-                .chain(scenarios.iter().map(|id| {
+            // The rulings first: a toast shows the first line.
+            scenarios
+                .iter()
+                .map(|id| {
                     format!(
                         "speccoder task rule {task}{f} --tests-wrong --scenario {id} --reason \"…\""
                     )
-                }))
+                })
+                .chain(std::iter::once(format!(
+                    "speccoder task nudge {task}{f} --note \"…\""
+                )))
                 .collect()
         }
         // The task's own test failed, or was called wrong: rule it.

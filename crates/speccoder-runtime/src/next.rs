@@ -44,7 +44,11 @@ pub fn attach(result: CommandResult, feature: Option<&str>) -> CommandResult {
             {
                 fix = why;
             }
-            result = result.with_code(entry.name).with_fix(fix);
+            // The stop's own lines (a ruling it offers) first, then the
+            // catalog's not already there.
+            let mut own = result.given_fix().to_vec();
+            own.extend(fix.into_iter().filter(|l| !result.given_fix().contains(l)));
+            result = result.with_code(entry.name).with_fix(own);
         }
     }
     result
@@ -326,6 +330,46 @@ mod tests {
                 .next()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn a_stop_keeps_the_fix_lines_it_offers_before_the_catalog_s() {
+        let r = CommandResult::new("run", CommandStatus::NeedsHuman, "x").with_fix(vec![
+            "speccoder task rule T029 --tests-wrong --reason \"…\"".to_owned(),
+        ]);
+        let r = attach(r, None);
+        assert!(r.has_explicit_code());
+        assert_eq!(
+            r.fix().first().map(String::as_str),
+            Some("speccoder task rule T029 --tests-wrong --reason \"…\"")
+        );
+        assert!(r.fix().len() > 1, "{:?}", r.fix());
+    }
+
+    /// A run that stopped incomplete: its own ruling line first, the
+    /// code's lines after it, each once; attaching again changes nothing,
+    /// and steps already attached are kept.
+    #[test]
+    fn a_run_stop_keeps_its_ruling_and_attach_is_idempotent() {
+        let ruling = "speccoder task rule T029 --tests-wrong --reason \"…\"";
+        let report = crate::pipeline::outcome::bare_report("001-x", "T029", "/w", "incomplete");
+        let r = CommandResult::new("run", CommandStatus::NeedsHuman, "x")
+            .with_data(CommandData::Run(Box::new(report)))
+            .with_fix(vec![ruling.to_owned()]);
+        let once = attach(r, Some("001-x"));
+        assert_eq!(once.code().map(|c| c.name), Some("ATTEMPT-INCOMPLETE"));
+        let fix = once.fix();
+        assert_eq!(fix.first().map(String::as_str), Some(ruling));
+        assert_eq!(fix.iter().filter(|f| f.as_str() == ruling).count(), 1);
+        assert!(
+            fix.iter()
+                .any(|f| f.starts_with("speccoder task nudge T029")),
+            "{fix:?}"
+        );
+        let next = once.next().to_vec();
+        let twice = attach(once, Some("001-x"));
+        assert_eq!(twice.fix(), fix);
+        assert_eq!(twice.next(), next.as_slice());
     }
 
     #[test]

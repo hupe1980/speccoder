@@ -303,6 +303,33 @@ fn the_story_s_last_task_must_close_it_or_stop_for_a_person() {
         saved.first().map(|a| a.story_open.clone()),
         Some(vec!["US1-2".to_owned()])
     );
+    // As shown: the ruling first among the fix lines, and in Needs You.
+    let shown = speccoder_runtime::next::attach(res, None);
+    assert_eq!(shown.code().map(|c| c.name), Some("STORY-OPEN"));
+    assert!(
+        shown
+            .fix()
+            .first()
+            .is_some_and(|f| f.contains("task rule T003 --tests-wrong --scenario US1-2")),
+        "{:?}",
+        shown.fix()
+    );
+    let inbox = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    let Some(CommandData::Inbox(items)) = inbox.data() else {
+        panic!("{}", inbox.message());
+    };
+    assert!(
+        items
+            .items
+            .iter()
+            .flat_map(|i| &i.actions)
+            .any(|a| matches!(
+                &a.run,
+                Some(speccoder_core::actions::Runnable::RuleScenario { task, scenario: Some(s) })
+                    if task == "T003" && s == "US1-2"
+            )),
+        "no ruling for US1-2 in Needs You"
+    );
     // The ruling is a person's decision, kept in speccoder's state.
     let ruled = speccoder_runtime::acceptance_at::rule_tests_wrong(
         r.path(),
@@ -495,12 +522,15 @@ fn a_task_outside_a_story_has_its_wrong_test_ruled_and_written_again() {
         "{}",
         res.message()
     );
+    // As the terminal and the app show it: through `next::attach`.
+    let shown = speccoder_runtime::next::attach(res, None);
     assert!(
-        res.fix()
+        shown
+            .fix()
             .iter()
             .any(|f| f.contains("task rule T026 --tests-wrong --reason")),
         "{:?}",
-        res.fix()
+        shown.fix()
     );
     let saved = speccoder_runtime::attempts::list(r.path(), "001-graph");
     assert_eq!(
@@ -632,4 +662,60 @@ fn the_author_sees_the_suite_s_tests_on_the_same_code() {
     // Without a cited name it touches, no such section.
     let plain = given(r.path(), "T001");
     assert!(!plain.contains("The project's tests on the same code"));
+}
+
+/// A placeholder — a test that raises "not implemented" — is no red: no
+/// implementation can turn it green. It is refused, never run as evidence.
+#[test]
+fn a_placeholder_test_is_refused_never_red() {
+    let tasks = format!(
+        "{}\n## Phase 7: Convergence\n\n- [ ] T029 Validate the header in `src/lib.rs` per US1/AC3 (partial)\n",
+        TASKS.replace("- [ ]", "- [x]")
+    );
+    let r = repo_with(&tasks);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(json!({
+        "files": [{ "path": "tests/test_acceptance_t029.py", "content": "def test_header():\n    raise NotImplementedError(\"once the entrypoint is known\")\n", "scenarios": ["US1-3"] }],
+        "argv": ["./accept.sh", "--", "tests/test_acceptance_t029.py", "fn gamma"],
+        "notes": [],
+    }));
+    implements(&f, "pub fn gamma() {}");
+    let res = run(r.path(), state.path(), "T029", &f);
+    let rep = report(&res);
+    let a = rep.acceptance.as_ref().expect("acceptance reported");
+    assert!(
+        a.to_string().contains("placeholder"),
+        "{a}\n{}",
+        res.message()
+    );
+    assert_ne!(a["red"], json!(true), "{a}");
+    assert!(
+        !rep.changes
+            .iter()
+            .any(|c| c.0.ends_with("test_acceptance_t029.py"))
+    );
+}
+
+/// A feature's done and total come from one list: the speccoder branch's,
+/// ahead with its ticks and appended convergence tasks — never the
+/// branch's ticks over the checkout's tasks (*26 of 25*).
+#[test]
+fn a_feature_counts_its_tasks_from_one_list() {
+    let r = repo();
+    git(r.path(), &["branch", "speccoder/001-graph"]);
+    git(r.path(), &["checkout", "-q", "speccoder/001-graph"]);
+    let ahead = format!(
+        "{}\n## Phase 7: Convergence\n\n- [x] T026 Route both tables in src/lib.rs per US1/AC3\n",
+        TASKS.replace("- [ ]", "- [x]")
+    );
+    fs::write(r.path().join("specs/001-graph/tasks.md"), ahead).unwrap();
+    git(r.path(), &["commit", "-qam", "ticks and a gap"]);
+    git(r.path(), &["checkout", "-q", "main"]);
+    let res = speccoder_runtime::current::list(r.path(), None);
+    let Some(CommandData::Features(f)) = res.data() else {
+        panic!("{}", res.message());
+    };
+    let f = &f.features[0];
+    assert_eq!((f.done, f.tasks), (5, 5), "{f:?}");
 }

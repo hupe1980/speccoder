@@ -89,6 +89,9 @@ describe("Board", () => {
           task("T021", "blocked", { judged: { kind: "checkpoint" } }),
         ],
         stories: [
+          // Done: proven, or ticked before its oracle — neither on the board.
+          { story: "US8", proven: true, oracle: { commit: "abc1234", decided_by: "speccoder run" }, scenarios: [{ id: "US8-1", state: "green" }] },
+          { story: "US9", before_oracle: true, scenarios: [{ id: "US9-1", state: "red" }] },
           {
             story: "US3",
             oracle: { commit: "abc1234", decided_by: "speccoder run" },
@@ -104,6 +107,8 @@ describe("Board", () => {
     };
     shown = mount(Board, { target: document.body });
     flushSync();
+    expect(document.querySelector('button[aria-label^="US8"]')).toBeNull();
+    expect(document.querySelector('button[aria-label^="US9"]')).toBeNull();
     const strip = document.querySelector('button[aria-label^="US3"]') as HTMLButtonElement;
     expect(strip.getAttribute("aria-label")).toBe("US3: 1 of 3 green · T018 turned US3-2 · T021 closes it");
     expect(strip.querySelectorAll(".mk.on")).toHaveLength(1);

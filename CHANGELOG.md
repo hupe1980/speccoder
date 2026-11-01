@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A stop's own fix lines (*rule its tests wrong*) were replaced by the
+  code's defaults before the terminal and the app showed them.
+- A stop in a parallel lane lost its code and fix lines (a story's
+  checkpoint ruling among them).
+- A test that raises *not implemented* (`raise NotImplementedError`,
+  `todo!()`, …) was taken as red although nothing can turn it green: it is
+  refused like a skipped test.
+
 ## [0.8.1] - 2026-11-01
 
 ### Added

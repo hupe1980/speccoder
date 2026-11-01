@@ -118,3 +118,44 @@ fn recorded_real_runs_replay_strictly() {
         }
     }
 }
+
+/// The model's account of a run: found in a lane's journal as in the
+/// project's; a run no journal holds, or no journal at all, is said — never
+/// read as a model that said nothing.
+#[test]
+fn an_account_is_found_in_a_lane_and_a_missing_one_is_said() {
+    let fixture = recorded().join("calc-add");
+    let manifest = std::fs::read_to_string(fixture.join("manifest.toml")).unwrap();
+    let run = run_ids(&manifest).remove(0);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let plane = tempfile::tempdir().unwrap();
+    let none = rt
+        .block_on(speccoder_runtime::substrate::account(plane.path(), &run))
+        .unwrap_err();
+    assert!(none.0.contains("no journal"), "{}", none.0);
+    let lane = plane.path().join("lanes").join("l1");
+    std::fs::create_dir_all(&lane).unwrap();
+    std::fs::copy(
+        fixture
+            .join("journal")
+            .join(speccoder_runtime::substrate::JOURNAL),
+        lane.join(speccoder_runtime::substrate::JOURNAL),
+    )
+    .unwrap();
+    let turns = rt
+        .block_on(speccoder_runtime::substrate::account(plane.path(), &run))
+        .unwrap();
+    assert!(!turns.is_empty());
+    let other = "run_01M00000000000000000000000";
+    let missing = rt
+        .block_on(speccoder_runtime::substrate::account(plane.path(), other))
+        .unwrap_err();
+    assert!(
+        missing.0.contains("not in this project's journal"),
+        "{}",
+        missing.0
+    );
+}

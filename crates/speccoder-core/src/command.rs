@@ -2901,6 +2901,12 @@ impl CommandResult {
         self.code.is_some()
     }
 
+    /// The fixes given with the result itself, before any code's.
+    #[must_use]
+    pub fn given_fix(&self) -> &[String] {
+        &self.fix
+    }
+
     /// How to resolve it: the fixes given, else the code's own.
     #[must_use]
     pub fn fix(&self) -> Vec<String> {

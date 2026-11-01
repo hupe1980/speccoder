@@ -318,6 +318,7 @@ pub(crate) fn refusal_words(why: &str) -> &'static str {
         "exists" => "already exists",
         "not_collected" => "is not where the runner collects tests",
         "skip_marker" => "skips a test",
+        "placeholder" => "is a placeholder that can never pass",
         _ => "is not a new test file",
     }
 }
@@ -434,6 +435,17 @@ pub(crate) fn validate_answer(
                 message: format!("`{rel}` skips a test"),
                 path: rel,
                 why: "skip_marker",
+            });
+            continue;
+        }
+        // A placeholder fails whatever the code does: no evidence.
+        if crate::integrity::has_placeholder(content) {
+            refused.push(RefusedFile {
+                message: format!(
+                    "`{rel}` is a placeholder: it raises \"not implemented\" instead of checking the behaviour"
+                ),
+                path: rel,
+                why: "placeholder",
             });
             continue;
         }

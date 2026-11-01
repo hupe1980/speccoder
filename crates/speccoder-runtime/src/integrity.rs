@@ -170,6 +170,18 @@ pub fn removed_tests(before: &str, after: &str) -> Vec<String> {
     gone
 }
 
+/// Markers of a placeholder: a test that fails by saying it is not
+/// written, never by checking anything.
+const PLACEHOLDER_MARKERS: &str = r#"\braise\s+NotImplementedError\b|\btodo!\s*\(|\bunimplemented!\s*\(|(?i:throw\s+new\s+Error\s*\(\s*['"`](?:not implemented|todo|placeholder))|(?i:\b(?:t\.Fatal|pytest\.fail|fail)\s*\(\s*['"`](?:not implemented|todo|placeholder))"#;
+
+/// Whether `text` is a placeholder: it fails by raising "not implemented"
+/// (`raise NotImplementedError`, `todo!()`, `unimplemented!()`, …) — red
+/// that no implementation can turn green.
+#[must_use]
+pub fn has_placeholder(text: &str) -> bool {
+    Regex::new(PLACEHOLDER_MARKERS).is_ok_and(|r| r.is_match(text))
+}
+
 /// Whether `text` holds a marker that skips a test.
 #[must_use]
 pub fn has_skip_marker(text: &str) -> bool {
@@ -525,5 +537,25 @@ mod tests {
             ),
             ["frozen test deleted: Tests/API.rs"]
         );
+    }
+
+    #[test]
+    fn a_placeholder_test_is_known_in_each_language() {
+        for text in [
+            "def test_a():\n    raise NotImplementedError(\"later\")\n",
+            "#[test] fn a() { todo!() }",
+            "#[test] fn a() { unimplemented!(\"x\") }",
+            "it('a', () => { throw new Error('Not implemented') })",
+            "func TestA(t *testing.T) { t.Fatal(\"not implemented\") }",
+        ] {
+            assert!(has_placeholder(text), "{text}");
+        }
+        for text in [
+            "def test_a():\n    with pytest.raises(NotImplementedError):\n        f()\n",
+            "#[test] fn a() { assert_eq!(f(), 2) }",
+            "it('a', () => expect(() => f()).toThrow('not implemented'))",
+        ] {
+            assert!(!has_placeholder(text), "{text}");
+        }
     }
 }

@@ -600,6 +600,13 @@ mod look_tests {
     }
 
     fn report_of(edit: impl Fn(&mut Vec<TaskStatus>)) -> CommandResult {
+        report_with(edit, Vec::new())
+    }
+
+    fn report_with(
+        edit: impl Fn(&mut Vec<TaskStatus>),
+        stories: Vec<speccoder_core::story::StoryScenarios>,
+    ) -> CommandResult {
         let long = "Handle Unicode input in the slug generator, including combining marks and wide characters such as 日本語";
         let tasks = [
             "verified",
@@ -625,7 +632,7 @@ mod look_tests {
         edit(&mut tasks);
         let r = CommandResult::ok("report", "8 tasks").with_data(CommandData::Report(Box::new(
             StatusReport {
-                stories: Vec::new(),
+                stories,
                 review: None,
                 issues: Vec::new(),
                 feature: "001-x".to_owned(),
@@ -662,6 +669,84 @@ mod look_tests {
                 String::from_utf8(err).unwrap(),
             )
         })
+    }
+
+    /// What the terminal prints of a task's own-test stop and of stories:
+    /// the ruling's command; a story ticked before its oracle as such (no
+    /// red count); one no task closes with the command that adds one; a
+    /// proven story not at all.
+    #[test]
+    fn the_report_says_how_each_story_and_own_test_stands() {
+        use speccoder_core::story::{OracleMark, ScenarioMark, ScenarioState, StoryScenarios};
+        let marks = |story: &str, n: usize| -> Vec<ScenarioMark> {
+            (1..=n)
+                .map(|k| ScenarioMark {
+                    id: format!("{story}-{k}"),
+                    state: ScenarioState::Red,
+                    turned_by: None,
+                    contract: None,
+                })
+                .collect()
+        };
+        let story = |name: &str, n: usize| StoryScenarios {
+            story: name.to_owned(),
+            scenarios: marks(name, n),
+            checkpoint: None,
+            oracle: Some(OracleMark {
+                commit: "abc1234".to_owned(),
+                decided_by: "speccoder run".to_owned(),
+            }),
+            proven: false,
+            before_oracle: false,
+        };
+        let r = report_with(
+            |tasks| {
+                tasks[6].last_attempt = Some(speccoder_core::LastAttempt {
+                    outcome: "incomplete".to_owned(),
+                    reason: "the model says: done".to_owned(),
+                    run_id: None,
+                    reference: "refs/x".to_owned(),
+                    story_open: Vec::new(),
+                    own_test: Some("tests/test_acceptance_t007.py".to_owned()),
+                });
+            },
+            vec![
+                StoryScenarios {
+                    oracle: None,
+                    before_oracle: true,
+                    ..story("US1", 2)
+                },
+                story("US2", 1),
+                StoryScenarios {
+                    proven: true,
+                    ..story("US3", 1)
+                },
+            ],
+        );
+        let (out, _) = render(
+            Look {
+                width: 200,
+                ..Look::PLAIN
+            },
+            &r,
+        );
+        assert!(
+            out.contains("its own test failed: tests/test_acceptance_t007.py — wrong? `speccoder task rule T007 --tests-wrong --reason …`"),
+            "{out}"
+        );
+        assert!(
+            out.contains(
+                "Story      US1 ticked before its oracle: its 2 scenario(s) were never run"
+            ),
+            "{out}"
+        );
+        assert!(!out.contains("US1 ○"), "{out}");
+        assert!(
+            out.contains("US2 ○ 0 of 1 green · no task closes it — add the task that implements it (`speccoder spec tasks`)"),
+            "{out}"
+        );
+        assert!(!out.contains("doctor"), "{out}");
+        assert!(!out.contains("US3"), "a proven story is not listed: {out}");
     }
 
     #[test]

@@ -579,7 +579,7 @@ pub fn run_feature_with(
             parallel_lines.borrow_mut().extend(outcome.lines);
             one_at_a_time.extend(outcome.one_at_a_time);
             parallel_off |= outcome.reverted;
-            if let Some((task, status, message)) = outcome.stop {
+            if let Some((task, res)) = outcome.stop {
                 // An honest stop in a lane is asked about like any other.
                 let claim = attempts
                     .iter()
@@ -587,7 +587,13 @@ pub fn run_feature_with(
                     .find(|a| a.task == task && a.attempt_status == "blocked")
                     .map(|a| a.reason.clone().unwrap_or_default());
                 let Some(claim) = claim else {
-                    return finish(feature_name, attempts, status, format!("{task}: {message}"));
+                    return finish(
+                        feature_name,
+                        attempts,
+                        res.status(),
+                        format!("{task}: {}", res.message()),
+                    )
+                    .caused_by(&res);
                 };
                 let stop = crate::approvals::StopRequest {
                     task: format!("{}/{task}", w.feature),
