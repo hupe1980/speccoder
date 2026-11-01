@@ -29,6 +29,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - A story task's tests could need its later tasks (an entry point, an
   error message): its attempts could never pass.
+- An external agent whose call waits for a person was not always told to
+  stop its turn (`session/cancel`).
 
 ### Upgrading
 

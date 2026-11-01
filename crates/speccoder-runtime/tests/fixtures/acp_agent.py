@@ -26,10 +26,13 @@ answers `initialize` and `session/new`, and what it does in its one turn:
 Every answer it got from the client is appended to `log` as a JSON line:
 `{"step": i, "method": ..., "result": ...} | {"error": ...}`; the client's
 requests to it too (`{"got": method, "params": ...}`). A step after a
-refused or cancelled permission still runs: the test says what follows.
+refused permission still runs: the test says what follows. After a
+cancelled one it waits (up to 5 s) for `session/cancel`, as an agent's
+turn ends on it.
 """
 import json
 import os
+import select
 import sys
 import time
 
@@ -38,6 +41,8 @@ LOG = SCENARIO.get("log")
 CWD = os.getcwd()
 NEXT = [100]
 CANCELLED = [False]
+# Unbuffered, so `select` sees every message not yet read.
+STDIN = os.fdopen(sys.stdin.fileno(), "rb", buffering=0)
 
 
 def log(entry):
@@ -66,10 +71,23 @@ def notify(session, update):
 
 
 def read():
-    line = sys.stdin.readline()
+    line = STDIN.readline()
     if not line:
         sys.exit(0)
     return json.loads(line)
+
+
+def waiting(seconds):
+    """Whether a message arrives within `seconds`."""
+    ready, _, _ = select.select([STDIN], [], [], seconds)
+    return bool(ready)
+
+
+def await_cancel(seconds):
+    end = time.time() + seconds
+    while time.time() < end and not CANCELLED[0]:
+        if waiting(0.05):
+            handle_side(read())
 
 
 def handle_side(msg):
@@ -132,6 +150,9 @@ def turn(session, prompt_id):
                           {"sessionId": session, "toolCall": tool, "options": options})
             log({"step": i, "method": "session/request_permission",
                  "result": answer.get("result"), "error": answer.get("error")})
+            outcome = (answer.get("result") or {}).get("outcome") or {}
+            if outcome.get("outcome") == "cancelled":
+                await_cancel(5)
         elif "read" in step:
             params = {"sessionId": session, "path": absolute(step["read"])}
             for k in ("line", "limit"):
@@ -173,12 +194,7 @@ def turn(session, prompt_id):
             t.setdefault("toolCallId", "tool-%d" % i)
             notify(session, dict({"sessionUpdate": "tool_call"}, **t))
         elif "sleep" in step:
-            end = time.time() + step["sleep"]
-            import select
-            while time.time() < end and not CANCELLED[0]:
-                ready, _, _ = select.select([sys.stdin], [], [], 0.05)
-                if ready:
-                    handle_side(read())
+            await_cancel(step["sleep"])
         elif "exit" in step:
             if step.get("stderr"):
                 sys.stderr.write(step["stderr"] + "\n")

@@ -965,9 +965,12 @@ async fn session(
     let ended = loop {
         let until = shared.deadline + shared.governor.asking();
         let left = until.saturating_duration_since(Instant::now());
+        // A stop is signalled before the agent is answered, so it is ready
+        // whenever the turn's end is: checked first, it always wins.
         tokio::select! {
-            r = &mut turn => break Some(r),
+            biased;
             () = stop.notified() => break None,
+            r = &mut turn => break Some(r),
             () = tokio::time::sleep(left) => {
                 if Instant::now() >= shared.deadline + shared.governor.asking() {
                     finished.timed_out = true;
