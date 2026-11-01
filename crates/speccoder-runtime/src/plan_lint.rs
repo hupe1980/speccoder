@@ -34,7 +34,7 @@ pub const RULES: [Rule; 4] = [
     },
     Rule {
         code: "PLAN-SCENARIO-UNKNOWN",
-        preset: "Name, in each implementing task's line, the scenarios it makes hold — `(scenarios US1-1, US1-2)`: the story's number and the scenario's position in it; that task is judged by exactly them, and the story's last task that is not documentation by every scenario not yet verified.",
+        preset: "Name, in each implementing task's line, the scenarios it makes hold — `(scenarios US1-1, US1-2)`: the story's number and the scenario's position in it; that task is judged by exactly them, and the story's checkpoint — its last open code task — by every scenario not yet verified.",
     },
     Rule {
         code: "PLAN-TESTS-UNCOLLECTED",

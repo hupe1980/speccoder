@@ -13,7 +13,7 @@ description: "Task list template for feature implementation"
 
 - Implement a story's behaviour inside that story's phase: Setup and Foundational tasks only create structure — manifests, empty modules, signatures that do not yet behave.
 - Write no task whose only output is tests: speccoder writes each story's acceptance tests from its scenarios and judges the implementing tasks by them.
-- Name, in each implementing task's line, the scenarios it makes hold — `(scenarios US1-1, US1-2)`: the story's number and the scenario's position in it; that task is judged by exactly them, and the story's last task that is not documentation by every scenario not yet verified.
+- Name, in each implementing task's line, the scenarios it makes hold — `(scenarios US1-1, US1-2)`: the story's number and the scenario's position in it; that task is judged by exactly them, and the story's checkpoint — its last open code task — by every scenario not yet verified.
 - When a task names a test file, name a path the project's test runner collects (Cargo: `tests/<name>.rs`, or `tests/<dir>/main.rs` and the modules it declares; pytest: `test_*.py` under `testpaths`; vitest/jest: a file matching `include`, such as `<name>.test.ts`; Go: `<name>_test.go` beside the package's sources).
 
 **Who does it (speccoder)**: every task is code for the implementer unless it says otherwise.

@@ -10,11 +10,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - **Every scenario judged.** In a story of several tasks, code decides
   what judges each one: a task naming its scenarios in its line,
-  `(scenarios US3-1)`, is judged by exactly those; the story's last task
-  that is not documentation by every scenario no earlier tick verified,
+  `(scenarios US3-1)`, is judged by exactly those; the story's checkpoint
+  — its last open code task — by every scenario no earlier tick verified,
   together. Ticks record their scenarios with a digest of the wording
   (`Scenarios:`). `report` and the board show each story's scenarios and
-  each open task's share.
+  what judges each open task.
 - **Judge it at the checkpoint** (`speccoder task defer T018`, Needs You,
   the inspector): a task whose tests need later tasks of its story is
   judged by its regression checks, its scenarios at the story's

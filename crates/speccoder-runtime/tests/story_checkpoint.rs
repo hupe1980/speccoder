@@ -266,8 +266,8 @@ fn a_person_defers_a_mid_story_task_to_the_checkpoint() {
 /// `accept.sh -- PATTERN`: one libtest-shaped test, "PATTERN is in src/lib.rs".
 const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
-/// T018's dead end, scripted: its tests stay red and the model says the
-/// rest is later tasks' — the next step and Needs You lead with judging
+/// A mid-story task whose tests stay red and the model says the rest is
+/// later tasks' — the next step and Needs You lead with judging
 /// them at the checkpoint, and the saved attempt says where.
 #[test]
 fn a_mid_story_task_whose_tests_stay_red_is_offered_the_checkpoint() {
