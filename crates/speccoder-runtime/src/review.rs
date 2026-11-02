@@ -617,11 +617,7 @@ fn sandbox_line(root: &Path) -> Option<String> {
         crate::sandbox::Network::Loopback => "loopback only",
         crate::sandbox::Network::On => "network on",
     };
-    let backend = match backend {
-        crate::sandbox::Backend::Seatbelt => "Seatbelt",
-        crate::sandbox::Backend::Landlock(_) => "Landlock+seccomp",
-    };
-    Some(format!("Sandbox: {backend}, {network}"))
+    Some(format!("Sandbox: {}, {network}", backend.mechanism()))
 }
 
 /// What *Approve and Run* would approve, what blocks it, and what an

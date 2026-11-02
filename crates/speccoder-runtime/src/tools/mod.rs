@@ -315,6 +315,12 @@ pub(crate) fn below_root(dir: Option<&str>) -> Option<&str> {
     dir.filter(|d| !matches!(d.trim(), "" | "." | "./"))
 }
 
+/// What the sandbox denied a failed command, for its result: `None` when
+/// there is neither a denial nor a note.
+fn sandbox_json(denials: &speccoder_core::verify::Denials) -> Option<Value> {
+    (!denials.is_empty()).then(|| json!(denials))
+}
+
 fn failure(error: impl Into<String>) -> Value {
     json!({ "ok": false, "error": error.into() })
 }
@@ -787,6 +793,10 @@ impl WorkspaceTools {
         if !drift.is_empty() {
             result["integrity"] = json!(drift);
         }
+        // Why a command failed is often the sandbox: say what it refused.
+        if let Some(sandbox) = sandbox_json(&outcome.sandbox) {
+            result["sandbox"] = sandbox;
+        }
         result
     }
 
@@ -855,5 +865,33 @@ impl ToolClient for WorkspaceTools {
     /// sandbox's concern, not a transport this client opens.)
     fn destination(&self, _tool: &ToolId) -> Destination {
         Destination::Local
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use speccoder_core::verify::Denials;
+
+    #[test]
+    fn the_sandbox_field_is_there_only_with_something_to_say() {
+        assert_eq!(sandbox_json(&Denials::default()), None);
+        let note = Denials {
+            note: Some("only refused system calls are reported on Linux".into()),
+            ..Denials::default()
+        };
+        assert_eq!(
+            sandbox_json(&note),
+            Some(json!({"note": "only refused system calls are reported on Linux"}))
+        );
+        let listed = Denials {
+            denied: vec!["git: file-write-data /w/.git/config — read-only".into()],
+            more: 3,
+            note: None,
+        };
+        assert_eq!(
+            sandbox_json(&listed),
+            Some(json!({"denied": ["git: file-write-data /w/.git/config — read-only"], "more": 3}))
+        );
     }
 }

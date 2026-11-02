@@ -49,6 +49,24 @@ jobs:
           tool: just,cargo-nextest@0.9.146,cargo-deny
       - run: just ci
 
+  # Ubuntu as shipped (user namespaces restricted): the sandbox is fitted
+  # and says what it leaves out, and every escape test still holds.
+  sandbox-fitted:
+    name: sandbox (Ubuntu as shipped)
+    runs-on: ubuntu-latest
+    env:
+      SPECCODER_EXPECT_FIT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.146
+      - run: cargo nextest run -p speccoder --test sandbox
+
   # The web interface is embedded from its committed build: rebuilding it
   # from source must give the same files, so what ships is what is reviewed.
   ui:

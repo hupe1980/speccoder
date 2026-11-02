@@ -31,3 +31,18 @@ run-wrapper = "isolated-state"
 [[profile.speccoder.scripts]]
 filter = "all()"
 run-wrapper = "isolated-state"
+
+# Bounds of a second or less prove that a reader never waits for another
+# process's lock (a wait would take seconds, or forever); they do not measure
+# speed. Such tests run alone, so a busy machine cannot fail them.
+[[profile.default.overrides]]
+filter = "test(=a_run_in_another_process_leaves_the_journal_readable)"
+threads-required = "num-test-threads"
+
+[[profile.ci.overrides]]
+filter = "test(=a_run_in_another_process_leaves_the_journal_readable)"
+threads-required = "num-test-threads"
+
+[[profile.speccoder.overrides]]
+filter = "test(=a_run_in_another_process_leaves_the_journal_readable)"
+threads-required = "num-test-threads"

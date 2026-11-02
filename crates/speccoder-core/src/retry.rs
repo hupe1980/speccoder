@@ -29,6 +29,9 @@ pub struct FailedCheck {
     pub failing_tests: Vec<String>,
     /// Output from the first error line on, capped.
     pub excerpt: String,
+    /// What the sandbox denied it.
+    #[serde(default, skip_serializing_if = "crate::verify::Denials::is_empty")]
+    pub sandbox: crate::verify::Denials,
 }
 
 /// What the next attempt is told about the previous one.
@@ -113,6 +116,7 @@ pub fn digest(
                 .map(|t| t.id.clone())
                 .collect(),
             excerpt: excerpt(&output(&c.stderr_tail, &c.stdout_tail)),
+            sandbox: c.sandbox.clone(),
         })
         .collect();
     Digest {
@@ -302,7 +306,36 @@ mod tests {
             truncated: false,
             note: None,
             flaky: false,
+            sandbox: Default::default(),
         }
+    }
+
+    /// The next attempt learns what the sandbox refused; a result without
+    /// denials serialises as before, and an older report still reads.
+    #[test]
+    fn denials_reach_the_digest_and_old_reports_still_read() {
+        let plain = check("test", CheckStatus::Failed, "error: x");
+        let json = serde_json::to_value(&plain).unwrap();
+        assert!(json.get("sandbox").is_none(), "{json}");
+        let back: CheckResult = serde_json::from_value(json).unwrap();
+        assert_eq!(back, plain);
+        let mut denied = plain.clone();
+        denied.sandbox = crate::verify::Denials {
+            denied: vec!["git: file-write-data /w/.git/config — read-only".into()],
+            more: 2,
+            note: None,
+        };
+        let d = digest(1, &[], &report(vec![denied.clone()]), &[]);
+        assert_eq!(d.checks[0].sandbox, denied.sandbox);
+        let json = serde_json::to_value(&d.checks[0]).unwrap();
+        assert_eq!(json["sandbox"]["more"], 2);
+        let plain_digest = digest(1, &[], &report(vec![plain]), &[]);
+        assert!(
+            serde_json::to_value(&plain_digest.checks[0])
+                .unwrap()
+                .get("sandbox")
+                .is_none()
+        );
     }
 
     fn report(checks: Vec<CheckResult>) -> VerifyReport {

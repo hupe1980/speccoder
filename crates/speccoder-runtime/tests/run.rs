@@ -604,7 +604,7 @@ fn skip_markers_and_ci_changes_are_flagged() {
 #[test]
 fn a_command_writing_agent_settings_stops_the_attempt_at_once() {
     let r = repo_with(
-        "[commands]\nallow = [[\"cp\", \"src/lib.rs\", \".claude/settings.json\"]]\n",
+        "[commands]\nallow = [[\"cp\", \"src/lib.rs\", \".claude/settings.json\"]]\n\n# The detector, not the sandbox (which refuses the write first).\n[sandbox]\nmode = \"off\"\n",
         &[(".claude/README.md", "agent config\n")],
     );
     let state = tempfile::tempdir().unwrap();
@@ -640,7 +640,7 @@ fn a_command_writing_agent_settings_stops_the_attempt_at_once() {
 #[test]
 fn a_command_writing_ignored_agent_settings_is_caught_too() {
     let r = repo_with(
-        "[commands]\nallow = [[\"cp\", \"src/lib.rs\", \".claude/settings.local.json\"]]\n",
+        "[commands]\nallow = [[\"cp\", \"src/lib.rs\", \".claude/settings.local.json\"]]\n\n# The detector, not the sandbox (which refuses the write first).\n[sandbox]\nmode = \"off\"\n",
         &[
             (".claude/README.md", "agent config\n"),
             (".gitignore", ".claude/settings.local.json\n"),
@@ -1547,6 +1547,7 @@ fn a_test_runner_that_ran_no_test_is_broken_a_failing_script_is_not() {
         truncated: false,
         note: None,
         flaky: false,
+        sandbox: Default::default(),
     };
     // The reported first run: a nextest profile the worktree does not have.
     let profile = check(
@@ -1565,6 +1566,16 @@ fn a_test_runner_that_ran_no_test_is_broken_a_failing_script_is_not() {
             "sh: missing-tool: not found"
         ))
         .is_some()
+    );
+    // What the sandbox denied a broken check is part of its reason.
+    let mut fetch = check(&["cargo", "test"], 101, "error: failed to download `serde`");
+    fetch.sandbox.denied = vec!["cargo: network-outbound static.crates.io:443".to_owned()];
+    fetch.sandbox.more = 2;
+    assert_eq!(
+        speccoder_runtime::pipeline::broken(&fetch).as_deref(),
+        Some(
+            "error: failed to download `serde` — the sandbox denied cargo: network-outbound static.crates.io:443 (and 2 more)"
+        )
     );
     // Tests ran and failed: pre-existing failures, not a broken check.
     let failing = check(

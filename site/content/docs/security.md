@@ -70,22 +70,28 @@ Approvals stay narrow: a grant covers one resolved object and ends with its run,
 
 Every command speccoder starts for a task (checks, the model's commands, the formatter, acceptance tests, mutation tools, MCP servers) runs inside it:
 
-- **macOS:** Seatbelt, with a profile generated per run.
-- **Linux:** Landlock for the filesystem and a seccomp filter for the network, applied with `no_new_privs` by speccoder's own helper before the command starts. Needs Landlock ABI 3 (Linux 6.2 or later).
+speccoder confines them with the [procage](https://github.com/hupe1980/procage) library:
+
+- **macOS:** Seatbelt, applied in the command's own process (no `sandbox-exec`).
+- **Linux:** Landlock for the filesystem, a seccomp filter for the network and, where the kernel allows unprivileged user namespaces, a mount namespace for the carve-outs, with `no_new_privs`. Needs Landlock (Linux 5.13 or later); see [older Linux kernels](#older-linux-kernels).
+
+Commands that run to completion start from speccoder's own process. MCP servers and agent terminals start through `speccoder __sandbox`, which confines itself and becomes the server, so whatever stops the server's process stops the server. Everything a command starts ends with it.
 
 Inside, a command:
 
 - **writes** only to the worktree, a private temporary directory and the package caches builds need (`~/.cargo/registry`, `~/.cache`, `~/.npm`, `~/go/pkg/mod`, `~/Library/Caches`, …), plus `[sandbox] writable`; not to speccoder's state, `~/.cargo/bin` or your checkout;
 - **cannot read** credentials: `~/.ssh`, `~/.aws`, `~/.azure`, `~/.gnupg`, `~/.netrc`, `~/.docker`, `~/.kube`, `~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.password-store`, `~/.config/gh`, `~/.config/gcloud`, `~/.cargo/credentials`, keyrings and keychains;
 - **has no network** beyond loopback (`[sandbox] network = "loopback"`, the default), so local test servers work; on Linux loopback is blocked too;
-- **cannot connect to a Unix socket outside the writable paths** (the Docker daemon's, a database's, an agent's); a check that needs one lists its directory in `[sandbox] writable`;
+- **cannot connect to a Unix socket outside the writable paths** (a database's, an agent's); a check that needs one lists its directory in `[sandbox] writable`. Sockets inside the writable paths work (test servers); on Linux without user namespaces no socket is reachable;
+- **cannot reach a container engine** (Docker, Podman, containerd) or, on Linux, your D-Bus buses and systemd user manager, not even with the network on or their directory writable: each runs commands outside the sandbox, so a check that starts containers cannot run sandboxed;
+- **cannot read other processes' arguments or environment** on macOS; on Linux their arguments stay readable (there is no PID namespace), their environment does not;
 - on macOS **cannot open applications** or send Apple events.
 
 A command gets the network only when it is exactly in `[sandbox] network_allow`, extends a `[sandbox] network_allow_prefix` entry, or a person approves that exact call. Fetch dependencies before a run (`cargo fetch`, `npm ci`), or allow the fetching command. CI runs an escape suite against these properties on macOS and Linux.
 
 Where the OS has no sandbox, every run says `commands run unsandboxed`; with `[sandbox] mode = "required"` it stops instead (`SANDBOX-UNAVAILABLE`).
 
-**Ubuntu 23.10 and later** restrict unprivileged user namespaces through AppArmor. Landlock and seccomp still apply, but without the namespace a command can write `.git` (the [git guard](#in-place-mode) catches it), read git-ignored secrets and reach daemon sockets; every run says so. To give speccoder its namespace, allow it in an AppArmor profile (the path is where your `speccoder` is installed):
+**Ubuntu 23.10 and later** restrict unprivileged user namespaces through AppArmor. Landlock and seccomp still apply and credentials stay unreadable, but without the namespace a command can write `.git` in place (the [git guard](#in-place-mode) catches it), read git-ignored secrets in place and write git hooks and shell startup files in the workspace, and no Unix socket is reachable; every run says so. To give speccoder its namespace, allow it in an AppArmor profile (the path is where your `speccoder` is installed):
 
 ```text
 # /etc/apparmor.d/speccoder — then: sudo apparmor_parser -r /etc/apparmor.d/speccoder
@@ -95,6 +101,13 @@ profile speccoder /usr/local/bin/speccoder flags=(unconfined) {
   userns,
 }
 ```
+
+**Older Linux kernels.** Commands stay confined on every kernel with Landlock (Linux 5.13 or later, or a distribution that backports it). Two limits depend on the kernel's age, and every run names the ones that apply:
+
+| Kernel | What changes |
+|---|---|
+| Older than Linux 6.12 (Landlock ABI 6), for example Ubuntu 24.04's 6.8, Debian 12, Ubuntu 22.04 | A command can signal (stop or kill) your other processes, not only its own. |
+| Older than Linux 6.2 (Landlock ABI 3), for example Debian 12, Ubuntu 22.04's 5.15 | Truncating a file by path fails with "operation not permitted", also in the worktree; opening the file for writing works. |
 
 ## Held-out tests
 

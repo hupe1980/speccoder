@@ -369,6 +369,7 @@ mod tests {
                 truncated: false,
                 note: None,
                 flaky: false,
+                sandbox: Default::default(),
             }],
             comparison: None,
             passed: false,

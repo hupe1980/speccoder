@@ -64,6 +64,40 @@ pub struct TestResult {
     pub outcome: TestOutcome,
 }
 
+/// What the sandbox denied a command that failed: shown to the model and
+/// to people, never evidence for a verdict.
+///
+/// Lines are written from the sandbox's record of the run: the most
+/// specific rule first, identical denials merged with a count, control
+/// characters escaped. A partial record (Linux reports refused system calls
+/// only) carries a note saying what it cannot show, and macOS reports are
+/// best effort: an empty list never means "nothing was denied".
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Denials {
+    /// One line per denial, at most ten.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub denied: Vec<String>,
+    /// How many more denials there were.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub more: usize,
+    /// What the record cannot show, when it cannot show everything.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+impl Denials {
+    /// Neither a denial nor a note.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.denied.is_empty() && self.note.is_none()
+    }
+}
+
+#[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's signature")]
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
 /// One check run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CheckResult {
@@ -93,6 +127,9 @@ pub struct CheckResult {
     /// task evidence.
     #[serde(default)]
     pub flaky: bool,
+    /// What the sandbox denied, when the check failed.
+    #[serde(default, skip_serializing_if = "Denials::is_empty")]
+    pub sandbox: Denials,
 }
 
 impl CheckResult {
@@ -951,6 +988,7 @@ mod tests {
             truncated: false,
             note: None,
             flaky: false,
+            sandbox: Default::default(),
         }
     }
 
@@ -1266,6 +1304,7 @@ mod tests {
                         truncated: false,
                         note: None,
                         flaky,
+                        sandbox: Denials::default(),
                     })
                     .collect()
             })

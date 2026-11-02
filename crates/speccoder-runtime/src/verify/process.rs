@@ -64,6 +64,8 @@ pub struct Outcome {
     pub stdout: Captured,
     /// Standard error.
     pub stderr: Captured,
+    /// What the sandbox denied, read only when the command failed.
+    pub sandbox: speccoder_core::verify::Denials,
 }
 
 /// Runs invocations. The verifier depends only on this trait.
@@ -88,6 +90,7 @@ impl CommandRunner for LocalRunner {
             duration: clock.elapsed(),
             stdout: Captured::default(),
             stderr: Captured::default(),
+            sandbox: Default::default(),
         };
         let Some((program, args)) = inv.argv.split_first() else {
             return failed("empty argv".to_owned());
@@ -104,69 +107,105 @@ impl CommandRunner for LocalRunner {
         #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
 
-        let mut child = match cmd.spawn() {
+        let child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => return failed(format!("could not start `{program}`: {e}")),
         };
         let pgid = i32::try_from(child.id()).ok().map(Pid::from_raw);
-        let cap = inv.output_cap;
-        // A little past the cap: a value straddling it is masked whole
-        // before the cut.
-        let keep = cap.saturating_add(crate::secrets::longest());
-        let out = child
-            .stdout
-            .take()
-            .map(|s| thread::spawn(move || capture(s, keep)));
-        let err = child
-            .stderr
-            .take()
-            .map(|s| thread::spawn(move || capture(s, keep)));
+        supervise(&mut Grouped { child, pgid }, inv, started, clock)
+    }
+}
 
-        let mut timed_out = false;
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => break Some(status),
-                Ok(None) if clock.elapsed() >= inv.timeout => {
-                    timed_out = true;
-                    if let Some(pgid) = pgid {
-                        let _ = killpg(pgid, Signal::SIGKILL);
-                    }
-                    break child.wait().ok();
-                }
-                Ok(None) => thread::sleep(Duration::from_millis(10)),
-                Err(_) => break None,
-            }
-        };
-        // Stragglers that outlived the leader (daemons started by tests) go too.
-        if let Some(pgid) = pgid {
+/// A started command [`supervise`] waits for.
+pub(crate) trait Supervised {
+    /// The process.
+    fn child(&mut self) -> &mut std::process::Child;
+    /// Ends what the command started: at the deadline, and again once it
+    /// ended (stragglers that outlived the leader, such as daemons started
+    /// by tests).
+    fn kill(&mut self);
+}
+
+/// A child leading its own process group.
+struct Grouped {
+    child: std::process::Child,
+    pgid: Option<Pid>,
+}
+
+impl Supervised for Grouped {
+    fn child(&mut self) -> &mut std::process::Child {
+        &mut self.child
+    }
+
+    fn kill(&mut self) {
+        if let Some(pgid) = self.pgid {
             let _ = killpg(pgid, Signal::SIGKILL);
         }
-        // What a command printed of a value copied from the person's secret
-        // files is masked before anything reads it ([`crate::secrets`]).
-        let join = |h: Option<thread::JoinHandle<Captured>>| {
-            let mut c: Captured = h.and_then(|h| h.join().ok()).unwrap_or_default();
-            let cut = c.total > cap;
-            c.kept = crate::secrets::mask_bytes(&c.kept);
-            c.kept.truncate(cap);
-            // Truncated only when the output was longer than the cap.
-            if !cut {
-                c.total = c.kept.len();
+    }
+}
+
+/// Waits for `s` (started at `started`, timed by `clock`) until it exits or
+/// `inv`'s deadline passes, capturing its output.
+pub(crate) fn supervise(
+    s: &mut impl Supervised,
+    inv: &Invocation,
+    started: SystemTime,
+    clock: Instant,
+) -> Outcome {
+    let child = s.child();
+    let cap = inv.output_cap;
+    // A little past the cap: a value straddling it is masked whole
+    // before the cut.
+    let keep = cap.saturating_add(crate::secrets::longest());
+    let out = child
+        .stdout
+        .take()
+        .map(|s| thread::spawn(move || capture(s, keep)));
+    let err = child
+        .stderr
+        .take()
+        .map(|s| thread::spawn(move || capture(s, keep)));
+
+    let mut timed_out = false;
+    let status = loop {
+        match s.child().try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if clock.elapsed() >= inv.timeout => {
+                timed_out = true;
+                s.kill();
+                break s.child().wait().ok();
             }
-            c
-        };
-        Outcome {
-            exit_code: if timed_out {
-                None
-            } else {
-                status.and_then(|s| s.code())
-            },
-            timed_out,
-            spawn_error: None,
-            started,
-            duration: clock.elapsed(),
-            stdout: join(out),
-            stderr: join(err),
+            Ok(None) => thread::sleep(Duration::from_millis(10)),
+            Err(_) => break None,
         }
+    };
+    s.kill();
+    // What a command printed of a value copied from the person's secret
+    // files is masked before anything reads it ([`crate::secrets`]).
+    let join = |h: Option<thread::JoinHandle<Captured>>| {
+        let mut c: Captured = h.and_then(|h| h.join().ok()).unwrap_or_default();
+        let cut = c.total > cap;
+        c.kept = crate::secrets::mask_bytes(&c.kept);
+        c.kept.truncate(cap);
+        // Truncated only when the output was longer than the cap.
+        if !cut {
+            c.total = c.kept.len();
+        }
+        c
+    };
+    Outcome {
+        exit_code: if timed_out {
+            None
+        } else {
+            status.and_then(|s| s.code())
+        },
+        timed_out,
+        spawn_error: None,
+        started,
+        duration: clock.elapsed(),
+        stdout: join(out),
+        stderr: join(err),
+        sandbox: Default::default(),
     }
 }
 

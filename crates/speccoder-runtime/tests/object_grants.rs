@@ -534,8 +534,11 @@ fn an_mcp_tool_whose_definition_changed_is_asked_again() {
     let server = tempfile::tempdir().unwrap();
     let description = server.path().join("description.txt");
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mcp_notes.py");
+    // MCP servers start through the speccoder binary as the sandbox helper,
+    // which this crate's tests do not have (speccoder's sandbox suite covers
+    // caged servers).
     let r = repo(&format!(
-        "[mcp.notes]\ncommand = [\"python3\", \"-I\", {:?}, {:?}]\n",
+        "[sandbox]\nmode = \"off\"\n[mcp.notes]\ncommand = [\"python3\", \"-I\", {:?}, {:?}]\n",
         script.display().to_string(),
         description.display().to_string()
     ));

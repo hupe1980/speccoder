@@ -108,8 +108,10 @@ pub(crate) fn run(target: &Path, state: &Path, step: &Run<'_>) -> PlanStepResult
         writable: vec![cache.display().to_string()],
         ..sandbox::Config::default()
     };
+    // The steps create the project: `git init` writes hooks, a format's
+    // init writes agent configuration.
     let runner = match sandbox::runner(target, &config) {
-        Ok((r, _)) => r,
+        Ok((r, _)) => r.with_trust_handoff_writable(),
         Err(e) => return failed(e),
     };
     // Once the repository exists, its own files are read-only to a step: a

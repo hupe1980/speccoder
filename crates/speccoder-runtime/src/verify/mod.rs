@@ -153,6 +153,7 @@ fn run_check(
         truncated: false,
         note: None,
         flaky: false,
+        sandbox: Default::default(),
     };
     if let Some(path) = &check.when_exists
         && ws.resolve(path).is_err()
@@ -199,6 +200,7 @@ fn run_check(
     result.stdout_tail = tail(&outcome.stdout.kept);
     result.stderr_tail = tail(&outcome.stderr.kept);
     result.truncated = outcome.stdout.truncated() || outcome.stderr.truncated();
+    result.sandbox = outcome.sandbox.clone();
     result.status = if let Some(e) = &outcome.spawn_error {
         result.note = Some(e.clone());
         CheckStatus::Error
@@ -396,6 +398,7 @@ mod tests {
             stderr_tail: String::new(),
             truncated: false,
             note: None,
+            sandbox: Default::default(),
             flaky: false,
         };
         let passed = result(CheckStatus::Passed, "");

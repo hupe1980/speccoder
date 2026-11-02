@@ -257,6 +257,32 @@ fn diagnostic(d: &Diagnostic) -> String {
 
 /// Failing tests listed per check before eliding the rest.
 const FAILING_SHOWN: usize = 10;
+/// Sandbox denials shown per failed check (the report keeps up to ten).
+const DENIALS_SHOWN: usize = 5;
+
+/// What the sandbox denied a failed check, as report lines: at most
+/// [`DENIALS_SHOWN`], the count of the rest, and what the record cannot
+/// show. Nothing without a denial: a note alone would only repeat itself
+/// under every failed check.
+fn sandbox_lines(d: &speccoder_core::verify::Denials) -> Vec<String> {
+    if d.denied.is_empty() {
+        return Vec::new();
+    }
+    let mut lines: Vec<String> = d
+        .denied
+        .iter()
+        .take(DENIALS_SHOWN)
+        .map(|l| format!("sandbox denied: {l}"))
+        .collect();
+    let rest = d.denied.len().saturating_sub(DENIALS_SHOWN) + d.more;
+    if rest > 0 {
+        lines.push(format!("… and {rest} more"));
+    }
+    if let Some(note) = &d.note {
+        lines.push(format!("({note})"));
+    }
+    lines
+}
 
 /// The `verify` report.
 pub fn verify(w: &mut impl Write, r: &VerifyReport) -> io::Result<()> {
@@ -310,6 +336,9 @@ pub fn verify(w: &mut impl Write, r: &VerifyReport) -> io::Result<()> {
             {
                 writeln!(w, "      | {line}")?;
             }
+        }
+        for line in sandbox_lines(&c.sandbox) {
+            writeln!(w, "      {line}")?;
         }
     }
     if let Some(cmp) = &r.comparison {
@@ -2341,5 +2370,32 @@ fn judged_words(j: &speccoder_core::story::Judged) -> String {
         Judged::Checkpoint => {
             "its story's checkpoint — every scenario must be green after it".to_owned()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use speccoder_core::verify::Denials;
+
+    #[test]
+    fn a_failed_check_shows_five_denials_and_counts_the_rest() {
+        let d = Denials {
+            denied: (0..10)
+                .map(|i| format!("sh: file-write-create /etc/{i} — x"))
+                .collect(),
+            more: 490,
+            note: Some("the record may be incomplete (the host was busy)".into()),
+        };
+        let lines = sandbox_lines(&d);
+        assert_eq!(lines.len(), 7, "{lines:#?}");
+        assert_eq!(lines[0], "sandbox denied: sh: file-write-create /etc/0 — x");
+        assert_eq!(lines[5], "… and 495 more");
+        assert!(lines[6].contains("incomplete"));
+        let note_only = Denials {
+            note: Some("only refused system calls are reported on Linux".into()),
+            ..Denials::default()
+        };
+        assert!(sandbox_lines(&note_only).is_empty());
     }
 }

@@ -238,16 +238,26 @@ fn confined(
     if speccoder_core::step::outside(argv).is_some() {
         return Ok((full, env));
     }
-    let Ok(backend) = crate::sandbox::backend() else {
+    // As `sandboxed()` reports: confined when there is a sandbox and the
+    // `speccoder` binary that starts commands in it.
+    let Some(backend) = crate::sandbox::backend()
+        .ok()
+        .filter(|b| b.helper.is_some())
+    else {
         return Ok((full, env));
     };
     let home = env
         .iter()
         .find(|(k, _)| k == "HOME")
         .map(|(_, v)| std::path::PathBuf::from(v));
-    let profile =
+    let mut profile =
         crate::sandbox::Profile::new(root, &crate::sandbox::Config::default(), home.as_deref())
             .with_network(crate::sandbox::Network::On);
+    // The person's own commands create projects: `git init` writes hooks and
+    // a format's init writes agent configuration, which the sandbox keeps
+    // model-run commands from writing.
+    profile.unenforced.trust_handoff = true;
+    let (profile, _) = crate::sandbox::fit(&profile)?;
     std::fs::create_dir_all(&profile.tmp)
         .map_err(|e| format!("the sandbox's temporary folder: {e}"))?;
     let tmp = profile.tmp.display().to_string();
@@ -256,10 +266,11 @@ fn confined(
     Ok((crate::sandbox::wrap(&profile, &backend, &full)?, env))
 }
 
-/// Whether the person's commands run in an OS sandbox here.
+/// Whether the person's commands run in an OS sandbox here: there is one,
+/// and the `speccoder` binary that starts them in it.
 #[must_use]
 pub fn sandboxed() -> bool {
-    crate::sandbox::backend().is_ok()
+    crate::sandbox::backend().is_ok_and(|b| b.helper.is_some())
 }
 
 /// Runs the person's own `argvs` in `root`, one after the other while each

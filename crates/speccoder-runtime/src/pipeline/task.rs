@@ -4040,8 +4040,25 @@ fn with_cause(note: &str, c: &speccoder_core::verify::CheckResult) -> String {
 /// Why a failing baseline check is broken rather than failing tests: it
 /// could not start, or it failed without any test result to show for it.
 /// `None`: it passed, or its tests ran and some failed.
+/// What the sandbox denied it comes last: often the cause itself.
 #[must_use]
 pub fn broken(c: &speccoder_core::verify::CheckResult) -> Option<String> {
+    let why = broken_why(c)?;
+    Some(match c.sandbox.denied.first() {
+        Some(first) => {
+            let others = c.sandbox.denied.len() - 1 + c.sandbox.more;
+            let more = if others > 0 {
+                format!(" (and {others} more)")
+            } else {
+                String::new()
+            };
+            format!("{why} — the sandbox denied {first}{more}")
+        }
+        None => why,
+    })
+}
+
+fn broken_why(c: &speccoder_core::verify::CheckResult) -> Option<String> {
     use speccoder_core::verify::CheckStatus;
     if !c.status.is_failure() || c.status == CheckStatus::TimedOut {
         return None;

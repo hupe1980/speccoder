@@ -88,6 +88,7 @@ fn result(argv: &[&str], ids: &[&str]) -> CheckResult {
         truncated: false,
         note: None,
         flaky: false,
+        sandbox: Default::default(),
     }
 }
 

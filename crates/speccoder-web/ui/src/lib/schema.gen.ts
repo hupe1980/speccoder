@@ -796,6 +796,8 @@ export interface CheckResult {
    * task evidence.
    */
   flaky: boolean;
+  /** What the sandbox denied, when the check failed. */
+  sandbox?: Denials;
 }
 
 /** Outcome of one check. */
@@ -1412,6 +1414,25 @@ export interface DeltaRequirement {
   path: string;
   /** Its heading's line. */
   line: number;
+}
+
+/**
+ * What the sandbox denied a command that failed: shown to the model and
+ * to people, never evidence for a verdict.
+ *
+ * Lines are written from the sandbox's record of the run: the most
+ * specific rule first, identical denials merged with a count, control
+ * characters escaped. A partial record (Linux reports refused system calls
+ * only) carries a note saying what it cannot show, and macOS reports are
+ * best effort: an empty list never means "nothing was denied".
+ */
+export interface Denials {
+  /** One line per denial, at most ten. */
+  denied?: string[];
+  /** How many more denials there were. */
+  more?: number;
+  /** What the record cannot show, when it cannot show everything. */
+  note?: string | null;
 }
 
 /** One direct dependency. */
@@ -2326,6 +2347,8 @@ export interface FailedCheck {
   failing_tests: string[];
   /** Output from the first error line on, capped. */
   excerpt: string;
+  /** What the sandbox denied it. */
+  sandbox?: Denials;
 }
 
 /** One feature (or change) of the project, as `speccoder feature` lists it. */

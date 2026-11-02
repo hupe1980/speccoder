@@ -6,8 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- When a sandboxed command fails, speccoder says what the sandbox denied
+  it: under a failed check's output, in a check that cannot run on the
+  untouched code (`CHECK-BROKEN`), in the next attempt's digest and in the
+  agent's `run_command` result. On Linux only refused system calls are
+  listed; on macOS the list is best effort.
+
 ### Changed
 
+- **The sandbox is [procage](https://github.com/hupe1980/procage).**
+  `sandbox-exec` and speccoder's Landlock helper are gone; the rules are
+  the same, and also: container engines and, on Linux, D-Bus and systemd
+  are unreachable even with the network on; everything a command starts
+  ends with it; MCP servers die with their process; test servers on Unix
+  sockets in the workspace work on Linux with user namespaces. Linux needs
+  Landlock (5.13) instead of ABI 3; older than 6.12 a command can signal
+  your other processes, older than 6.2 truncating by path fails, and each
+  run says which applies. In place, a repository cloned from a local path
+  stops with the `git gc` that gives it its own objects.
 - **One test per scenario.** A convergence task citing a story's scenario
   is judged by that story's oracle (written first when missing), never by
   a second test of its own; when what it cites already holds it stops

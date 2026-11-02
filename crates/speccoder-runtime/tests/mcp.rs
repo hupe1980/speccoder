@@ -136,10 +136,13 @@ fn repo_args(mcp: &str, args: &[&str]) -> tempfile::TempDir {
     fs::create_dir_all(r.join("src")).unwrap();
     fs::write(r.join("src/lib.rs"), "pub fn ok() {}\n").unwrap();
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mcp_notes.py");
+    // MCP servers start through the speccoder binary as the sandbox helper,
+    // which this crate's tests do not have: these tests are about MCP and
+    // run unsandboxed (speccoder's sandbox suite covers caged servers).
     fs::write(
         r.join("speccoder.toml"),
         format!(
-            "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n[mcp.notes]\ncommand = [\"python3\", \"-I\", {:?}{}]\n{mcp}",
+            "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n[sandbox]\nmode = \"off\"\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n[mcp.notes]\ncommand = [\"python3\", \"-I\", {:?}{}]\n{mcp}",
             script.display().to_string(),
             args.iter().map(|a| format!(", {a:?}")).collect::<String>()
         ),

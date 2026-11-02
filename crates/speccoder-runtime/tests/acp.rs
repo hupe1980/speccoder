@@ -442,7 +442,7 @@ fn a_frozen_test_written_through_speccoder_is_a_persons_decision() {
 }
 
 #[test]
-fn terminals_run_sandboxed_with_masked_output_and_need_the_policy() {
+fn terminals_have_masked_output_and_need_the_policy() {
     let outside = tempfile::tempdir().unwrap();
     let target = outside.path().join("escaped");
     let p = Project::new(
@@ -453,8 +453,11 @@ fn terminals_run_sandboxed_with_masked_output_and_need_the_policy() {
             { "edit": "src/lib.rs", "content": EDIT },
             { "say": "Done." },
         ] }),
+        // Terminals start through the speccoder binary as the sandbox
+        // helper, which this crate's tests do not have: unsandboxed here
+        // (speccoder's sandbox suite covers caged terminals and servers).
         &format!(
-            "[commands]\nallow = [[\"cat\", \"config.txt\"], [\"touch\", \"{}\"]]\n",
+            "[sandbox]\nmode = \"off\"\n[commands]\nallow = [[\"cat\", \"config.txt\"], [\"touch\", \"{}\"]]\n",
             target.display()
         ),
     );
@@ -467,11 +470,6 @@ fn terminals_run_sandboxed_with_masked_output_and_need_the_policy() {
     let cat = outputs[0]["result"]["output"].as_str().unwrap();
     assert!(cat.starts_with("token = ") && !cat.contains(TOKEN), "{cat}");
     assert_eq!(outputs[0]["exit"]["exitCode"], 0);
-    // Confined to the worktree where the OS sandbox exists.
-    if speccoder_runtime::sandbox::backend().is_ok() {
-        assert_ne!(outputs[1]["exit"]["exitCode"], 0, "{}", outputs[1]);
-        assert!(!target.exists());
-    }
     // A command no rule allows waits for a person: the attempt ends.
     assert_eq!(
         report(&res).attempt_status,

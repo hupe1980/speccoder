@@ -740,6 +740,7 @@ fn execute(
         truncated: out.stdout.truncated() || out.stderr.truncated(),
         note: out.spawn_error,
         flaky: false,
+        sandbox: out.sandbox,
     };
     (result, summary)
 }

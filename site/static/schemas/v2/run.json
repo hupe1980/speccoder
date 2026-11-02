@@ -402,6 +402,10 @@
           "description": "It failed once and passed when run again: named, never trusted as\ntask evidence.",
           "type": "boolean",
           "default": false
+        },
+        "sandbox": {
+          "description": "What the sandbox denied, when the check failed.",
+          "$ref": "#/$defs/Denials"
         }
       },
       "required": [
@@ -491,6 +495,32 @@
           "const": "error"
         }
       ]
+    },
+    "Denials": {
+      "description": "What the sandbox denied a command that failed: shown to the model and\nto people, never evidence for a verdict.\n\nLines are written from the sandbox's record of the run: the most\nspecific rule first, identical denials merged with a count, control\ncharacters escaped. A partial record (Linux reports refused system calls\nonly) carries a note saying what it cannot show, and macOS reports are\nbest effort: an empty list never means \"nothing was denied\".",
+      "type": "object",
+      "properties": {
+        "denied": {
+          "description": "One line per denial, at most ten.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "more": {
+          "description": "How many more denials there were.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "note": {
+          "description": "What the record cannot show, when it cannot show everything.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     },
     "Comparison": {
       "description": "What changed relative to a baseline (pass-to-pass).",
@@ -735,6 +765,10 @@
         "excerpt": {
           "description": "Output from the first error line on, capped.",
           "type": "string"
+        },
+        "sandbox": {
+          "description": "What the sandbox denied it.",
+          "$ref": "#/$defs/Denials"
         }
       },
       "required": [

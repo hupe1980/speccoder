@@ -472,11 +472,14 @@ pub(crate) fn plan_with(
         Kind::Commit,
     );
     let sandbox = SandboxNote {
-        backend: match crate::sandbox::backend() {
-            Ok(crate::sandbox::Backend::Seatbelt) => Some("seatbelt".to_owned()),
-            Ok(crate::sandbox::Backend::Landlock(_)) => Some("landlock".to_owned()),
-            Err(_) => None,
-        },
+        backend: crate::sandbox::backend().ok().map(|_| {
+            if cfg!(target_os = "macos") {
+                "seatbelt"
+            } else {
+                "landlock"
+            }
+            .to_owned()
+        }),
     };
     let mut plan = ProjectPlan {
         target: target.display().to_string(),

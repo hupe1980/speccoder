@@ -1190,6 +1190,7 @@ mod tests {
                 kept: stderr.as_bytes().to_vec(),
                 total: stderr.len(),
             },
+            sandbox: Default::default(),
         };
         assert_eq!(
             reason(&out(

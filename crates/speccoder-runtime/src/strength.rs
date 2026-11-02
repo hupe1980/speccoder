@@ -645,6 +645,7 @@ mod tests {
             truncated: false,
             note: None,
             flaky: false,
+            sandbox: Default::default(),
         };
         assert_eq!(
             classify(&result(CheckStatus::Passed, ""), None),

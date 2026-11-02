@@ -486,7 +486,7 @@ fn a_failed_step_stops_the_run_and_running_again_resumes_at_it() {
 
 #[test]
 fn a_tool_that_writes_outside_the_folder_fails_its_step_where_there_is_a_sandbox() {
-    if speccoder_runtime::sandbox::backend().is_err() {
+    if speccoder_runtime::sandbox::available().is_err() {
         eprintln!("no OS sandbox here: nothing to deny");
         return;
     }

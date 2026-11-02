@@ -12,10 +12,20 @@
 //!   (exactly, `[sandbox] network_allow`, or by a prefix in
 //!   `[sandbox] network_allow_prefix`) or a person approved it.
 //!
-//! macOS: Seatbelt (`sandbox-exec`) with a generated profile. Linux: the
-//! `speccoder` binary re-executes itself as a helper (`__sandbox`) that
-//! applies Landlock and a seccomp filter to itself, sets `no_new_privs` and
-//! executes the command — so the workspace keeps `unsafe_code` forbidden.
+//! The [procage](https://github.com/hupe1980/procage) library confines
+//! every command (module `sandbox::procage`): Seatbelt on macOS, Landlock,
+//! seccomp and, where the kernel allows user namespaces, mounts on Linux.
+//! Commands that run to completion are spawned in this process; long-running
+//! servers start through the `speccoder` binary as a helper (`__sandbox`),
+//! which confines itself and becomes the server. Where the host cannot
+//! enforce part of the profile, that part is left out by name and the
+//! runner says so.
+//!
+//! When a sandboxed command fails, its outcome carries what the sandbox
+//! refused it (module `denials`): shown under a failed check, in the next
+//! attempt's digest and in the model's `run_command` result. Linux lists
+//! refused system calls only; macOS lists every denial it logged, which
+//! under heavy load is not every denial.
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -23,6 +33,11 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 
 use crate::verify::process::{CommandRunner, Invocation, LocalRunner, Outcome};
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod denials;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod procage;
 
 /// What a sandboxed command may reach on the network.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -170,6 +185,7 @@ pub const CACHES: &[&str] = &[
 
 /// One command's confinement.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Profile {
     /// Writable trees (the workspace first).
     pub writable: Vec<PathBuf>,
@@ -182,6 +198,26 @@ pub struct Profile {
     pub network: Network,
     /// The private temporary directory (`TMPDIR`), writable.
     pub tmp: PathBuf,
+    /// What this host cannot enforce and the profile leaves out
+    /// (`sandbox::procage::fit`).
+    #[serde(default)]
+    pub unenforced: Unenforced,
+}
+
+/// Parts of a profile left out: because the host cannot enforce them (Linux
+/// without user namespaces or with an older kernel; the runner's notice
+/// names each), or on purpose
+/// (the person's own commands may write git hooks and agent configuration).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Unenforced {
+    /// Git hooks and shell startup files in writable trees stay writable.
+    pub trust_handoff: bool,
+    /// Unix sockets in writable trees are not reachable either.
+    pub workspace_sockets: bool,
+    /// Commands can signal every process of the user, not only their own
+    /// (Linux older than 6.12 cannot keep signals within the run).
+    pub signal_scope: bool,
 }
 
 fn canonical(p: &Path) -> PathBuf {
@@ -234,6 +270,7 @@ impl Profile {
             read_only: Vec::new(),
             network: config.network,
             tmp,
+            unenforced: Unenforced::default(),
         }
     }
 
@@ -255,16 +292,28 @@ impl Profile {
     }
 }
 
-/// How this machine sandboxes.
+/// This machine's sandbox: procage, which confines with Seatbelt on macOS
+/// and Landlock and seccomp on Linux. Long-running servers start through the
+/// `speccoder` binary at `helper`, when there is one (commands that run to
+/// completion need none).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Backend {
-    /// macOS Seatbelt.
-    Seatbelt,
-    /// Linux Landlock + seccomp through the `speccoder` helper at this path.
-    Landlock(PathBuf),
+pub struct Backend {
+    /// The `speccoder` binary that serves as the helper.
+    pub helper: Option<PathBuf>,
 }
 
-const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
+impl Backend {
+    /// The OS mechanism, for people and run records: `Seatbelt` or
+    /// `Landlock+seccomp`.
+    #[must_use]
+    pub fn mechanism(&self) -> &'static str {
+        if cfg!(target_os = "macos") {
+            "Seatbelt"
+        } else {
+            "Landlock+seccomp"
+        }
+    }
+}
 
 /// The helper subcommand (`speccoder __sandbox <profile> -- argv…`).
 pub const HELPER_ARG: &str = "__sandbox";
@@ -276,140 +325,67 @@ pub fn backend() -> Result<Backend, String> {
 }
 
 fn detect() -> Result<Backend, String> {
-    if cfg!(target_os = "macos") {
-        return if Path::new(SANDBOX_EXEC).exists() {
-            Ok(Backend::Seatbelt)
-        } else {
-            Err(format!("{SANDBOX_EXEC} is missing"))
-        };
-    }
-    if cfg!(target_os = "linux") {
-        let helper = std::env::var_os("SPECCODER_SANDBOX_HELPER")
-            .map(PathBuf::from)
-            .or_else(|| {
-                std::env::current_exe()
-                    .ok()
-                    .filter(|p| p.file_stem().is_some_and(|n| n == "speccoder"))
-            })
-            .ok_or_else(|| "the speccoder helper binary was not found".to_owned())?;
-        return with_helper(helper);
-    }
+    available()?;
+    Ok(Backend {
+        helper: helper_binary(),
+    })
+}
+
+/// Whether this machine can sandbox commands at all (whatever process asks).
+///
+/// # Errors
+///
+/// Why not.
+pub fn available() -> Result<(), String> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    return procage::available();
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     Err(format!("no sandbox for {}", std::env::consts::OS))
 }
 
-/// The Linux backend with the helper binary at `helper`, if the kernel
-/// supports Landlock.
-pub fn with_helper(helper: PathBuf) -> Result<Backend, String> {
-    linux_supported()?;
-    Ok(Backend::Landlock(helper))
+/// The `speccoder` binary that serves as the helper: `SPECCODER_SANDBOX_HELPER`,
+/// or this executable when it is `speccoder`.
+fn helper_binary() -> Option<PathBuf> {
+    std::env::var_os("SPECCODER_SANDBOX_HELPER")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::current_exe()
+                .ok()
+                .filter(|p| p.file_stem().is_some_and(|n| n == "speccoder"))
+        })
 }
 
-#[cfg(target_os = "linux")]
-fn linux_supported() -> Result<(), String> {
-    linux::probe()
+/// The profile this machine enforces for `profile`, and a notice for what it
+/// leaves out.
+///
+/// # Errors
+///
+/// Why this machine cannot confine the profile at all.
+pub fn fit(profile: &Profile) -> Result<(Profile, Option<String>), String> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    return procage::fit(profile);
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = profile;
+        Err(format!("no sandbox for {}", std::env::consts::OS))
+    }
 }
 
-#[cfg(not(target_os = "linux"))]
-fn linux_supported() -> Result<(), String> {
-    Err("not Linux".to_owned())
-}
-
-fn quote(p: &Path) -> String {
-    let s = p.to_string_lossy();
-    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
-}
-
-/// `text` as a literal in a Seatbelt (POSIX extended) regular expression.
-fn regex_escape(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        if "\\^$.|?*+()[]{}\"".contains(c) {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out
-}
-
-/// The Seatbelt profile for `p`. Later rules win.
-#[must_use]
-pub fn seatbelt(p: &Profile) -> String {
-    let mut out = String::from("(version 1)\n(allow default)\n(deny file-write*)\n");
-    out.push_str("(allow file-write*");
-    for w in p.writable.iter().chain([&p.tmp]) {
-        out.push_str(&format!(" (subpath {})", quote(w)));
-    }
-    // macOS's `mktemp` ignores `TMPDIR` and creates `tmp.XXXXXXXX` in the
-    // per-user temporary directory (the private one's parent): only those
-    // names, and what is inside them, are writable there.
-    if let Some(user_tmp) = p.tmp.parent() {
-        out.push_str(&format!(
-            " (regex #\"^{}/tmp\\.[A-Za-z0-9]+(/|$)\")",
-            regex_escape(&user_tmp.to_string_lossy())
-        ));
-    }
-    out.push_str(
-        " (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/tty\") (literal \"/dev/dtracehelper\") (regex #\"^/dev/fd/\") (regex #\"^/dev/ttys\"))\n",
-    );
-    if !p.read_only.is_empty() {
-        out.push_str("(deny file-write*");
-        for r in &p.read_only {
-            out.push_str(&format!(" (subpath {})", quote(r)));
-        }
-        out.push_str(")\n");
-    }
-    if !p.hidden.is_empty() {
-        out.push_str("(deny file-read* file-write*");
-        for h in &p.hidden {
-            out.push_str(&format!(" (subpath {})", quote(h)));
-        }
-        out.push_str(")\n");
-    }
-    // Opening applications (and Apple events) would run code outside the sandbox.
-    out.push_str("(deny appleevent-send)\n");
-    out.push_str("(deny mach-lookup (global-name-regex #\"^com\\.apple\\.lsd\\.\") (global-name \"com.apple.coreservices.launchservicesd\") (global-name \"com.apple.coreservices.appleevents\"))\n");
-    match p.network {
-        Network::On => {}
-        Network::Off | Network::Loopback => {
-            out.push_str("(deny network*)\n");
-            if p.network == Network::Loopback {
-                // Not `(local ip "localhost:*")` for all operations: it also
-                // matches outbound connections to anywhere.
-                out.push_str("(allow network-outbound (remote ip \"localhost:*\"))\n(allow network-bind network-inbound (local ip \"localhost:*\"))\n");
-            }
-            // Unix sockets inside the writable trees (not the Docker socket).
-            out.push_str("(allow network-outbound network-bind network-inbound");
-            for w in p.writable.iter().chain([&p.tmp]) {
-                out.push_str(&format!(
-                    " (remote unix-socket (subpath {q})) (local unix-socket (subpath {q}))",
-                    q = quote(w)
-                ));
-            }
-            out.push_str(")\n");
-        }
-    }
-    out
-}
-
-/// `argv` confined by `p` on `backend`.
+/// `argv` confined by `p` through the helper on `backend`.
 pub fn wrap(p: &Profile, backend: &Backend, argv: &[String]) -> Result<Vec<String>, String> {
-    match backend {
-        Backend::Seatbelt => {
-            let mut out = vec![SANDBOX_EXEC.to_owned(), "-p".to_owned(), seatbelt(p)];
-            out.extend_from_slice(argv);
-            Ok(out)
-        }
-        Backend::Landlock(helper) => {
-            let mut out = vec![
-                helper.to_string_lossy().into_owned(),
-                HELPER_ARG.to_owned(),
-                serde_json::to_string(p).map_err(|e| e.to_string())?,
-                "--".to_owned(),
-            ];
-            out.extend_from_slice(argv);
-            Ok(out)
-        }
-    }
+    // Without the helper a server cannot be confined: never start it plain.
+    let helper = backend.helper.as_ref().ok_or_else(|| {
+        "servers start through the speccoder binary, which was not found (SPECCODER_SANDBOX_HELPER)"
+            .to_owned()
+    })?;
+    let mut out = vec![
+        helper.to_string_lossy().into_owned(),
+        HELPER_ARG.to_owned(),
+        serde_json::to_string(p).map_err(|e| e.to_string())?,
+        "--".to_owned(),
+    ];
+    out.extend_from_slice(argv);
+    Ok(out)
 }
 
 /// A runner that confines every command.
@@ -454,6 +430,7 @@ impl Sandboxed {
             duration: std::time::Duration::ZERO,
             stdout: crate::verify::process::Captured::default(),
             stderr: crate::verify::process::Captured::default(),
+            sandbox: Default::default(),
         };
         // Through the wrapper a missing program would be the wrapper's
         // failure; report it as the plain runner does.
@@ -467,10 +444,6 @@ impl Sandboxed {
         if let Err(e) = std::fs::create_dir_all(&profile.tmp) {
             return failed(format!("the sandbox's temporary directory: {e}"));
         }
-        let argv = match wrap(&profile, &self.backend, &inv.argv) {
-            Ok(a) => a,
-            Err(e) => return failed(e),
-        };
         let tmp = profile.tmp.to_string_lossy().into_owned();
         let mut env: Vec<(String, String)> = inv
             .env
@@ -479,11 +452,13 @@ impl Sandboxed {
             .cloned()
             .collect();
         env.extend(["TMPDIR", "TMP", "TEMP"].map(|k| (k.to_owned(), tmp.clone())));
-        LocalRunner.run(&Invocation {
-            argv,
-            env,
-            ..inv.clone()
-        })
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        return procage::run(&profile, &Invocation { env, ..inv.clone() });
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        {
+            let _ = env;
+            failed(format!("no sandbox for {}", std::env::consts::OS))
+        }
     }
 }
 
@@ -550,19 +525,20 @@ pub fn runner(root: &Path, config: &Config) -> Result<(Runner, Option<String>), 
             Some("commands run unsandboxed ([sandbox] mode = \"off\")".to_owned()),
         ));
     }
-    match backend() {
-        Ok(backend) => {
-            let home = std::env::var_os("HOME").map(PathBuf::from);
-            Ok((
-                Runner::Sandboxed(Sandboxed {
-                    profile: Profile::new(root, config, home.as_deref()),
-                    backend,
-                    network_allow: config.network_allow.clone(),
-                    network_allow_prefix: config.network_allow_prefix.clone(),
-                }),
-                None,
-            ))
-        }
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let profile = Profile::new(root, config, home.as_deref());
+    // What this machine cannot enforce is left out by name; anything else it
+    // cannot confine means no sandbox, and `mode` decides.
+    match backend().and_then(|backend| Ok((backend, fit(&profile)?))) {
+        Ok((backend, (profile, notice))) => Ok((
+            Runner::Sandboxed(Sandboxed {
+                profile,
+                backend,
+                network_allow: config.network_allow.clone(),
+                network_allow_prefix: config.network_allow_prefix.clone(),
+            }),
+            notice,
+        )),
         Err(e) if config.mode == Mode::Required => Err(format!(
             "[sandbox] mode = \"required\", but there is no sandbox: {e}"
         )),
@@ -590,18 +566,19 @@ impl Runner {
     pub fn carve(self, read_only: &[PathBuf], hidden: &[PathBuf]) -> (Self, Option<String>) {
         match self {
             Self::Sandboxed(mut s) => {
-                // Linux carves with mounts in a user namespace, which some
-                // hosts do not allow (container seccomp, AppArmor).
-                if let Backend::Landlock(helper) = &s.backend
-                    && !mounts_supported(helper)
-                {
-                    return (
+                let carved = s.profile.clone().carve(read_only, hidden);
+                match fit(&carved) {
+                    Ok((fitted, notice)) => {
+                        s.profile = fitted;
+                        (Self::Sandboxed(s), notice)
+                    }
+                    Err(e) => (
                         Self::Sandboxed(s),
-                        Some("this machine does not allow user namespaces (on Ubuntu 23.10+: AppArmor), so commands can write `.git`, read ignored secrets in place and reach daemon sockets such as Docker's; the run stops if `.git` changes".to_owned()),
-                    );
+                        Some(format!(
+                            "the sandbox cannot carve here ({e}): commands can write `.git` and read ignored secrets in place; the run stops if `.git` changes"
+                        )),
+                    ),
                 }
-                s.profile = s.profile.carve(read_only, hidden);
-                (Self::Sandboxed(s), None)
             }
             Self::Plain => (Self::Plain, None),
         }
@@ -622,6 +599,21 @@ impl Runner {
     #[must_use]
     pub fn is_sandboxed(&self) -> bool {
         matches!(self, Self::Sandboxed(_))
+    }
+
+    /// The same runner, with git hooks, git config and agent configuration
+    /// (the trust-handoff names) writable in its trees: for the tools that
+    /// create a project (`git init`, a format's init), never for the model's
+    /// commands.
+    #[must_use]
+    pub fn with_trust_handoff_writable(self) -> Self {
+        match self {
+            Self::Sandboxed(mut s) => {
+                s.profile.unenforced.trust_handoff = true;
+                Self::Sandboxed(s)
+            }
+            Self::Plain => Self::Plain,
+        }
     }
 
     /// The same runner, `dir` writable too.
@@ -685,14 +677,8 @@ impl CommandRunner for Runner {
 }
 
 /// The helper's entry (`speccoder __sandbox <profile> -- argv…`): confines
-/// this process and executes the command; returns only on failure.
+/// this process and becomes the command; returns only on failure.
 pub fn helper_main(args: &[String]) -> String {
-    if args.first().map(String::as_str) == Some(PROBE_MOUNTS) {
-        return match probe_mounts() {
-            Ok(()) => std::process::exit(0),
-            Err(e) => e,
-        };
-    }
     let (Some(profile), Some("--")) = (args.first(), args.get(1).map(String::as_str)) else {
         return format!("usage: speccoder {HELPER_ARG} <profile> -- <argv…>");
     };
@@ -704,351 +690,10 @@ pub fn helper_main(args: &[String]) -> String {
     if argv.is_empty() {
         return "nothing to run".to_owned();
     }
-    enter(&profile, argv)
-}
-
-#[cfg(target_os = "linux")]
-fn enter(profile: &Profile, argv: &[String]) -> String {
-    linux::enter(profile, argv)
-}
-
-/// The helper's argument that only checks the mount carve-outs work.
-const PROBE_MOUNTS: &str = "--probe-mounts";
-
-/// Whether the Linux helper can carve with mounts here (checked once, in a
-/// child: the namespace never touches this process).
-fn mounts_supported(helper: &Path) -> bool {
-    static CACHED: OnceLock<bool> = OnceLock::new();
-    *CACHED.get_or_init(|| {
-        std::process::Command::new(helper)
-            .args([HELPER_ARG, PROBE_MOUNTS])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|s| s.success())
-    })
-}
-
-#[cfg(target_os = "linux")]
-fn probe_mounts() -> Result<(), String> {
-    linux::probe_mounts()
-}
-
-#[cfg(not(target_os = "linux"))]
-fn probe_mounts() -> Result<(), String> {
-    Err("mount carve-outs are for Linux".to_owned())
-}
-
-#[cfg(not(target_os = "linux"))]
-fn enter(_profile: &Profile, _argv: &[String]) -> String {
-    format!("the {HELPER_ARG} helper is for Linux")
-}
-
-#[cfg(target_os = "linux")]
-mod linux {
-    //! Landlock (filesystem) and seccomp (network) for this process, then exec.
-
-    use std::collections::BTreeMap;
-    use std::path::{Path, PathBuf};
-
-    use landlock::{
-        ABI, Access, AccessFs, CompatLevel, Compatible, PathBeneath, PathFd, Ruleset, RulesetAttr,
-        RulesetCreatedAttr, RulesetStatus,
-    };
-    use seccompiler::{
-        SeccompAction, SeccompCmpArgLen, SeccompCmpOp, SeccompCondition, SeccompFilter,
-        SeccompRule, TargetArch,
-    };
-
-    use super::{Network, Profile};
-
-    const ABI_LEVEL: ABI = ABI::V3;
-
-    pub(super) fn probe() -> Result<(), String> {
-        Ruleset::default()
-            .set_compatibility(CompatLevel::HardRequirement)
-            .handle_access(AccessFs::from_all(ABI_LEVEL))
-            .and_then(|r| r.create())
-            .map(|_| ())
-            .map_err(|e| format!("Landlock is not available: {e}"))
-    }
-
-    /// Landlock cannot take back what a rule grants beneath it, so the
-    /// carve-outs inside a writable tree are mounts in a namespace of this
-    /// process alone: `read_only` trees bound read-only, `hidden` ones
-    /// inside a writable tree covered (a file by `/dev/null`, a directory
-    /// by an empty read-only tmpfs).
-    fn mount_carve(profile: &Profile) -> Result<(), String> {
-        use nix::mount::{MsFlags, mount};
-        let inside = |p: &PathBuf| profile.writable.iter().any(|w| p.starts_with(w));
-        let hidden: Vec<&PathBuf> = profile
-            .hidden
-            .iter()
-            .filter(|h| inside(h) && h.exists())
-            .collect();
-        let sockets: Vec<PathBuf> = daemon_sockets()
-            .into_iter()
-            .filter(|p| !inside(p))
-            .collect();
-        let carved = !profile.read_only.is_empty() || !hidden.is_empty();
-        if !carved && sockets.is_empty() {
-            return Ok(());
-        }
-        // Without user namespaces (AppArmor on Ubuntu 23.10+) the runner has
-        // already said so and asked for no carve-outs: the sockets stay
-        // reachable rather than every command failing.
-        if let Err(e) = private_namespace() {
-            return if carved { Err(e) } else { Ok(()) };
-        }
-        let none: Option<&str> = None;
-        for p in profile.read_only.iter().filter(|p| p.exists()) {
-            mount(Some(p), p, none, MsFlags::MS_BIND | MsFlags::MS_REC, none)
-                .map_err(|e| format!("bind {}: {e}", p.display()))?;
-            mount(
-                none,
-                p,
-                none,
-                MsFlags::MS_BIND | MsFlags::MS_REMOUNT | MsFlags::MS_RDONLY | locked(p),
-                none,
-            )
-            .map_err(|e| format!("read-only {}: {e}", p.display()))?;
-        }
-        for h in hidden {
-            if h.is_dir() {
-                mount(
-                    Some("tmpfs"),
-                    h,
-                    Some("tmpfs"),
-                    MsFlags::MS_RDONLY | MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
-                    Some("size=4k"),
-                )
-            } else {
-                mount(Some("/dev/null"), h, none, MsFlags::MS_BIND, none)
-            }
-            .map_err(|e| format!("hide {}: {e}", h.display()))?;
-        }
-        // Landlock does not govern connecting to a Unix socket and seccomp
-        // cannot see its path: a daemon's socket (Docker's is root on the
-        // host) is covered instead, so connecting to it fails.
-        for p in &sockets {
-            mount(Some("/dev/null"), p, none, MsFlags::MS_BIND, none)
-                .map_err(|e| format!("cover {}: {e}", p.display()))?;
-        }
-        Ok(())
-    }
-
-    /// The Unix sockets in the places daemons keep them (`/run`, `/var/run`,
-    /// `/tmp`, `$XDG_RUNTIME_DIR`, three levels deep), each once.
-    fn daemon_sockets() -> Vec<PathBuf> {
-        use std::os::unix::fs::FileTypeExt as _;
-        fn walk(dir: &Path, depth: u8, out: &mut Vec<PathBuf>) {
-            let Ok(entries) = std::fs::read_dir(dir) else {
-                return;
-            };
-            for e in entries.flatten() {
-                let Ok(t) = e.file_type() else { continue };
-                if t.is_socket() {
-                    out.push(e.path());
-                } else if t.is_dir() && depth > 0 {
-                    walk(&e.path(), depth - 1, out);
-                }
-            }
-        }
-        let mut roots = vec![
-            PathBuf::from("/run"),
-            PathBuf::from("/var/run"),
-            PathBuf::from("/tmp"),
-        ];
-        if let Some(x) = std::env::var_os("XDG_RUNTIME_DIR") {
-            roots.push(PathBuf::from(x));
-        }
-        let mut seen = std::collections::BTreeSet::new();
-        let mut out = Vec::new();
-        for root in roots {
-            // `/var/run` is usually a link to `/run`: walk each tree once.
-            let Ok(real) = root.canonicalize() else {
-                continue;
-            };
-            if !seen.insert(real.clone()) {
-                continue;
-            }
-            walk(&real, 3, &mut out);
-        }
-        out.sort();
-        out.dedup();
-        out
-    }
-
-    /// A user and mount namespace for this process, mapped to its own ids,
-    /// with no mount propagating out.
-    fn private_namespace() -> Result<(), String> {
-        use nix::mount::{MsFlags, mount};
-        use nix::sched::{CloneFlags, unshare};
-        let (uid, gid) = (nix::unistd::getuid(), nix::unistd::getgid());
-        unshare(CloneFlags::CLONE_NEWUSER | CloneFlags::CLONE_NEWNS)
-            .map_err(|e| format!("user namespace: {e}"))?;
-        let write = |file: &str, text: String| {
-            std::fs::write(file, text).map_err(|e| format!("{file}: {e}"))
-        };
-        write("/proc/self/setgroups", "deny".to_owned())?;
-        write("/proc/self/uid_map", format!("{uid} {uid} 1"))?;
-        write("/proc/self/gid_map", format!("{gid} {gid} 1"))?;
-        let none: Option<&str> = None;
-        mount(none, "/", none, MsFlags::MS_REC | MsFlags::MS_PRIVATE, none)
-            .map_err(|e| format!("private mounts: {e}"))
-    }
-
-    /// The flags a bind mount inherits and may not drop in a user namespace.
-    fn locked(p: &Path) -> nix::mount::MsFlags {
-        use nix::mount::MsFlags;
-        use nix::sys::statvfs::{FsFlags, statvfs};
-        let Ok(st) = statvfs(p) else {
-            return MsFlags::empty();
-        };
-        let f = st.flags();
-        let mut out = MsFlags::empty();
-        for (fs, ms) in [
-            (FsFlags::ST_NOSUID, MsFlags::MS_NOSUID),
-            (FsFlags::ST_NODEV, MsFlags::MS_NODEV),
-            (FsFlags::ST_NOEXEC, MsFlags::MS_NOEXEC),
-            (FsFlags::ST_NOATIME, MsFlags::MS_NOATIME),
-            (FsFlags::ST_NODIRATIME, MsFlags::MS_NODIRATIME),
-            (FsFlags::ST_RELATIME, MsFlags::MS_RELATIME),
-        ] {
-            if f.contains(fs) {
-                out |= ms;
-            }
-        }
-        out
-    }
-
-    /// Whether [`mount_carve`] works here: a read-only bind of a temporary
-    /// directory in a namespace of this (probe) process.
-    pub(super) fn probe_mounts() -> Result<(), String> {
-        let dir = std::env::temp_dir().join(format!("speccoder-probe-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        let profile = Profile {
-            writable: Vec::new(),
-            hidden: Vec::new(),
-            read_only: vec![dir.clone()],
-            network: Network::On,
-            tmp: dir.clone(),
-        };
-        let carved = mount_carve(&profile);
-        let refused = carved.is_ok() && std::fs::write(dir.join("x"), "x").is_err();
-        let _ = std::fs::remove_dir_all(&dir);
-        carved.and_then(|()| {
-            refused
-                .then_some(())
-                .ok_or_else(|| "the read-only bind did not hold".to_owned())
-        })
-    }
-
-    /// Readable everywhere except the hidden trees: rules for every path
-    /// that contains no hidden tree, descending into those that do.
-    fn readable(dir: &Path, hidden: &[PathBuf], out: &mut Vec<PathBuf>) {
-        if hidden.iter().any(|h| h == dir) {
-            return;
-        }
-        if !hidden.iter().any(|h| h.starts_with(dir)) {
-            out.push(dir.to_path_buf());
-            return;
-        }
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for e in entries.flatten() {
-                readable(&e.path(), hidden, out);
-            }
-        }
-    }
-
-    pub(super) fn enter(profile: &Profile, argv: &[String]) -> String {
-        match mount_carve(profile).and_then(|()| confine(profile)) {
-            Ok(()) => {
-                use std::os::unix::process::CommandExt as _;
-                let e = std::process::Command::new(&argv[0]).args(&argv[1..]).exec();
-                format!("could not start `{}`: {e}", argv[0])
-            }
-            Err(e) => format!("the sandbox could not be applied: {e}"),
-        }
-    }
-
-    fn confine(profile: &Profile) -> Result<(), String> {
-        let read = AccessFs::from_read(ABI_LEVEL);
-        let all = AccessFs::from_all(ABI_LEVEL);
-        let mut readable_paths = Vec::new();
-        readable(Path::new("/"), &profile.hidden, &mut readable_paths);
-        let mut ruleset = Ruleset::default()
-            .set_compatibility(CompatLevel::HardRequirement)
-            .handle_access(all)
-            .and_then(|r| r.create())
-            .map_err(|e| e.to_string())?;
-        for p in &readable_paths {
-            if let Ok(fd) = PathFd::new(p) {
-                let access = if p.is_dir() {
-                    read
-                } else {
-                    read & AccessFs::from_file(ABI_LEVEL)
-                };
-                ruleset = ruleset
-                    .add_rule(PathBeneath::new(fd, access))
-                    .map_err(|e| e.to_string())?;
-            }
-        }
-        for w in profile.writable.iter().chain([&profile.tmp]) {
-            if let Ok(fd) = PathFd::new(w) {
-                let access = if w.is_dir() {
-                    all
-                } else {
-                    AccessFs::from_file(ABI_LEVEL)
-                };
-                ruleset = ruleset
-                    .add_rule(PathBeneath::new(fd, access))
-                    .map_err(|e| e.to_string())?;
-            }
-        }
-        for dev in ["/dev/null", "/dev/zero", "/dev/tty", "/dev/ptmx"] {
-            if let Ok(fd) = PathFd::new(dev) {
-                ruleset = ruleset
-                    .add_rule(PathBeneath::new(fd, AccessFs::from_file(ABI_LEVEL)))
-                    .map_err(|e| e.to_string())?;
-            }
-        }
-        let status = ruleset.restrict_self().map_err(|e| e.to_string())?;
-        if status.ruleset != RulesetStatus::FullyEnforced {
-            return Err(format!("Landlock only {:?}", status.ruleset));
-        }
-        if profile.network != Network::On {
-            no_inet()?;
-        }
-        Ok(())
-    }
-
-    /// `socket(AF_INET | AF_INET6, …)` fails with EACCES.
-    fn no_inet() -> Result<(), String> {
-        let rule = |domain: u64| {
-            SeccompCondition::new(0, SeccompCmpArgLen::Dword, SeccompCmpOp::Eq, domain)
-                .and_then(|c| SeccompRule::new(vec![c]))
-                .map_err(|e| e.to_string())
-        };
-        let rules = vec![
-            rule(u64::from(libc::AF_INET.unsigned_abs()))?,
-            rule(u64::from(libc::AF_INET6.unsigned_abs()))?,
-        ];
-        let arch: TargetArch = std::env::consts::ARCH
-            .try_into()
-            .map_err(|e: seccompiler::BackendError| e.to_string())?;
-        let filter = SeccompFilter::new(
-            BTreeMap::from([(libc::SYS_socket, rules)]),
-            SeccompAction::Allow,
-            SeccompAction::Errno(libc::EACCES.unsigned_abs()),
-            arch,
-        )
-        .map_err(|e| e.to_string())?;
-        let program: seccompiler::BpfProgram = filter
-            .try_into()
-            .map_err(|e: seccompiler::BackendError| e.to_string())?;
-        seccompiler::apply_filter(&program).map_err(|e| e.to_string())
-    }
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    return procage::exec(&profile, argv);
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    format!("no sandbox for {}", std::env::consts::OS)
 }
 
 #[cfg(test)]
@@ -1079,10 +724,24 @@ mod tests {
                 .any(|w| w == Path::new("/s/proj") || w == &home.join(".cargo"))
         );
         assert!(p.hidden.contains(&home.join(".ssh")));
-        let sb = seatbelt(&p);
-        assert!(sb.contains("(deny network*)"));
-        assert!(sb.contains("(subpath \"/home/u/.cargo/registry\")"));
-        assert!(!sb.contains("(local ip \"localhost:*\"))\n(allow network*"));
+        assert!(p.writable.contains(&home.join(".cargo/registry")));
+        assert_eq!(p.unenforced, Unenforced::default());
+    }
+
+    /// A profile written before the signal scope could be left out
+    /// enforces it; a fitted one keeps the choice through the helper.
+    #[test]
+    fn the_signal_scope_is_enforced_unless_the_profile_says_otherwise() {
+        let p = Profile::new(Path::new("/w"), &Config::default(), None);
+        let mut json: serde_json::Value = serde_json::to_value(&p).unwrap();
+        json["unenforced"] =
+            serde_json::json!({"trust_handoff": false, "workspace_sockets": false});
+        let old: Profile = serde_json::from_value(json).unwrap();
+        assert!(!old.unenforced.signal_scope);
+        let mut fitted = p.clone();
+        fitted.unenforced.signal_scope = true;
+        let back: Profile = serde_json::from_str(&serde_json::to_string(&fitted).unwrap()).unwrap();
+        assert!(back.unenforced.signal_scope);
     }
 
     #[test]
@@ -1126,12 +785,59 @@ mod tests {
         assert_eq!(resolve_executable("./bin/make", &root, &env("")), None);
     }
 
+    /// The experimental `engine` key is gone: procage is the only engine.
+    #[test]
+    fn the_engine_key_is_refused_by_name() {
+        let e = parse("[sandbox]\nengine = \"procage\"\n").unwrap_err();
+        assert!(e.contains("engine"), "{e}");
+    }
+
+    /// A profile this machine cannot confine at all (here: a writable path
+    /// with a control character, which Seatbelt cannot express) means no
+    /// sandbox: `auto` runs commands plain and says why, `required` refuses.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn an_unconfinable_profile_follows_the_mode() {
+        if backend().is_err() {
+            return; // no sandbox on this machine at all
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let odd = dir.path().join("procage\u{1}odd");
+        std::fs::create_dir_all(&odd).unwrap();
+        let mut config = Config {
+            writable: vec![odd.to_string_lossy().into_owned()],
+            ..Config::default()
+        };
+        let (plain, notice) = runner(dir.path(), &config).unwrap();
+        assert!(!plain.is_sandboxed());
+        assert!(
+            notice.is_some_and(|n| n.starts_with("commands run unsandboxed: ")),
+            "{plain:?}"
+        );
+        config.mode = Mode::Required;
+        let e = runner(dir.path(), &config).unwrap_err();
+        assert!(e.contains("mode = \"required\""), "{e}");
+    }
+
+    #[test]
+    fn a_confinable_profile_is_sandboxed() {
+        let dir = tempfile::tempdir().unwrap();
+        let Ok((Runner::Sandboxed(s), _)) = runner(dir.path(), &Config::default()) else {
+            assert!(
+                backend().is_err(),
+                "a sandbox exists but the runner is plain"
+            );
+            return;
+        };
+        assert_eq!(s.backend, backend().unwrap());
+    }
+
     #[test]
     fn network_allow_is_exact_and_a_prefix_needs_two_elements() {
         let c = parse("[sandbox]\nnetwork_allow = [[\"cargo\", \"fetch\"]]\nnetwork_allow_prefix = [[\"npm\", \"ci\"]]\n").unwrap();
         let s = Sandboxed {
             profile: Profile::new(Path::new("/w"), &c, None),
-            backend: Backend::Seatbelt,
+            backend: Backend { helper: None },
             network_allow: c.network_allow.clone(),
             network_allow_prefix: c.network_allow_prefix.clone(),
         };
