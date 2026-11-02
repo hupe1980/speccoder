@@ -46,8 +46,17 @@ pub fn attach(result: CommandResult, feature: Option<&str>) -> CommandResult {
             }
             // The stop's own lines (a ruling it offers) first, then the
             // catalog's not already there.
+            // A line the same but for naming the feature is the same line.
+            let bare = |l: &str| {
+                let mut words: Vec<&str> = l.split(' ').collect();
+                if let Some(i) = words.iter().position(|w| *w == "--feature") {
+                    words.drain(i..(i + 2).min(words.len()));
+                }
+                words.join(" ")
+            };
             let mut own = result.given_fix().to_vec();
-            own.extend(fix.into_iter().filter(|l| !result.given_fix().contains(l)));
+            let have: Vec<String> = own.iter().map(|l| bare(l)).collect();
+            own.extend(fix.into_iter().filter(|l| !have.contains(&bare(l))));
             result = result.with_code(entry.name).with_fix(own);
         }
     }
@@ -355,12 +364,23 @@ mod tests {
         let report = crate::pipeline::outcome::bare_report("001-x", "T029", "/w", "incomplete");
         let r = CommandResult::new("run", CommandStatus::NeedsHuman, "x")
             .with_data(CommandData::Run(Box::new(report)))
-            .with_fix(vec![ruling.to_owned()]);
+            .with_fix(vec![
+                ruling.to_owned(),
+                "speccoder task nudge T029 --feature 001-x --note \"…\"".to_owned(),
+            ]);
         let once = attach(r, Some("001-x"));
         assert_eq!(once.code().map(|c| c.name), Some("ATTEMPT-INCOMPLETE"));
         let fix = once.fix();
         assert_eq!(fix.first().map(String::as_str), Some(ruling));
         assert_eq!(fix.iter().filter(|f| f.as_str() == ruling).count(), 1);
+        // One nudge, though the stop's names the feature and the catalog's not.
+        assert_eq!(
+            fix.iter()
+                .filter(|f| f.starts_with("speccoder task nudge T029"))
+                .count(),
+            1,
+            "{fix:?}"
+        );
         assert!(
             fix.iter()
                 .any(|f| f.starts_with("speccoder task nudge T029")),

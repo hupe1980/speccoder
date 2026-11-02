@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A stop could offer the same command twice, once naming the feature and
+  once not.
+
 ## [0.8.2] - 2026-11-01
 
 ### Fixed

@@ -116,13 +116,16 @@ fn project(port: &str) -> tempfile::TempDir {
     dir
 }
 
-fn run(r: &Path, state: &Path, json: bool) -> std::process::Output {
+fn run(r: &Path, state: &Path, json: bool, feature: bool) -> std::process::Output {
     let mut c = Command::new(env!("CARGO_BIN_EXE_speccoder"));
     if json {
         c.arg("--json");
     }
-    c.args(["run", "--task", "T026", "--no-prompt"])
-        .arg("-C")
+    c.args(["run", "--task", "T026", "--no-prompt"]);
+    if feature {
+        c.args(["--feature", "001-graph"]);
+    }
+    c.arg("-C")
         .arg(r)
         .env("SPECCODER_STATE_DIR", state)
         .env("OPENAI_API_KEY", "mock")
@@ -134,6 +137,25 @@ fn run(r: &Path, state: &Path, json: bool) -> std::process::Output {
 }
 
 const RULING: &str = "speccoder task rule T026 --tests-wrong --reason";
+
+/// The result's fix lines.
+fn lines(v: &serde_json::Value) -> Vec<String> {
+    v["fix"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|f| f.as_str().map(str::to_owned))
+        .collect()
+}
+
+/// A fix line without the feature it names: the same command either way.
+fn bare(line: &str) -> String {
+    let mut words: Vec<&str> = line.split(' ').collect();
+    if let Some(i) = words.iter().position(|w| *w == "--feature") {
+        words.drain(i..(i + 2).min(words.len()));
+    }
+    words.join(" ")
+}
 
 /// A task outside a story stopped on its own (wrong) test: the stop the
 /// person reads offers the ruling, first among its fix lines.
@@ -147,17 +169,18 @@ fn a_stop_on_a_task_s_own_test_prints_the_ruling() {
     let (_m, _mock, port) = mock();
     let repo = project(&port);
     let state = tempfile::tempdir().unwrap();
-    let out = run(repo.path(), state.path(), true);
+    let out = run(repo.path(), state.path(), true, false);
     let v = support::result(&out.stdout);
-    let fix: Vec<String> = v["fix"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|f| f.as_str().map(str::to_owned))
-        .collect();
-    assert!(
-        fix.first().is_some_and(|f| f.starts_with(RULING)),
-        "{fix:?}\n{v}"
+    let fix = lines(&v);
+    // Exactly these, in this order: the ruling, then each way on once.
+    assert_eq!(
+        fix,
+        [
+            "speccoder task rule T026 --tests-wrong --reason \"…\"",
+            "speccoder task nudge T026 --note \"…\"",
+            "speccoder report",
+        ],
+        "{v}"
     );
     assert!(
         v["message"]
@@ -171,11 +194,36 @@ fn a_stop_on_a_task_s_own_test_prints_the_ruling() {
     let (_m, _mock, port) = mock();
     let repo = project(&port);
     let state = tempfile::tempdir().unwrap();
-    let out = run(repo.path(), state.path(), false);
+    let out = run(repo.path(), state.path(), false, false);
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(text.contains(&format!("fix: {RULING}")), "{text}");
+}
+
+/// Named with `--feature` (as a feature run names it): the stop's own lines
+/// and the code's carry it or not, but no command is offered twice.
+#[test]
+fn a_stop_never_offers_a_command_twice() {
+    if Command::new("python3").arg("--version").output().is_err() {
+        eprintln!("skipped: no python3");
+        return;
+    }
+    let (_m, _mock, port) = mock();
+    let repo = project(&port);
+    let state = tempfile::tempdir().unwrap();
+    let out = run(repo.path(), state.path(), true, true);
+    let v = support::result(&out.stdout);
+    let fix = lines(&v);
+    assert!(
+        fix.first()
+            .is_some_and(|f| f.starts_with("speccoder task rule T026")),
+        "{fix:?}"
+    );
+    let mut seen: Vec<String> = fix.iter().map(|l| bare(l)).collect();
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen.len(), fix.len(), "a command offered twice: {fix:?}");
 }
