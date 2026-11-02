@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A gap test could call code that is not there (a module the task does
+  not add, a misspelled class) and stop the task after a whole attempt.
+  Its author now sees the code's declarations, such an import is refused
+  before anything runs, and a refused test is asked for once more, told
+  why.
+
 ## [0.8.3] - 2026-11-02
 
 ### Added

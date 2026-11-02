@@ -26,7 +26,9 @@ states them — do not invent behaviour the spec does not state, and do not weak
 example. Put them where the project's test runner collects them: in the file named under \
 \"Where the tests go\" below (the story's file, to which you only ADD a section, or a NEW \
 file), using the crate or package name from the manifest — and give the command that \
-runs only that file (named there too). Each file cites \
+runs only that file (named there too). Call the project's code by the modules, names and \
+return shapes it has (under \"The code as it is\"): only what this task itself adds may not \
+exist yet — never a module, name or shape you imagine. Each file cites \
 the IDs of the scenarios it tests, from the list given (none when there is no list). The tests must \
 fail now (the task is not implemented) and pass once it is. When the task is one of several \
 in its story (listed under \"The story's other tasks\"), test only what THIS task makes hold, through the code \
@@ -331,7 +333,7 @@ pub fn review_policy(w: &Wording) -> String {
 project's own language and test framework, exactly as the spec states them — do not invent behaviour \
 the spec does not state, and do not weaken an example. Test through the interface the requirement's \
 Independent Test names (a command, an API, a page): the product as a person uses it, never an internal \
-module only. Put them in NEW files under the project's test directory — paths that are not in the \
+module only; call the code that exists by the names and shapes it has (under \"The code as it is\"), never ones you imagine. Put them in NEW files under the project's test directory — paths that are not in the \
 project's file list; one file per scenario, named after it (for Rust: tests/acceptance_<scenario>.rs, \
 using the crate name from Cargo.toml) — and per file the command that runs only that file (for Rust: \
 cargo test --test <name>). In Python and JavaScript, import the code under test inside each test, so a \
@@ -430,6 +432,8 @@ pub struct ReviewParts<'a> {
     pub test_layout: Option<&'a str>,
     /// The project's tests on the code the requirement names.
     pub suite: &'a [SuiteTest],
+    /// The code's declarations, as it is.
+    pub interface: &'a [SuiteTest],
 }
 
 /// The review-time author's input: `{ mode: "review", … }`.
@@ -454,14 +458,16 @@ pub fn review_input(p: &ReviewParts<'_>) -> Tainted<Value> {
             ),
         ),
     ];
-    if !p.suite.is_empty() {
-        parts.push((
-            "suite",
-            Tainted::with_label(
-                json!(p.suite),
-                super::provenance::from(super::provenance::WORKTREE),
-            ),
-        ));
+    for (key, part) in [("suite", p.suite), ("interface", p.interface)] {
+        if !part.is_empty() {
+            parts.push((
+                key,
+                Tainted::with_label(
+                    json!(part),
+                    super::provenance::from(super::provenance::WORKTREE),
+                ),
+            ));
+        }
     }
     if let Some((path, content)) = p.again {
         parts.push((
@@ -508,8 +514,14 @@ pub fn input(
     manifest: &str,
     instructions: &[crate::instructions::Instruction],
     placement: Option<&Placement>,
-    (told, suite): (&[String], &[SuiteTest]),
+    known: &Known<'_>,
 ) -> Tainted<Value> {
+    let Known {
+        told,
+        refused,
+        suite,
+        interface,
+    } = *known;
     // The bundle and its scenarios are the person's; the file list,
     // manifest and instructions are the worktree's.
     let mut parts = vec![
@@ -528,15 +540,22 @@ pub fn input(
     if !told.is_empty() {
         parts.push(("told", Tainted::trusted(json!(told))));
     }
-    // The project's tests on the same code: the worktree's.
-    if !suite.is_empty() {
-        parts.push((
-            "suite",
-            Tainted::with_label(
-                json!(suite),
-                super::provenance::from(super::provenance::WORKTREE),
-            ),
-        ));
+    // speccoder refused the earlier answer: its own words.
+    if !refused.is_empty() {
+        parts.push(("refused", Tainted::trusted(json!(refused))));
+    }
+    // The project's tests on the same code, and the code's declarations:
+    // the worktree's.
+    for (key, part) in [("suite", suite), ("interface", interface)] {
+        if !part.is_empty() {
+            parts.push((
+                key,
+                Tainted::with_label(
+                    json!(part),
+                    super::provenance::from(super::provenance::WORKTREE),
+                ),
+            ));
+        }
     }
     // Where the tests go: speccoder's facts from the checkout.
     if let Some(p) = placement {
@@ -550,6 +569,21 @@ pub fn input(
         ));
     }
     Tainted::object(parts)
+}
+
+/// What the author is told beyond the task: a person's rulings, speccoder's
+/// refusal of its earlier answer, the suite's tests on the same code, and
+/// the code's declarations.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Known<'a> {
+    /// A person's rulings that the earlier tests were wrong.
+    pub told: &'a [String],
+    /// Why speccoder refused the earlier answer.
+    pub refused: &'a [String],
+    /// The project's tests on the same code.
+    pub suite: &'a [SuiteTest],
+    /// The code's declarations, as it is.
+    pub interface: &'a [SuiteTest],
 }
 
 /// An existing project test on the code a task's test will exercise: the
@@ -778,6 +812,28 @@ impl Skill for Acceptance {
                     text.push_str("\n\n# A person ruled the earlier tests wrong\n\nWrite them again so they agree with what follows; their words decide over your reading.\n");
                     for t in told {
                         text.push_str(&format!("\n- {t}"));
+                    }
+                }
+                let refused: Vec<&str> = input["refused"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .collect();
+                if !refused.is_empty() {
+                    text.push_str("\n\n# speccoder refused your earlier answer\n\nWrite the tests again without this:\n");
+                    for r in refused {
+                        text.push_str(&format!("\n- {r}"));
+                    }
+                }
+                if let Some(code) = input["interface"].as_array().filter(|a| !a.is_empty()) {
+                    text.push_str("\n\n# The code as it is (its declarations)\n\nCall it by these modules, names and shapes; only what this task adds may be new.\n");
+                    for f in code {
+                        text.push_str(&format!(
+                            "\n## {}\n\n```\n{}```\n",
+                            f["path"].as_str().unwrap_or_default(),
+                            f["content"].as_str().unwrap_or_default()
+                        ));
                     }
                 }
                 if let Some(suite) = input["suite"].as_array().filter(|a| !a.is_empty()) {

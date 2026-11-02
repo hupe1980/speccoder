@@ -330,6 +330,9 @@ fn us1_reject_edit_and_again_shape_the_set() {
         prompt.contains("check the parentheses too"),
         "the comment is told"
     );
+    // The code as it is: called by the names it has, never imagined ones.
+    assert!(prompt.contains("# The code as it is"), "{prompt}");
+    assert!(prompt.contains("pub fn ok()"), "{prompt}");
     let v = us1(&res);
     assert_eq!(v.tests.len(), 1);
     assert_eq!(v.tests[0].content, "checks fn login(\n");

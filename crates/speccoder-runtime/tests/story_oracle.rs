@@ -659,13 +659,17 @@ fn the_author_sees_the_suite_s_tests_on_the_same_code() {
         "{asked}"
     );
     assert!(asked.contains("tests/unit/test_cells.rs"), "{asked}");
+    // And the code it calls, as it is: its modules, names and shapes.
+    assert!(asked.contains("# The code as it is"), "{asked}");
+    assert!(asked.contains("pub fn ok()"), "{asked}");
     // Without a cited name it touches, no such section.
     let plain = given(r.path(), "T001");
     assert!(!plain.contains("The project's tests on the same code"));
 }
 
 /// A placeholder — a test that raises "not implemented" — is no red: no
-/// implementation can turn it green. It is refused, never run as evidence.
+/// implementation can turn it green. It is refused and asked for once more,
+/// told why; refused again, never run as evidence.
 #[test]
 fn a_placeholder_test_is_refused_never_red() {
     let tasks = format!(
@@ -675,12 +679,13 @@ fn a_placeholder_test_is_refused_never_red() {
     let r = repo_with(&tasks);
     let state = tempfile::tempdir().unwrap();
     let f = FakeProvider::new();
-    f.will_structure(json!({
+    let placeholder = json!({
         "files": [{ "path": "tests/test_acceptance_t029.py", "content": "def test_header():\n    raise NotImplementedError(\"once the entrypoint is known\")\n", "scenarios": ["US1-3"] }],
         "argv": ["./accept.sh", "--", "tests/test_acceptance_t029.py", "fn gamma"],
         "notes": [],
-    }));
-    implements(&f, "pub fn gamma() {}");
+    });
+    f.will_structure(placeholder.clone());
+    f.will_structure(placeholder);
     let res = run(r.path(), state.path(), "T029", &f);
     let rep = report(&res);
     let a = rep.acceptance.as_ref().expect("acceptance reported");
@@ -690,11 +695,59 @@ fn a_placeholder_test_is_refused_never_red() {
         res.message()
     );
     assert_ne!(a["red"], json!(true), "{a}");
+    // Asked twice, the second time told why; nothing implemented.
+    let asked = f.asked();
+    assert_eq!(asked.len(), 2, "two author calls, no attempt");
+    let again = serde_json::to_string(&asked[1].prompt).unwrap();
+    assert!(
+        again.contains("speccoder refused your earlier answer"),
+        "{again}"
+    );
+    assert!(again.contains("is a placeholder"), "{again}");
     assert!(
         !rep.changes
             .iter()
             .any(|c| c.0.ends_with("test_acceptance_t029.py"))
     );
+}
+
+/// A gap test that imports a module the code does not have (the sample's
+/// T032: `src.lib.convert_table_to_csv`) is refused before anything runs;
+/// the author, told which, writes it against the code as it is — and the
+/// task is done on the first attempt.
+#[test]
+fn a_test_of_imagined_code_is_written_again_before_any_attempt() {
+    let tasks = format!(
+        "{}\n## Phase 7: Convergence\n\n- [ ] T032 Validate the header in the conversion flow per US1/AC3 (partial)\n",
+        TASKS.replace("- [ ]", "- [x]")
+    );
+    let r = repo_with(&tasks);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(json!({
+        "files": [{ "path": "tests/test_acceptance_t032.py", "content": "def test_header():\n    from src.convert_table import convert\n    assert convert('| a |')\n", "scenarios": ["US1-3"] }],
+        "argv": ["./accept.sh", "--", "tests/test_acceptance_t032.py", "fn gamma"],
+        "notes": [],
+    }));
+    f.will_structure(json!({
+        "files": [{ "path": "tests/acceptance_t032.txt", "content": "checks fn gamma\n", "scenarios": ["US1-3"] }],
+        "argv": ["./accept.sh", "--", "tests/acceptance_t032.txt", "fn gamma"],
+        "notes": [],
+    }));
+    implements(&f, "pub fn gamma() {}");
+    let res = run(r.path(), state.path(), "T032", &f);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let again = serde_json::to_string(&f.asked()[1].prompt).unwrap();
+    assert!(
+        again.contains("imports `src.convert_table`, which is not in the code"),
+        "{again}"
+    );
+    let a = report(&res)
+        .acceptance
+        .clone()
+        .expect("acceptance reported");
+    assert_eq!(a["refused_first"].as_array().map(Vec::len), Some(1), "{a}");
+    assert!(!r.path().join("tests/test_acceptance_t032.py").exists());
 }
 
 /// A feature's done and total come from one list: the speccoder branch's,

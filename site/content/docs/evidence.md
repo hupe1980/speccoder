@@ -85,7 +85,7 @@ A story's acceptance is written once — its **oracle** — and every task of th
 - **Linked.** A task that names its scenarios — `(scenarios US3-1, US3-2)`, or `US3/AC2` as Spec Kit's converge cites them — must leave exactly those green. A link to no scenario of the story is ignored and reported (`PLAN-SCENARIO-UNKNOWN`).
 - **Checkpoint.** The story's last open code task must leave every scenario green, and the story's held-out tests passing. Otherwise it stops (`STORY-OPEN`), naming each red scenario with its contract: leave a note (`task nudge`) and run again, or — when a test asserts what the spec does not say — `speccoder task rule T021 --tests-wrong --scenario US3-2 --reason "…"`; the next run writes that scenario's tests again, and nothing else (`Oracle-Amends: US3-2`). A scenario its author declared untestable is shown, and never blocks the story.
 - **Outside a story.** A convergence gap writes its own test, cited to the scenario it closes; a bug is judged by its reproductions. When that test asserts what the spec does not say, the stop names it: `speccoder task rule T027 --tests-wrong --reason "FR-005 keeps cell whitespace"` has it written again, your words told to its author and recorded on the tick (`Ruling: tests-wrong`).
-- **The suite.** Every test author is shown the project's tests on the code its task or story names in backticks, and told not to contradict them; a scenario it could only state against them is *untested*.
+- **The code as it is.** Every test author is shown the code's declarations (its modules, functions, types and fields) and the project's tests on the code its task or story names in backticks, and told not to contradict them; a scenario it could only state against them is *untested*. A gap test that imports a module the code does not have and the task does not name, or a name in other letters (`CSVOutput` for `CsvOutput`), is refused before anything runs — as is a skipped or placeholder test — and asked for once more, told why.
 
 `speccoder report` and the board show each story on its oracle — `US1 ●●○ 2 of 3 green · T008 turned US1-1, US1-2 · T010 closes it` — and each open task what judges it. A story whose every task is documentation or yours has no checkpoint (`PLAN-STORY-UNJUDGED`); one ticked before it had an oracle reads *ticked before its oracle*, its scenarios never run: `speccoder story check US1` (or **Check This Story** in the spec view) writes its oracle now and runs it on the feature's branch — each scenario then held or not, the rest to [converge](@/docs/running.md#convergence).
 
@@ -98,7 +98,7 @@ Every `regression_only` tick carries one reason, decided by code, recorded in th
 | `acceptance_off` | `[acceptance] generate = false` |
 | `no_story` | The task belongs to no user story: nothing to derive a test from |
 | `no_scenarios` | Its story states no acceptance scenario |
-| `author_failed` | The test author's files could not be used (refused path, a skipped or placeholder test, command not allowed, no place the runner collects) |
+| `author_failed` | The test author's files could not be used (refused path, a skipped or placeholder test, an import of code that is not there, command not allowed, no place the runner collects) — refused twice |
 | `author_wrote_none` | The test author wrote no test |
 | `tests_not_collected` | The acceptance command collected no test |
 | `not_red` | The acceptance tests did not fail first (build error, timeout, flaky, …) |

@@ -95,7 +95,7 @@ fn bundles_and_acceptance_input_are_unchanged() {
         "Cargo.toml:\n[package]",
         &[],
         None,
-        (&[], &[]),
+        &speccoder_runtime::substrate::acceptance::Known::default(),
     );
     golden(
         "acceptance-input.json",

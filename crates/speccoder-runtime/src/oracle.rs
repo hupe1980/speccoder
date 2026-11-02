@@ -1147,6 +1147,7 @@ impl<'a> Author<'a> {
     ) -> Result<(Value, String, Vec<ContextEntry>), String> {
         let context = self.context(req, notes);
         let suite = crate::pipeline::acceptance::suite(&self.ctx.root, &req.text);
+        let interface = crate::pipeline::acceptance::interface(&self.ctx.root, &req.text);
         let input = substrate::acceptance::review_input(&substrate::acceptance::ReviewParts {
             bundle: self.bundle.clone(),
             requirement: json!({ "key": req.key, "title": req.title, "text": req.text }),
@@ -1160,6 +1161,7 @@ impl<'a> Author<'a> {
             sample,
             test_layout: Some(&self.test_layout),
             suite: &suite,
+            interface: &interface,
         });
         let task = format!("req-{}", req.key);
         let outcome = self

@@ -116,53 +116,78 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
             );
         }
     };
-    let suite = suite(
-        a.worktree,
-        a.bundle["task"]["title"].as_str().unwrap_or_default(),
-    );
-    let input = substrate::acceptance::input(
-        a.bundle.clone(),
-        a.scenarios,
-        &files,
-        &manifest,
-        a.instructions,
-        placement.as_ref(),
-        (a.told, &suite),
-    );
-    let outcome = a.rt.block_on(a.plane.acceptance(a.feature, a.task, input));
-    let outcome = match outcome {
-        Ok(o) => o,
-        Err(e) => return failed(format!("generation failed: {}", e.0), json!({})),
-    };
-    let output = outcome
-        .output
-        .as_ref()
-        .map(|o| o.peek().clone())
-        .unwrap_or_default();
-    let answer = output["answer"].clone();
-    let base = json!({ "run_id": outcome.run_id.to_string(), "usage": output["usage"], "notes": answer["notes"] });
-    if !matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded) || answer.is_null() {
-        let status = format!("{:?}", outcome.status);
-        let why = substrate::provider_refusal(&status).map_or_else(
-            || format!("generation failed: {}", substrate::why_not(&outcome.status)),
-            |r| format!("the model provider refused the request: {r}"),
+    let title = a.bundle["task"]["title"].as_str().unwrap_or_default();
+    let suite = suite(a.worktree, title);
+    let interface = interface(a.worktree, title);
+    // A refused answer is asked for once more, told exactly why: what
+    // speccoder refuses is checked, never left to the author's reading.
+    let mut refusals: Vec<String> = Vec::new();
+    let (answer, base, valid) = loop {
+        let input = substrate::acceptance::input(
+            a.bundle.clone(),
+            a.scenarios,
+            &files,
+            &manifest,
+            a.instructions,
+            placement.as_ref(),
+            &substrate::acceptance::Known {
+                told: a.told,
+                refused: &refusals,
+                suite: &suite,
+                interface: &interface,
+            },
         );
-        return failed(why, base);
-    }
+        let outcome = a.rt.block_on(a.plane.acceptance(a.feature, a.task, input));
+        let outcome = match outcome {
+            Ok(o) => o,
+            Err(e) => return failed(format!("generation failed: {}", e.0), json!({})),
+        };
+        let output = outcome
+            .output
+            .as_ref()
+            .map(|o| o.peek().clone())
+            .unwrap_or_default();
+        let answer = output["answer"].clone();
+        let mut base = json!({ "run_id": outcome.run_id.to_string(), "usage": output["usage"], "notes": answer["notes"] });
+        if !matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded) || answer.is_null()
+        {
+            let status = format!("{:?}", outcome.status);
+            let why = substrate::provider_refusal(&status).map_or_else(
+                || format!("generation failed: {}", substrate::why_not(&outcome.status)),
+                |r| format!("the model provider refused the request: {r}"),
+            );
+            return failed(why, base);
+        }
+        if !refusals.is_empty() {
+            base["refused_first"] = json!(refusals);
+        }
 
-    // Validate: new test files only, a command the policy allows.
+        // Validate: new test files only, a command the policy allows, and
+        // calls to code that is there (or that the task adds).
+        let (valid, mut refused) = validate_answer(&answer, a.project, a.policy, a.scenarios);
+        refused.extend(valid.iter().filter_map(|f| {
+            imagined(a.worktree, &f.path, &f.content, title).map(|message| RefusedFile {
+                message,
+                path: f.path.clone(),
+                why: "imagined",
+            })
+        }));
+        match refused.first() {
+            None => break (answer, base, valid),
+            Some(r) if refusals.is_empty() => refusals.push(r.message.clone()),
+            Some(r) => {
+                return skipped_by(
+                    r.message.clone(),
+                    Some(SkipCause::Refused {
+                        path: r.path.clone(),
+                        why: refusal_words(r.why).to_owned(),
+                    }),
+                    base,
+                );
+            }
+        }
+    };
     let mut written = Vec::new();
-    let (valid, refused) = validate_answer(&answer, a.project, a.policy, a.scenarios);
-    if let Some(r) = refused.first() {
-        return skipped_by(
-            r.message.clone(),
-            Some(SkipCause::Refused {
-                path: r.path.clone(),
-                why: refusal_words(r.why).to_owned(),
-            }),
-            base,
-        );
-    }
     // Each test and the scenarios it cites, of those the spec has.
     let tests: Vec<serde_json::Value> = valid
         .iter()
@@ -319,6 +344,7 @@ pub(crate) fn refusal_words(why: &str) -> &'static str {
         "not_collected" => "is not where the runner collects tests",
         "skip_marker" => "skips a test",
         "placeholder" => "is a placeholder that can never pass",
+        "imagined" => "calls code that is not there",
         _ => "is not a new test file",
     }
 }
@@ -1028,12 +1054,9 @@ pub(crate) fn strengthen(
     })
 }
 
-/// The project's tests that name what the task line names (a backticked
-/// function, type or file's stem): at most three files, 6 KiB in all, each
-/// trimmed with a note — the tests a new test must not contradict.
-pub(crate) fn suite(worktree: &Path, title: &str) -> Vec<substrate::acceptance::SuiteTest> {
-    const FILES: usize = 3;
-    const BUDGET: usize = 6 * 1024;
+/// The names a task line (or a requirement's text) gives in backticks: a
+/// function, a type, a file's stem.
+fn named(title: &str) -> Vec<String> {
     let mut names: Vec<String> = title
         .split('`')
         .skip(1)
@@ -1052,6 +1075,31 @@ pub(crate) fn suite(worktree: &Path, title: &str) -> Vec<substrate::acceptance::
         .collect();
     names.sort();
     names.dedup();
+    names
+}
+
+/// Whether a project path is a test's.
+fn is_test(p: &str) -> bool {
+    p.split('/').any(|seg| {
+        let s = seg.to_ascii_lowercase();
+        s == "tests"
+            || s == "test"
+            || s == "spec"
+            || s == "__tests__"
+            || s.starts_with("test_")
+            || s.contains("_test.")
+            || s.contains(".test.")
+            || s.contains(".spec.")
+    })
+}
+
+/// The project's tests that name what the task line names (a backticked
+/// function, type or file's stem): at most three files, 6 KiB in all, each
+/// trimmed with a note — the tests a new test must not contradict.
+pub(crate) fn suite(worktree: &Path, title: &str) -> Vec<substrate::acceptance::SuiteTest> {
+    const FILES: usize = 3;
+    const BUDGET: usize = 6 * 1024;
+    let names = named(title);
     if names.is_empty() {
         return Vec::new();
     }
@@ -1061,19 +1109,6 @@ pub(crate) fn suite(worktree: &Path, title: &str) -> Vec<substrate::acceptance::
     }
     let Ok(out) = crate::git::Git::at(worktree).line(&args) else {
         return Vec::new();
-    };
-    let is_test = |p: &str| {
-        p.split('/').any(|seg| {
-            let s = seg.to_ascii_lowercase();
-            s == "tests"
-                || s == "test"
-                || s == "spec"
-                || s == "__tests__"
-                || s.starts_with("test_")
-                || s.contains("_test.")
-                || s.contains(".test.")
-                || s.contains(".spec.")
-        })
     };
     let mut left = BUDGET;
     out.lines()
@@ -1098,6 +1133,284 @@ pub(crate) fn suite(worktree: &Path, title: &str) -> Vec<substrate::acceptance::
             })
         })
         .collect()
+}
+
+/// The code a new test calls, as it is: each source file's declarations
+/// (a function, type, method, field or re-export line, as written), the
+/// files the task names first, 8 KiB in all — so the author calls the code
+/// by the modules, names and shapes it has, never ones it imagines.
+pub(crate) fn interface(worktree: &Path, title: &str) -> Vec<substrate::acceptance::SuiteTest> {
+    const BUDGET: usize = 8 * 1024;
+    const SOURCE: &[&str] = &[
+        "py", "rs", "ts", "tsx", "js", "mjs", "go", "java", "kt", "rb", "cs", "swift",
+    ];
+    let Ok(out) = crate::git::Git::at(worktree).line(&[
+        "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+    ]) else {
+        return Vec::new();
+    };
+    let names = named(title);
+    let stem = |p: &str| {
+        let f = p.rsplit('/').next().unwrap_or(p);
+        f.split('.').next().unwrap_or(f).to_owned()
+    };
+    let mut files: Vec<&str> = out
+        .lines()
+        .filter(|p| {
+            !is_test(p)
+                && p.rsplit_once('.')
+                    .is_some_and(|(_, ext)| SOURCE.contains(&ext))
+        })
+        .collect();
+    files.sort_by_key(|p| !names.contains(&stem(p)));
+    let mut left = BUDGET;
+    let mut shown = Vec::new();
+    for p in files {
+        let Ok(text) = std::fs::read_to_string(worktree.join(p)) else {
+            continue;
+        };
+        let content = declarations(&text, p.ends_with("__init__.py"));
+        if content.is_empty() {
+            continue;
+        }
+        if content.len() > left {
+            break;
+        }
+        left -= content.len();
+        shown.push(substrate::acceptance::SuiteTest {
+            path: p.to_owned(),
+            content,
+        });
+    }
+    shown
+}
+
+/// A source file's declaration lines, indented as written: a signature
+/// spanning lines is joined until its brackets close; a Python name with a
+/// leading underscore is private and left out.
+fn declarations(text: &str, init: bool) -> String {
+    const STARTS: &[&str] = &[
+        "def ",
+        "async def ",
+        "class ",
+        "pub ",
+        "pub(",
+        "export ",
+        "func ",
+        "type ",
+        "public ",
+        "fun ",
+        "interface ",
+        "struct ",
+        "enum ",
+        "trait ",
+    ];
+    let mut out = String::new();
+    let mut in_class = false;
+    let mut lines = text.lines();
+    while let Some(line) = lines.next() {
+        let t = line.trim_start();
+        let top = t.len() == line.len();
+        if top && !t.is_empty() {
+            in_class = t.starts_with("class ");
+        }
+        let private = ["def _", "async def _", "class _"]
+            .iter()
+            .any(|p| t.starts_with(p) && !t.starts_with("def __init__"));
+        // A Python class body's field (`header: tuple[str, ...]`) and a
+        // package's re-export (`from .x import Y`) are its shape too.
+        let field = in_class
+            && !top
+            && line.len() - t.len() == 4
+            && t.split_once(':').is_some_and(|(n, rest)| {
+                !rest.trim().is_empty()
+                    && !n.is_empty()
+                    && n.chars().all(|c| c.is_alphanumeric() || c == '_')
+            });
+        let export = init && top && t.starts_with("from .");
+        let decl = STARTS.iter().any(|s| t.starts_with(s)) || field || export;
+        if !decl || private {
+            continue;
+        }
+        let mut sig = line.trim_end().to_owned();
+        let open = |s: &str| {
+            s.chars().filter(|c| matches!(c, '(' | '[')).count() as isize
+                - s.chars().filter(|c| matches!(c, ')' | ']')).count() as isize
+        };
+        let mut depth = open(&sig);
+        while depth > 0 {
+            let Some(next) = lines.next() else { break };
+            sig.push(' ');
+            sig.push_str(next.trim());
+            depth += open(next);
+        }
+        let sig: String = sig.chars().take(200).collect();
+        out.push_str(sig.trim_end_matches(['{', ' ']));
+        out.push('\n');
+    }
+    out
+}
+
+/// Whether a new test calls project code that is not there and that the
+/// task does not add: a module no file is (and the task line does not
+/// name), or a name the module has only in other letter case — the test
+/// would be red for its own mistake, never for the task's gap. Python
+/// imports and relative JavaScript/TypeScript imports; other languages'
+/// compilers say it.
+pub(crate) fn imagined(worktree: &Path, path: &str, content: &str, title: &str) -> Option<String> {
+    let named = named(title);
+    let adds = |module_path: &str| {
+        let stem = module_path
+            .rsplit('/')
+            .next()
+            .unwrap_or(module_path)
+            .split('.')
+            .next()
+            .unwrap_or_default()
+            .to_owned();
+        title.contains(module_path) || named.contains(&stem)
+    };
+    let missing = |shown: &str| {
+        format!(
+            "`{path}` imports `{shown}`, which is not in the code and which this task does not add — call the code by the modules it has (under \"The code as it is\")"
+        )
+    };
+    if path.ends_with(".py") {
+        for (module, names) in python_imports(content) {
+            let first = module.split('.').next().unwrap_or_default();
+            // Only the project's own modules: at the root or under src/.
+            let Some(base) = ["", "src/"].into_iter().find(|b| {
+                worktree.join(format!("{b}{first}")).exists()
+                    || worktree.join(format!("{b}{first}.py")).exists()
+            }) else {
+                continue;
+            };
+            let rel = format!("{base}{}", module.replace('.', "/"));
+            let file = [format!("{rel}.py"), format!("{rel}/__init__.py")]
+                .into_iter()
+                .find(|f| worktree.join(f).is_file());
+            let Some(file) = file else {
+                if adds(&format!("{rel}.py")) {
+                    continue;
+                }
+                return Some(missing(&module));
+            };
+            let text = std::fs::read_to_string(worktree.join(&file)).unwrap_or_default();
+            for n in names {
+                let word = |w: &str| {
+                    text.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                        .any(|t| t == w)
+                };
+                if word(&n) || worktree.join(format!("{rel}/{n}.py")).is_file() {
+                    continue;
+                }
+                if let Some(real) = text
+                    .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .find(|t| t.eq_ignore_ascii_case(&n))
+                {
+                    return Some(format!(
+                        "`{path}` imports `{n}` from `{module}`, which has `{real}` — call the code by the names it has"
+                    ));
+                }
+            }
+        }
+        return None;
+    }
+    if [".ts", ".tsx", ".js", ".mjs", ".cjs"]
+        .iter()
+        .any(|e| path.ends_with(e))
+    {
+        let dir = Path::new(path).parent().unwrap_or(Path::new(""));
+        for spec in relative_imports(content) {
+            let joined = dir.join(&spec);
+            let rel = crate::tools::paths::normalise(&joined.to_string_lossy()).unwrap_or_default();
+            let found = [
+                "",
+                ".ts",
+                ".tsx",
+                ".js",
+                ".mjs",
+                ".svelte",
+                "/index.ts",
+                "/index.js",
+            ]
+            .iter()
+            .any(|e| worktree.join(format!("{rel}{e}")).is_file());
+            if !found && !adds(&rel) {
+                return Some(missing(&spec));
+            }
+        }
+    }
+    None
+}
+
+/// A Python file's absolute imports: each module, with the names taken
+/// from it (`from m import a, b`; none for `import m`).
+fn python_imports(content: &str) -> Vec<(String, Vec<String>)> {
+    let mut out = Vec::new();
+    let mut lines = content.lines();
+    while let Some(line) = lines.next() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("from ") {
+            let Some((module, names)) = rest.split_once(" import ") else {
+                continue;
+            };
+            if module.starts_with('.') {
+                continue;
+            }
+            let mut names = names.to_owned();
+            if names.contains('(') && !names.contains(')') {
+                for next in lines.by_ref() {
+                    names.push_str(next);
+                    if next.contains(')') {
+                        break;
+                    }
+                }
+            }
+            let names = names
+                .split([',', '(', ')'])
+                .filter_map(|n| n.split_whitespace().next())
+                .filter(|n| *n != "*" && !n.starts_with('#'))
+                .map(str::to_owned)
+                .collect();
+            out.push((module.trim().to_owned(), names));
+        } else if let Some(rest) = t.strip_prefix("import ") {
+            for m in rest.split(',') {
+                if let Some(m) = m.split_whitespace().next() {
+                    out.push((m.to_owned(), Vec::new()));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// A JavaScript/TypeScript file's relative module specifiers.
+fn relative_imports(content: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for quote in ['\'', '"'] {
+        for (i, _) in content.match_indices(quote) {
+            let rest = &content[i + 1..];
+            if !(rest.starts_with("./") || rest.starts_with("../")) {
+                continue;
+            }
+            let before = content[..i].trim_end();
+            if !(before.ends_with("from")
+                || before.ends_with("import")
+                || before.ends_with("require(")
+                || before.ends_with("import("))
+            {
+                continue;
+            }
+            if let Some(end) = rest.find(quote) {
+                out.push(rest[..end].to_owned());
+            }
+        }
+    }
+    out
 }
 
 /// What judges a task outside any story (setup, polish, convergence):
@@ -1131,6 +1444,107 @@ pub(crate) fn checks_only(
     t.yours
         || speccoder_core::lane::by_paths(&t.title, unit_dir, judged)
             == speccoder_core::lane::Lane::Planning
+}
+
+#[cfg(test)]
+mod interface_tests {
+    use super::{declarations, imagined};
+
+    /// The sample's T032 test (2026-11-02), against its code: the module it
+    /// imagined, the class it misspelled — and what passes.
+    #[test]
+    fn a_test_s_imports_are_checked_against_the_code() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let w = dir.path();
+        for (p, t) in [
+            ("src/__init__.py", ""),
+            (
+                "src/models/__init__.py",
+                "from .csv_output import CsvOutput\nfrom .conversion_error import ConversionError\n",
+            ),
+            ("src/models/csv_output.py", "class CsvOutput:\n    pass\n"),
+            (
+                "src/services/table_parser.py",
+                "def parse_markdown_table(content):\n    return ()\n",
+            ),
+            ("web/src/lib/csv.ts", "export function toCsv() {}\n"),
+        ] {
+            std::fs::create_dir_all(w.join(p).parent().unwrap_or(w))
+                .unwrap_or_else(|e| panic!("{e}"));
+            std::fs::write(w.join(p), t).unwrap_or_else(|e| panic!("{e}"));
+        }
+        let task = "Add header-presence validation in the conversion flow per FR-004";
+        let check = |content: &str| imagined(w, "tests/test_t032.py", content, task);
+        // As the sample wrote it: the module is not there.
+        let got = check(
+            "def test():\n    from src.lib.convert_table_to_csv import convert_table_to_csv\n    from src.models.conversion_error import ConversionError\n",
+        );
+        assert!(
+            got.as_deref()
+                .is_some_and(|m| m.contains("`src.lib.convert_table_to_csv`")),
+            "{got:?}"
+        );
+        // A task that names the file adds it.
+        assert_eq!(
+            imagined(
+                w,
+                "tests/test_t032.py",
+                "from src.lib.convert_table_to_csv import convert\n",
+                "Add `src/lib/convert_table_to_csv.py`"
+            ),
+            None
+        );
+        // A name the module has only in other letters.
+        let got = check("from src.models import CSVOutput\n");
+        assert!(
+            got.as_deref()
+                .is_some_and(|m| m.contains("which has `CsvOutput`")),
+            "{got:?}"
+        );
+        // What is there, what the task may add, and what is not the project's.
+        assert_eq!(
+            check(
+                "import pytest\nfrom dataclasses import dataclass\nfrom src.models import (\n    CsvOutput,\n    ConversionError,\n)\nfrom src.services.table_parser import parse_markdown_table, validate_header\n"
+            ),
+            None
+        );
+        // Relative JavaScript/TypeScript imports.
+        let ts = |c: &str| imagined(w, "web/src/lib/csv.test.ts", c, task);
+        assert_eq!(
+            ts("import { toCsv } from \"./csv\";\nimport { it } from \"vitest\";\n"),
+            None
+        );
+        assert!(ts("import { toCsv } from './convert';\n").is_some());
+    }
+
+    /// The sample's code (2026-11-02): the test author imagined a module,
+    /// a class's spelling and a return shape; these lines say them.
+    #[test]
+    fn a_file_s_declarations_are_its_names_and_shapes() {
+        let py = "from dataclasses import dataclass\n\n\n@dataclass(frozen=True)\nclass MarkdownTable:\n    header: tuple[str, ...]\n    rows: tuple[tuple[str, ...], ...]\n\n    def width(self) -> int:\n        return len(self.header)\n\n    def _check(self) -> None:\n        pass\n\n\ndef parse_markdown_table(\n    content: str,\n) -> tuple[MarkdownTable, ...]:\n    x: int = 1\n    return ()\n\n\ndef _split_row(line: str) -> tuple[str, ...]:\n    return ()\n";
+        assert_eq!(
+            declarations(py, false),
+            "class MarkdownTable:\n    header: tuple[str, ...]\n    rows: tuple[tuple[str, ...], ...]\n    def width(self) -> int:\ndef parse_markdown_table( content: str, ) -> tuple[MarkdownTable, ...]:\n"
+        );
+        assert_eq!(
+            declarations("from .csv_output import CsvOutput\nimport os\n", true),
+            "from .csv_output import CsvOutput\n"
+        );
+        assert_eq!(
+            declarations(
+                "pub struct Table {\n    pub header: Vec<String>,\n    rows: usize,\n}\nfn private() {}\npub fn parse(s: &str) -> Vec<Table> {\n",
+                false
+            ),
+            "pub struct Table\n    pub header: Vec<String>,\npub fn parse(s: &str) -> Vec<Table>\n"
+        );
+        assert_eq!(
+            declarations(
+                "export function toCsv(t: Table): string {\nconst x = 1;\n",
+                false
+            ),
+            "export function toCsv(t: Table): string\n"
+        );
+    }
 }
 
 #[cfg(test)]
