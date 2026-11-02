@@ -23,9 +23,9 @@ adheres to [Semantic Versioning](https://semver.org/).
   ends with it; MCP servers die with their process; test servers on Unix
   sockets in the workspace work on Linux with user namespaces. Linux needs
   Landlock (5.13) instead of ABI 3; older than 6.12 a command can signal
-  your other processes, older than 6.2 truncating by path fails, and each
-  run says which applies. In place, a repository cloned from a local path
-  stops with the `git gc` that gives it its own objects.
+  your other processes, older than 6.2 truncating by path fails, older
+  than 5.19 files cannot move between directories, and each run says
+  which applies.
 - **One test per scenario.** A convergence task citing a story's scenario
   is judged by that story's oracle (written first when missing), never by
   a second test of its own; when what it cites already holds it stops

@@ -106,7 +106,7 @@ fn cage(profile: &Profile) -> Result<Cage, procage::native::SpawnError> {
 
 /// [`cage`] as on a Linux kernel whose Landlock is at most ABI `cap` (tests).
 fn cage_at(profile: &Profile, cap: Option<u8>) -> Result<Cage, procage::native::SpawnError> {
-    cage_with(profile, &options(cap))
+    cage_with(profile, &options(profile, cap))
 }
 
 /// The cage for `profile` with `options`.
@@ -121,14 +121,25 @@ fn cage_with(
 }
 
 /// The cage options: spawn-snapshot approximations and other processes'
-/// arguments under `/proc` (Linux, no PID namespace) accepted, the Landlock
-/// ABI capped at `cap` on Linux (tests).
-fn options(cap: Option<u8>) -> CageOptions {
-    let options = CageOptions::default().with_lower(
+/// arguments under `/proc` (Linux, no PID namespace) accepted, a protected
+/// repository's object store out of the link check (a local `git clone`
+/// hard-links it to the source's; objects are never rewritten in place), the
+/// Landlock ABI capped at `cap` on Linux (tests).
+fn options(profile: &Profile, cap: Option<u8>) -> CageOptions {
+    let mut options = CageOptions::default().with_lower(
         LowerOptions::default()
             .accept_spawn_snapshot()
             .allow(procage::policy::Construct::ProcOtherProcesses),
     );
+    for objects in profile
+        .read_only
+        .iter()
+        .filter(|r| r.ends_with(".git"))
+        .map(|r| r.join("objects"))
+        .filter(|o| o.is_dir())
+    {
+        options = options.with_link_exemption(objects);
+    }
     #[cfg(target_os = "linux")]
     let options = match cap {
         Some(abi) => options.with_landlock_abi(abi),
@@ -197,8 +208,8 @@ fn relax() -> Relax {
 
 /// [`fit`] as on a Linux kernel whose Landlock is at most ABI `cap` (tests).
 fn fit_at(profile: &Profile, cap: Option<u8>) -> Result<(Profile, Option<String>), String> {
-    let (cage, relaxed) =
-        Cage::fit(&policy(profile)?, &options(cap), &relax()).map_err(|e| e.to_string())?;
+    let (cage, relaxed) = Cage::fit(&policy(profile)?, &options(profile, cap), &relax())
+        .map_err(|e| e.to_string())?;
     let mut fitted = profile.clone();
     let mut notes = Vec::new();
     for r in &relaxed {
@@ -209,6 +220,13 @@ fn fit_at(profile: &Profile, cap: Option<u8>) -> Result<(Profile, Option<String>
         cage_at(&fitted, cap).map_err(|e| format!("the fitted profile does not hold: {e}"))?;
     }
     let abi = landlock_abi(&cage);
+    if abi.is_some_and(|a| a < 2) {
+        note(
+            &mut notes,
+            Cause::Kernel(2),
+            "files cannot move between directories, so builds fail",
+        );
+    }
     if abi.is_some_and(|a| a < 3) {
         note(
             &mut notes,
@@ -338,8 +356,26 @@ fn command(argv: &[String], cwd: &Path, env: &[(String, String)]) -> Option<Comm
     cmd.args(args)
         .current_dir(cwd)
         .env_clear()
-        .envs(env.iter().map(|(k, v)| (k, v)));
+        .envs(env.iter().map(|(k, v)| (k, v)))
+        .envs(foreground_git(
+            env.iter()
+                .find(|(k, _)| k == "GIT_CONFIG_COUNT")
+                .map(|(_, v)| v.as_str()),
+        ));
     Some(cmd)
+}
+
+/// `gc.autoDetach=false` after the `count` git settings the environment
+/// already passes: git's automatic `gc` detaches with `setsid`, which the
+/// cage refuses (a run's processes end with it), and would print "setsid
+/// failed".
+fn foreground_git(count: Option<&str>) -> [(String, String); 3] {
+    let n: usize = count.and_then(|c| c.parse().ok()).unwrap_or(0);
+    [
+        (format!("GIT_CONFIG_KEY_{n}"), "gc.autoDetach".to_owned()),
+        (format!("GIT_CONFIG_VALUE_{n}"), "false".to_owned()),
+        ("GIT_CONFIG_COUNT".to_owned(), (n + 1).to_string()),
+    ]
 }
 
 /// Runs `inv` caged by `profile` to completion or deadline. `inv.env`
@@ -361,7 +397,7 @@ pub fn run(profile: &Profile, inv: &Invocation) -> Outcome {
     // A cage that cannot be built now is this command's failure, never an
     // unconfined run. Reporting what it denies changes no rule; where it
     // cannot start, the command runs confined all the same.
-    let cage = match cage_with(profile, &options(None).with_violations()) {
+    let cage = match cage_with(profile, &options(profile, None).with_violations()) {
         Ok(c) => c,
         Err(e) => return failed(format!("the sandbox could not confine the command: {e}")),
     };
@@ -374,7 +410,7 @@ pub fn run(profile: &Profile, inv: &Invocation) -> Outcome {
     let program = &inv.argv[0];
     let child = match cage.spawn(&mut cmd, &Grants::new()) {
         Ok(c) => c,
-        Err(e) => return failed(refused(program, &e)),
+        Err(e) => return failed(format!("could not start `{program}` in the sandbox: {e}")),
     };
     let mut caged = Caged(child);
     let mut outcome = supervise(&mut caged, inv, started, clock);
@@ -414,35 +450,13 @@ pub fn exec(profile: &Profile, argv: &[String]) -> String {
     };
     let mut cmd = Command::new(program);
     // The environment speccoder gave the helper, which it already scrubbed.
-    cmd.args(args).envs(std::env::vars_os());
+    cmd.args(args)
+        .envs(std::env::vars_os())
+        .envs(foreground_git(
+            std::env::var("GIT_CONFIG_COUNT").ok().as_deref(),
+        ));
     let err = cage.exec(&mut cmd, &Grants::new());
-    refused(program, &err)
-}
-
-/// Why `program` did not start, in the person's terms. A local `git clone`
-/// hard-links the source's object files, and a protected file with a second
-/// name refuses every spawn (procage's link check): `git gc` gives the
-/// repository its own copies.
-fn refused(program: &str, err: &procage::native::SpawnError) -> String {
-    if let procage::native::SpawnError::HardLinks(found) = err
-        && let Some(git) = found.iter().find_map(|f| shared_git(&f.path))
-    {
-        return format!(
-            "could not start `{program}`: {} shares files with another repository \
-             (a local `git clone` hard-links them), and the sandbox refuses a \
-             protected file with a second name; run `git -C {} gc` to give it \
-             its own copies",
-            git.display(),
-            git.parent().unwrap_or(git).display()
-        );
-    }
     format!("could not start `{program}` in the sandbox: {err}")
-}
-
-/// The `.git` directory holding `path`, when `path` is in its object store.
-fn shared_git(path: &Path) -> Option<&Path> {
-    let objects = path.ancestors().find(|a| a.ends_with(".git/objects"))?;
-    objects.parent()
 }
 
 #[cfg(test)]
@@ -466,29 +480,21 @@ mod tests {
         }
     }
 
-    /// Run, the helper and fit share one policy, on the base that keeps
-    /// benign probes out of the record and allows nothing more than V2.
     #[test]
-    fn a_shared_object_store_names_git_gc() {
-        let found = vec![procage::LinkFinding {
-            path: "/w/.git/objects/ab/cdef".into(),
-            links: 2,
-            symbolic: false,
-        }];
-        let text = refused("sh", &procage::native::SpawnError::HardLinks(found));
-        assert!(text.contains("`git -C /w gc`"), "{text}");
-        let other = vec![procage::LinkFinding {
-            path: "/w/.git/config".into(),
-            links: 2,
-            symbolic: false,
-        }];
-        let text = refused("sh", &procage::native::SpawnError::HardLinks(other));
-        assert!(
-            !text.contains("gc"),
-            "only the object store is a clone's: {text}"
+    fn caged_git_configuration_keeps_what_the_environment_set() {
+        assert_eq!(
+            foreground_git(Some("2")),
+            [
+                ("GIT_CONFIG_KEY_2".to_owned(), "gc.autoDetach".to_owned()),
+                ("GIT_CONFIG_VALUE_2".to_owned(), "false".to_owned()),
+                ("GIT_CONFIG_COUNT".to_owned(), "3".to_owned()),
+            ]
         );
+        assert_eq!(foreground_git(None)[2].1, "1");
     }
 
+    /// Run, the helper and fit share one policy, on the base that keeps
+    /// benign probes out of the record and allows nothing more than V2.
     #[test]
     fn the_policy_is_on_base_v3() {
         let p = Profile::new(Path::new("/w"), &super::super::Config::default(), None);
@@ -636,7 +642,13 @@ mod tests {
             child.wait().unwrap().success()
         };
         let signal = format!("kill -0 {}", sleeper.id());
-        for cap in [2, 5].into_iter().filter(|&c| c < kernel) {
+        // `os.rename`, not `mv`: `mv` copies where a rename fails.
+        let moves = format!(
+            "cd {} && mkdir -p a b && echo x > a/x && python3 -I -c \
+             'import os; os.rename(\"a/x\", \"b/x\"); os.rename(\"b/x\", \"a/x\")'",
+            root.display()
+        );
+        for cap in [1, 2, 5].into_iter().filter(|&c| c < kernel) {
             let (fitted, notice) = fit_at(&profile, Some(cap)).unwrap();
             assert!(fitted.unenforced.signal_scope, "ABI {cap}");
             let notice = notice.unwrap();
@@ -650,7 +662,13 @@ mod tests {
                 cap < 3,
                 "{notice}"
             );
+            assert_eq!(
+                notice.contains("files cannot move between directories"),
+                cap < 2,
+                "{notice}"
+            );
             let at = Some(cap);
+            assert_eq!(ok(&fitted, at, &moves), cap >= 2, "ABI {cap}");
             assert!(
                 ok(&fitted, at, &format!("echo x > {}/f", root.display())),
                 "ABI {cap}"

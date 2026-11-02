@@ -550,13 +550,10 @@ mod tests {
     fn a_stop_ends_everything_it_started_and_the_job_ends() {
         let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
         let cancel = Arc::new(AtomicBool::new(false));
-        let flag = Arc::clone(&cancel);
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(400));
-            flag.store(true, Ordering::SeqCst);
-        });
         let pids = Mutex::new(Vec::new());
         let started = Instant::now();
+        // Stopped once the background process is started, however slow
+        // the machine.
         let r = run(
             dir.path(),
             &[s(&["sh", "-c", "sleep 30 & echo $!; sleep 30"])],
@@ -565,7 +562,8 @@ mod tests {
             &|_, l| {
                 pids.lock()
                     .unwrap_or_else(|e| e.into_inner())
-                    .push(l.to_owned())
+                    .push(l.to_owned());
+                cancel.store(true, Ordering::SeqCst);
             },
         );
         assert!(r.message().ends_with("was stopped"), "{}", r.message());

@@ -398,6 +398,28 @@ fn a_background_process_dies_with_the_command() {
     });
 }
 
+/// A test runner may put each test in a process group of its own
+/// (cargo-nextest does), and what it leaves there still dies with the
+/// command.
+#[test]
+fn a_process_group_of_its_own_runs_and_dies_with_the_command() {
+    each(Network::Loopback, |w, s| {
+        let script = "python3 -I -c 'import os,time; os.setpgid(0, 0); open(\"pg.pid\", \"w\").write(str(os.getpid())); time.sleep(30)' & \
+                      while [ ! -s pg.pid ] && kill -0 $! 2>/dev/null; do sleep 0.1; done; [ -s pg.pid ]";
+        let out = run(&s, w.root.path(), script, path_only(), 30);
+        assert_eq!(out.exit_code, Some(0), "{out:?}");
+        let pid = fs::read_to_string(w.root.path().join("pg.pid")).unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        let survived = alive(&pid);
+        if survived {
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &pid])
+                .status();
+        }
+        assert!(!survived, "a process in its own group outlived the command");
+    });
+}
+
 /// At the deadline the command and its descendants are killed, also one
 /// that started its own session (which would otherwise keep the output pipe
 /// open and hold the outcome until it exits by itself).
@@ -715,10 +737,25 @@ fn a_refused_system_call_is_named_on_linux() {
 }
 
 #[test]
-fn a_locally_cloned_object_store_names_its_fix() {
+fn caged_git_collects_its_garbage_in_the_foreground() {
+    each(Network::Loopback, |w, s| {
+        // Git's automatic `gc` would detach with `setsid`, which the cage refuses.
+        let (ok, out) = sh(
+            &s,
+            w.root.path(),
+            "git config --get gc.autoDetach 2>/dev/null",
+        );
+        assert!(ok && out.trim() == "false", "{out}");
+    });
+}
+
+#[test]
+fn a_locally_cloned_repository_runs_in_place_and_a_linked_config_does_not() {
     each(Network::Loopback, |w, mut s| {
         let root = w.root.path();
         fs::create_dir_all(root.join(".git/objects/ab")).unwrap();
+        fs::write(root.join(".git/config"), "").unwrap();
+        // A local `git clone` hard-links the source's objects.
         let source = tempfile::tempdir().unwrap();
         fs::write(source.path().join("object"), "blob").unwrap();
         fs::hard_link(
@@ -726,20 +763,18 @@ fn a_locally_cloned_object_store_names_its_fix() {
             root.join(".git/objects/ab/cdef"),
         )
         .unwrap();
-        let (fitted, notice) =
+        let (fitted, _) =
             sandbox::fit(&s.profile.clone().carve(&[root.join(".git")], &[])).unwrap();
         s.profile = fitted;
         let (ok, out) = sh(&s, root, "echo hi");
+        assert!(ok, "a cloned object store refused the run: {out}");
         if fitted_lane() {
             // `.git` is left out of the carve-outs there, so nothing is protected.
-            assert!(notice.is_some() && ok, "{out}");
             return;
         }
-        assert!(!ok, "a protected file with a second name ran: {out}");
-        let root = root.canonicalize().unwrap();
-        assert!(
-            out.contains(&format!("`git -C {} gc`", root.display())),
-            "{out}"
-        );
+        fs::hard_link(root.join(".git/config"), source.path().join("config")).unwrap();
+        let (ok, out) = sh(&s, root, "echo hi");
+        assert!(!ok, "a protected config with a second name ran: {out}");
+        assert!(out.contains(".git/config"), "{out}");
     });
 }

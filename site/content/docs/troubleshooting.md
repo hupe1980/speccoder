@@ -26,7 +26,6 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it; `sp
 | A build cannot download dependencies | The sandbox has no network. Fetch first (`cargo fetch`, `npm ci`, `uv sync`) or add the fetch command to `[sandbox] network_allow`. |
 | A tool writes outside the project and fails | Add its cache to `[sandbox] writable`, e.g. `["~/.m2"]` or `["~/.gradle"]`. |
 | A check fails with `sandbox denied: …` under its output | The sandbox refused what the line names, and says why: a read-only `.git`, hidden credentials, git hooks or agent configuration, the network, a write outside the writable trees. Allow it where that is right (`[sandbox] writable`, `network_allow`); otherwise the command should not need it. The agent sees the same lines. On Linux only refused system calls are listed, never files or the network; on macOS the list is best effort, so a failure without one can still be the sandbox. |
-| `could not start …: … shares files with another repository` | In place, the repository was cloned from a local path, which hard-links its objects, and the sandbox refuses a protected file with a second name. Run the `git -C … gc` it names once. |
 | `commands run unsandboxed: …` | The OS offers no sandbox (Linux without Landlock, another OS). Set `[sandbox] mode = "required"` to refuse instead. |
 | `error[TASK-NOT-READY]` or `TASK-BLOCKED` (16) | `speccoder inspect` shows what blocks what; a skipped task blocks its dependents. |
 | `stopped[BUDGET-EXHAUSTED]` (23) | Raise the `[budget]` limit it hit, or split the task in `tasks.md`. |

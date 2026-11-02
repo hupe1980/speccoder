@@ -102,12 +102,13 @@ profile speccoder /usr/local/bin/speccoder flags=(unconfined) {
 }
 ```
 
-**Older Linux kernels.** Commands stay confined on every kernel with Landlock (Linux 5.13 or later, or a distribution that backports it). Two limits depend on the kernel's age, and every run names the ones that apply:
+**Older Linux kernels.** Commands stay confined on every kernel with Landlock (Linux 5.13 or later, or a distribution that backports it). Three limits depend on the kernel's age, and every run names the ones that apply:
 
 | Kernel | What changes |
 |---|---|
 | Older than Linux 6.12 (Landlock ABI 6), for example Ubuntu 24.04's 6.8, Debian 12, Ubuntu 22.04 | A command can signal (stop or kill) your other processes, not only its own. |
 | Older than Linux 6.2 (Landlock ABI 3), for example Debian 12, Ubuntu 22.04's 5.15 | Truncating a file by path fails with "operation not permitted", also in the worktree; opening the file for writing works. |
+| Older than Linux 5.19 (Landlock ABI 2) | Files cannot move or link between directories ("invalid cross-device link"), so `cargo build`, package managers and atomic saves fail. |
 
 ## Held-out tests
 
