@@ -100,7 +100,9 @@ profile speccoder /usr/local/bin/speccoder flags=(unconfined) {
 }
 ```
 
-**Older Linux kernels.** Commands stay confined on every kernel with Landlock (Linux 5.13 or later, or a distribution that backports it). Three limits depend on the kernel's age, and every run names the ones that apply:
+### Older Linux kernels
+
+Commands stay confined on every kernel with Landlock (Linux 5.13 or later, or a distribution that backports it). Three limits depend on the kernel's age, and every run names the ones that apply:
 
 | Kernel | What changes |
 |---|---|
