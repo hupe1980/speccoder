@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-11-02
+
 ### Fixed
 
 - A gap test could call code that is not there (a module the task does
@@ -673,7 +675,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.8.3...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.8.4...HEAD
+[0.8.4]: https://github.com/hupe1980/speccoder/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/hupe1980/speccoder/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/hupe1980/speccoder/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/hupe1980/speccoder/compare/v0.8.0...v0.8.1
