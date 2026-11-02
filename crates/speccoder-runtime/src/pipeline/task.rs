@@ -1302,6 +1302,16 @@ fn run_task_once(
                     &redact(&reason, secret),
                 )
                 .with_code(code)
+                // The oracle's own way on (its story's tests), then the task's.
+                .with_fix(if r.given_fix().is_empty() {
+                    Vec::new()
+                } else {
+                    r.given_fix()
+                        .iter()
+                        .cloned()
+                        .chain([format!("speccoder run --task {task}")])
+                        .collect()
+                })
                 .with_data(CommandData::Run(Box::new(report)));
             }
         }
@@ -1320,6 +1330,12 @@ fn run_task_once(
         .iter()
         .map(|r| format!("{} ruled the tests wrong: {}", r.by, r.reason))
         .collect();
+    // The tasks on the same requirements: their tests are the author's to
+    // agree with.
+    let related: Vec<String> = match (parsed_task.as_ref(), parsed_tasks) {
+        (Some(t), Some(pt)) => super::acceptance::related(t, &pt.tasks),
+        _ => Vec::new(),
+    };
     if bug_fix.is_none()
         && run_config.acceptance
         && !options.fresh_acceptance
@@ -1480,6 +1496,7 @@ fn run_task_once(
             runner: &runner,
             layout: Some(&test_layout),
             told: &told,
+            related: &related,
         }))
     } else {
         None
@@ -1534,6 +1551,7 @@ fn run_task_once(
                     runner: &runner,
                     layout: Some(&test_layout),
                     told: &told,
+                    related: &related,
                 },
                 a,
                 &scenarios,
@@ -3057,6 +3075,7 @@ fn run_task_once(
                 runner: &runner,
                 layout: Some(&test_layout),
                 told: &told,
+                related: &related,
             };
             let weak = crate::strength::weak(a);
             match strengthen(&setup, &visible_tests, weak, &before, fin) {

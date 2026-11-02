@@ -1146,7 +1146,7 @@ impl<'a> Author<'a> {
         sample: u8,
     ) -> Result<(Value, String, Vec<ContextEntry>), String> {
         let context = self.context(req, notes);
-        let suite = crate::pipeline::acceptance::suite(&self.ctx.root, &req.text);
+        let suite = crate::pipeline::acceptance::suite(&self.ctx.root, &req.text, &[]);
         let interface = crate::pipeline::acceptance::interface(&self.ctx.root, &req.text);
         let input = substrate::acceptance::review_input(&substrate::acceptance::ReviewParts {
             bundle: self.bundle.clone(),
@@ -1702,6 +1702,7 @@ fn held_out(
             runner: &bench.runner,
             layout: None,
             told: &[],
+            related: &[],
         },
         &visible,
         &req.scenarios,
@@ -2177,6 +2178,14 @@ fn freeze_tests(
 /// Python or JavaScript an absent import stops the whole run's
 /// collection). A file of several scenarios, when its story has more, is
 /// never kept: its scenarios could only turn green together.
+/// A discarded test's reason, in words (`exists` → "already exists").
+fn discard_words(why: &str) -> &'static str {
+    match why {
+        "cites_no_scenario" => "cites no scenario of the list",
+        _ => crate::pipeline::acceptance::refusal_words(why),
+    }
+}
+
 fn not_kept(t: &DraftTest, many: bool) -> Option<String> {
     if many && t.scenarios.len() > 1 {
         return Some(format!(
@@ -2312,11 +2321,18 @@ pub(crate) fn write_for_run(
         .into_iter()
         .filter(|id| !untestable.contains(id))
         .collect();
-    if broke && !left.is_empty() {
+    // Nothing kept at all is asked again too: a path that exists, a test
+    // that broke, is the author's to fix — never the story's to lose.
+    if broke && (!left.is_empty() || kept(&draft).is_empty()) {
+        let left = if left.is_empty() {
+            req.scenarios.iter().map(|s| s.id.clone()).collect()
+        } else {
+            left
+        };
         let told: Vec<String> = draft
             .discarded
             .iter()
-            .map(|d| format!("Not kept `{}`: {}", d.path, d.why))
+            .map(|d| format!("Not kept `{}`: it {}", d.path, discard_words(&d.why)))
             .chain(draft.tests.iter().filter_map(|t| {
                 not_kept(t, many).map(|why| format!("Not kept `{}`: {why}", t.path))
             }))
@@ -2361,14 +2377,28 @@ pub(crate) fn write_for_run(
         });
     }
     if keep.is_empty() {
-        return Err(Box::new(refuse(
-            CommandStatus::NeedsHuman,
-            "ORACLE-UNWRITTEN",
-            &format!(
-                "no test written for {story} could be used ({} not kept)",
-                draft.tests.len() + draft.discarded.len()
-            ),
-        )));
+        let why: Vec<String> = draft
+            .discarded
+            .iter()
+            .map(|d| format!("`{}` {}", d.path, discard_words(&d.why)))
+            .chain(
+                draft
+                    .tests
+                    .iter()
+                    .filter_map(|t| not_kept(t, many).map(|why| format!("`{}`: {why}", t.path))),
+            )
+            .collect();
+        return Err(Box::new(
+            refuse(
+                CommandStatus::NeedsHuman,
+                "ORACLE-UNWRITTEN",
+                &format!(
+                    "no test written for {story} could be used, asked twice: {}",
+                    why.join("; ")
+                ),
+            )
+            .with_fix(vec![format!("speccoder review tests {story} --write")]),
+        ));
     }
     let manifest = manifest_digest(
         keep.iter()

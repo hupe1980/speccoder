@@ -667,6 +667,79 @@ fn the_author_sees_the_suite_s_tests_on_the_same_code() {
     assert!(!plain.contains("The project's tests on the same code"));
 }
 
+/// Checking a story whose author keeps writing over an old test (the
+/// sample's US1, 2026-11-02): it stops saying why, and its way on names
+/// the story — never `<story>`.
+#[test]
+fn a_story_check_that_keeps_nothing_says_why_and_names_the_story() {
+    let r = repo_with(&TASKS.replace("- [ ]", "- [x]"));
+    fs::create_dir_all(r.path().join("tests")).unwrap();
+    for name in ["alpha", "beta", "gamma"] {
+        fs::write(
+            r.path().join(format!("tests/acceptance_us1_{name}.txt")),
+            "an old test\n",
+        )
+        .unwrap();
+    }
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-qm", "old per-story tests"]);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(oracle_answer());
+    f.will_structure(oracle_answer());
+    let d: Arc<dyn ModelProvider> = f.clone();
+    let res = speccoder_runtime::pipeline::story::check_with(
+        r.path(),
+        None,
+        "US1",
+        state.path(),
+        &d,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    let res = speccoder_runtime::next::attach(res, None);
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("ORACLE-UNWRITTEN"),
+        "{}",
+        res.message()
+    );
+    assert_eq!(f.asked().len(), 2, "asked once more");
+    assert!(
+        res.message()
+            .contains("`tests/acceptance_us1_alpha.txt` already exists"),
+        "{}",
+        res.message()
+    );
+    assert_eq!(res.fix(), ["speccoder review tests US1 --write"]);
+}
+
+/// A gap test on a requirement another task's test already judges (the
+/// sample's T032 contradicted T029's): its author is shown that test.
+#[test]
+fn the_author_sees_the_tests_of_tasks_on_the_same_requirement() {
+    let tasks = format!(
+        "{}\n## Phase 7: Convergence\n\n- [x] T029 Validate the header per US1/AC3 (partial)\n- [ ] T032 Report a missing header per US1/AC3, T029 (partial)\n- [ ] T033 Describe it per US1/AC1\n",
+        TASKS.replace("- [ ]", "- [x]")
+    );
+    let r = repo_with(&tasks);
+    fs::create_dir_all(r.path().join("tests")).unwrap();
+    fs::write(
+        r.path().join("tests/acceptance_t029.txt"),
+        "validate_header returns a result, never raises\n",
+    )
+    .unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-qm", "T029's test"]);
+    let asked = given(r.path(), "T032");
+    assert!(
+        asked.contains("tests/acceptance_t029.txt") && asked.contains("never raises"),
+        "{asked}"
+    );
+    assert!(asked.contains("may demand different outcomes"), "{asked}");
+    // A task on another requirement is not shown it.
+    assert!(!given(r.path(), "T033").contains("tests/acceptance_t029.txt"));
+}
+
 /// A placeholder — a test that raises "not implemented" — is no red: no
 /// implementation can turn it green. It is refused and asked for once more,
 /// told why; refused again, never run as evidence.

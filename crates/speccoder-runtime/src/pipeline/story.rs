@@ -347,6 +347,13 @@ fn stop(code: &str, message: String) -> Box<speccoder_core::CommandResult> {
     )
 }
 
+/// The oracle could not be had: writing the story's tests again is the way on.
+fn unwritten(story: &str, message: String) -> Box<speccoder_core::CommandResult> {
+    let mut res = stop("ORACLE-UNWRITTEN", message);
+    *res = res.with_fix(vec![format!("speccoder review tests {story} --write")]);
+    res
+}
+
 /// The story's oracle for a task: the one committed on the branch; else
 /// the one frozen at review, or — nobody having reviewed it — one the run
 /// writes now; either committed before the task implements anything.
@@ -389,7 +396,7 @@ pub(crate) fn ensure(
         at_oracle: BTreeMap::new(),
         untestable: BTreeMap::new(),
     };
-    if let Some(commit) = commit_of(e.wt_root, e.key).map_err(|m| stop("ORACLE-UNWRITTEN", m))? {
+    if let Some(commit) = commit_of(e.wt_root, e.key).map_err(|m| unwritten(e.key, m))? {
         // An oracle of no test: the author found nothing testable.
         if tests_of(e.wt_root, &commit) == Some(0) {
             return Ok((
@@ -404,8 +411,8 @@ pub(crate) fn ensure(
             ));
         }
         let Some(frozen) = crate::oracle::load_frozen(e.plane_dir, e.feature, e.key) else {
-            return Err(stop(
-                "ORACLE-UNWRITTEN",
+            return Err(unwritten(
+                e.key,
                 format!(
                     "{}'s oracle ({}) was written on another machine: the commands that run its tests are kept there",
                     e.key,
@@ -605,7 +612,7 @@ pub(crate) fn ensure(
             .map_or(Ok(()), std::fs::create_dir_all)
             .and_then(|()| std::fs::write(&full, content));
         if let Err(err) = written {
-            return Err(stop("ORACLE-UNWRITTEN", format!("{path}: {err}")));
+            return Err(unwritten(e.key, format!("{path}: {err}")));
         }
     }
     let mut o = oracle(tests, contracts, String::new(), by);
@@ -637,12 +644,8 @@ pub(crate) fn ensure(
                 .map_or_else(|_| p.clone(), |r| r.to_string_lossy().into_owned())
         })
         .collect();
-    o.commit = super::commit::commit_paths(e.wt_root, &message, &paths, true).map_err(|m| {
-        stop(
-            "ORACLE-UNWRITTEN",
-            format!("the oracle could not be committed: {m}"),
-        )
-    })?;
+    o.commit = super::commit::commit_paths(e.wt_root, &message, &paths, true)
+        .map_err(|m| unwritten(e.key, format!("the oracle could not be committed: {m}")))?;
     Ok((o, true, notices))
 }
 
@@ -713,7 +716,7 @@ fn amend(
             .map_or(Ok(()), std::fs::create_dir_all)
             .and_then(|()| std::fs::write(&full, content));
         if let Err(err) = written {
-            return Err(restore(stop("ORACLE-UNWRITTEN", format!("{path}: {err}"))));
+            return Err(restore(unwritten(e.key, format!("{path}: {err}"))));
         }
     }
     let new_paths: Vec<String> = w.tests.iter().map(|t| rel(&t.path)).collect();
@@ -725,7 +728,7 @@ fn amend(
         o.untestable.insert(u.scenario.clone(), u.why.clone());
     }
     crate::oracle::refreeze(e.plane_dir, e.feature, e.key, o.tests.clone())
-        .map_err(|m| restore(stop("ORACLE-UNWRITTEN", m)))?;
+        .map_err(|m| restore(unwritten(e.key, m)))?;
     let now = states(e.project, &o, e.runner);
     let message = commit_message(
         &o,
@@ -742,14 +745,14 @@ fn amend(
     );
     let paths: Vec<String> = old_paths.iter().chain(&new_paths).cloned().collect();
     o.commit = super::commit::commit_paths(e.wt_root, &message, &paths, true).map_err(|m| {
-        restore(stop(
-            "ORACLE-UNWRITTEN",
+        restore(unwritten(
+            e.key,
             format!("the amendment could not be committed: {m}"),
         ))
     })?;
     let acted: Vec<String> = rulings.iter().filter_map(|r| r.scenario.clone()).collect();
     crate::acceptance_at::acted_on(e.plane_dir, e.feature, &acted)
-        .map_err(|m| stop("ORACLE-UNWRITTEN", m))?;
+        .map_err(|m| unwritten(e.key, m))?;
     Ok(o)
 }
 

@@ -2912,7 +2912,14 @@ impl CommandResult {
     pub fn fix(&self) -> Vec<String> {
         match self.code() {
             Some(_) if !self.fix.is_empty() => self.fix.clone(),
-            Some(entry) => crate::codes::fixes(entry, &self.command, None, None),
+            // A run's stop names its task: the catalog's `{task}` is it.
+            Some(entry) => {
+                let task = match &self.data {
+                    Some(CommandData::Run(r)) if !r.task.is_empty() => Some(r.task.as_str()),
+                    _ => None,
+                };
+                crate::codes::fixes(entry, &self.command, task, None)
+            }
             None => Vec::new(),
         }
     }

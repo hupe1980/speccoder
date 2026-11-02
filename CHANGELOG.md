@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A gap test's author never saw the tests of tasks on the same
+  requirement, so it could contradict them (or itself). It now sees the
+  tests of the tasks its line names or that cite the same requirement,
+  and is told that no two tests may demand different outcomes of one
+  call.
+- A story's oracle could be lost to an old test's path, or to an author
+  calling every scenario untestable because the story's code did not
+  exist yet. Nothing kept is asked for once more, told why in words; the
+  stop says why each test was not kept and names the story in its fix
+  (`speccoder review tests US1 --write`).
+
 ## [0.8.4] - 2026-11-02
 
 ### Fixed

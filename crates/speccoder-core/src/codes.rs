@@ -1029,11 +1029,8 @@ pub const CATALOG: &[Entry] = &[
         P,
         S::NeedsHuman,
         "the story's oracle got no usable test for any scenario",
-        "Before a story's first code task, speccoder writes the story's acceptance tests through its interface. None of them could be used (they did not build or collect, twice), so the story has nothing to be judged by and the task stops before any code is written.",
-        [
-            "speccoder review tests <story> --write",
-            "speccoder run --task {task}"
-        ]
+        "Before a story's first code task, speccoder writes the story's acceptance tests through its interface. None of them could be used (they did not build or collect, or took a path that exists — asked twice), so the story has nothing to be judged by and the task stops before any code is written. The stop says why each was not kept, and `speccoder review tests US1 --write` writes them again for review.",
+        ["speccoder run --task {task}"]
     ),
     entry!(
         "ACCEPTANCE-UNWRITTEN",

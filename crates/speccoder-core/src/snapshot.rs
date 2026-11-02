@@ -183,7 +183,7 @@ pub struct Phase {
 }
 
 /// One task line of `tasks.md`, as written.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Task {
     /// Task ID, e.g. `T014`.
     pub id: String,

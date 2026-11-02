@@ -27,6 +27,9 @@ pub(crate) struct AcceptanceSetup<'a> {
     /// A person's rulings that the task's earlier tests were wrong: their
     /// words, told to the author verbatim.
     pub(crate) told: &'a [String],
+    /// The tasks on the same requirements (or named by this one's line):
+    /// their tests are shown, never contradicted.
+    pub(crate) related: &'a [String],
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -117,7 +120,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         }
     };
     let title = a.bundle["task"]["title"].as_str().unwrap_or_default();
-    let suite = suite(a.worktree, title);
+    let suite = suite(a.worktree, title, a.related);
     let interface = interface(a.worktree, title);
     // A refused answer is asked for once more, told exactly why: what
     // speccoder refuses is checked, never left to the author's reading.
@@ -1093,26 +1096,88 @@ fn is_test(p: &str) -> bool {
     })
 }
 
-/// The project's tests that name what the task line names (a backticked
-/// function, type or file's stem): at most three files, 6 KiB in all, each
-/// trimmed with a note — the tests a new test must not contradict.
-pub(crate) fn suite(worktree: &Path, title: &str) -> Vec<substrate::acceptance::SuiteTest> {
+/// The tasks whose tests a new test must agree with: those this task's
+/// line names (`per FR-004, T029`) and those citing a requirement or
+/// scenario it cites (`FR-004`, `US1/AC3`, `SC-002`).
+pub(crate) fn related(
+    this: &speccoder_core::snapshot::Task,
+    all: &[speccoder_core::snapshot::Task],
+) -> Vec<String> {
+    let cites = |title: &str| -> Vec<String> {
+        title
+            .split(|c: char| !(c.is_alphanumeric() || c == '-' || c == '/'))
+            .map(|w| w.trim_matches('-').to_ascii_uppercase())
+            .filter(|w| {
+                let (head, num) = w.split_once('-').unwrap_or_default();
+                (matches!(head, "FR" | "SC")
+                    && !num.is_empty()
+                    && num.chars().all(|c| c.is_ascii_digit()))
+                    || w.split_once("/AC").is_some_and(|(us, ac)| {
+                        us.strip_prefix("US")
+                            .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+                            && !ac.is_empty()
+                            && ac.chars().all(|c| c.is_ascii_digit())
+                    })
+            })
+            .collect()
+    };
+    let mine = cites(&this.title);
+    let named = |id: &str| {
+        this.title
+            .split(|c: char| !c.is_alphanumeric())
+            .any(|w| w == id)
+    };
+    all.iter()
+        .filter(|t| t.id != this.id)
+        .filter(|t| named(&t.id) || cites(&t.title).iter().any(|c| mine.contains(c)))
+        .map(|t| t.id.clone())
+        .collect()
+}
+
+/// The project's tests a new test must not contradict, at most three files,
+/// 6 KiB in all, each trimmed with a note: first the related tasks' own
+/// tests (named after their ids, `test_acceptance_t029.py`), then those
+/// that name what the task line names (a backticked function, type or
+/// file's stem).
+pub(crate) fn suite(
+    worktree: &Path,
+    title: &str,
+    related: &[String],
+) -> Vec<substrate::acceptance::SuiteTest> {
     const FILES: usize = 3;
     const BUDGET: usize = 6 * 1024;
-    let names = named(title);
-    if names.is_empty() {
-        return Vec::new();
-    }
-    let mut args = vec!["grep", "-l", "-w", "-I"];
-    for n in &names {
-        args.extend(["-e", n.as_str()]);
-    }
-    let Ok(out) = crate::git::Git::at(worktree).line(&args) else {
-        return Vec::new();
+    let git = crate::git::Git::at(worktree);
+    let ids: Vec<String> = related.iter().map(|t| t.to_ascii_lowercase()).collect();
+    let mut paths: Vec<String> = if ids.is_empty() {
+        Vec::new()
+    } else {
+        git.line(&["ls-files", "--cached", "--others", "--exclude-standard"])
+            .unwrap_or_default()
+            .lines()
+            .filter(|p| is_test(p))
+            .filter(|p| {
+                let file = p.rsplit('/').next().unwrap_or(p).to_ascii_lowercase();
+                file.split(|c: char| !c.is_alphanumeric())
+                    .any(|w| ids.iter().any(|id| id == w))
+            })
+            .map(str::to_owned)
+            .collect()
     };
+    let names = named(title);
+    if !names.is_empty() {
+        let mut args = vec!["grep", "-l", "-w", "-I"];
+        for n in &names {
+            args.extend(["-e", n.as_str()]);
+        }
+        if let Ok(out) = git.line(&args) {
+            paths.extend(out.lines().filter(|p| is_test(p)).map(str::to_owned));
+        }
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    paths.retain(|p| seen.insert(p.clone()));
     let mut left = BUDGET;
-    out.lines()
-        .filter(|p| is_test(p))
+    paths
+        .iter()
         .take(FILES)
         .filter_map(|p| {
             let text = std::fs::read_to_string(worktree.join(p)).ok()?;
@@ -1128,7 +1193,7 @@ pub(crate) fn suite(worktree: &Path, title: &str) -> Vec<substrate::acceptance::
             };
             left = left.saturating_sub(content.len());
             Some(substrate::acceptance::SuiteTest {
-                path: p.to_owned(),
+                path: p.clone(),
                 content,
             })
         })
@@ -1448,7 +1513,38 @@ pub(crate) fn checks_only(
 
 #[cfg(test)]
 mod interface_tests {
-    use super::{declarations, imagined};
+    use super::{declarations, imagined, related};
+
+    /// The sample's T032 (2026-11-02) cites FR-004, FR-007 and T029, whose
+    /// frozen test it then contradicted: T029 is related, by both.
+    #[test]
+    fn tasks_on_the_same_requirements_are_related() {
+        let task = |id: &str, title: &str| speccoder_core::snapshot::Task {
+            id: id.to_owned(),
+            title: title.to_owned(),
+            ..Default::default()
+        };
+        let all = [
+            task(
+                "T026",
+                "Route both tables in `src/lib.rs` per US1/AC3 (partial)",
+            ),
+            task(
+                "T029",
+                "Add header-presence validation per FR-004, FR-007 (partial)",
+            ),
+            task("T030", "Propagate the source path per FR-010"),
+            task("T031", "Escape pipes per FR-0041 and us1/ac3"),
+            task(
+                "T032",
+                "Add explicit header-presence validation per FR-004, FR-007, T029 (partial)",
+            ),
+        ];
+        assert_eq!(related(&all[4], &all), ["T029"]);
+        assert_eq!(related(&all[0], &all), ["T031"]);
+        let named = task("T033", "Finish what T030 began");
+        assert_eq!(related(&named, &all), ["T030"]);
+    }
 
     /// The sample's T032 test (2026-11-02), against its code: the module it
     /// imagined, the class it misspelled — and what passes.

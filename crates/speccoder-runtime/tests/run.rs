@@ -1068,6 +1068,53 @@ fn a_test_that_does_not_build_is_asked_for_again_then_the_task_stops() {
     assert_eq!(res.code().map(|c| c.name), Some("ORACLE-UNWRITTEN"));
     assert_eq!(f.asked().len(), 2, "two author calls, no attempt");
     assert!(f.asked().iter().all(|a| a.tools.is_empty()));
+    // As the person reads it: why, and the story's own way on — once.
+    let res = speccoder_runtime::next::attach(res, None);
+    assert!(
+        res.message()
+            .contains("`tests/acceptance_login.txt`: it did not"),
+        "{}",
+        res.message()
+    );
+    assert_eq!(
+        res.fix(),
+        [
+            "speccoder review tests US1 --write",
+            "speccoder run --task T005"
+        ]
+    );
+}
+
+/// The sample's US1 (2026-11-02): its oracle file's path was an old test's,
+/// and the author called every scenario untestable. Nothing kept is asked
+/// again, told why in words — and the second answer is the oracle.
+#[test]
+fn an_oracle_with_nothing_kept_is_asked_for_again() {
+    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
+    fs::create_dir_all(r.path().join("tests")).unwrap();
+    fs::write(r.path().join("tests/acceptance_login.txt"), "an old test\n").unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-qm", "an old test"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let mut taken = acceptance("tests/acceptance_login.txt", GREP_LOGIN);
+    taken["untestable"] = json!([{ "scenario": "US1-1", "why": "the code does not exist yet" }]);
+    f.will_structure(taken);
+    f.will_structure(acceptance("tests/acceptance_login_us1.txt", GREP_LOGIN));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let again = serde_json::to_string(&f.asked()[1].prompt).unwrap();
+    assert!(
+        again.contains("Not kept `tests/acceptance_login.txt`: it already exists"),
+        "{again}"
+    );
+    // The policy: code that does not exist yet never makes a scenario untestable.
+    assert!(
+        again.contains("never makes a scenario untestable"),
+        "{again}"
+    );
 }
 
 #[test]

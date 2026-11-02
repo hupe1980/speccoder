@@ -28,7 +28,9 @@ example. Put them where the project's test runner collects them: in the file nam
 file), using the crate or package name from the manifest — and give the command that \
 runs only that file (named there too). Call the project's code by the modules, names and \
 return shapes it has (under \"The code as it is\"): only what this task itself adds may not \
-exist yet — never a module, name or shape you imagine. Each file cites \
+exist yet — never a module, name or shape you imagine. No two tests — yours or \
+the project's (under \"The project's tests on the same code\") — may demand different outcomes \
+of the same call (a value and an error). Each file cites \
 the IDs of the scenarios it tests, from the list given (none when there is no list). The tests must \
 fail now (the task is not implemented) and pass once it is. When the task is one of several \
 in its story (listed under \"The story's other tasks\"), test only what THIS task makes hold, through the code \
@@ -333,7 +335,8 @@ pub fn review_policy(w: &Wording) -> String {
 project's own language and test framework, exactly as the spec states them — do not invent behaviour \
 the spec does not state, and do not weaken an example. Test through the interface the requirement's \
 Independent Test names (a command, an API, a page): the product as a person uses it, never an internal \
-module only; call the code that exists by the names and shapes it has (under \"The code as it is\"), never ones you imagine. Put them in NEW files under the project's test directory — paths that are not in the \
+module only. The story's code does not exist yet, and that never makes a scenario untestable; code that \
+does exist (under \"The code as it is\") is called by the names and shapes it has. Put them in NEW files under the project's test directory — paths that are not in the \
 project's file list; one file per scenario, named after it (for Rust: tests/acceptance_<scenario>.rs, \
 using the crate name from Cargo.toml) — and per file the command that runs only that file (for Rust: \
 cargo test --test <name>). In Python and JavaScript, import the code under test inside each test, so a \
@@ -827,7 +830,11 @@ impl Skill for Acceptance {
                     }
                 }
                 if let Some(code) = input["interface"].as_array().filter(|a| !a.is_empty()) {
-                    text.push_str("\n\n# The code as it is (its declarations)\n\nCall it by these modules, names and shapes; only what this task adds may be new.\n");
+                    text.push_str(if review {
+                        "\n\n# The code as it is (its declarations)\n\nWhat exists is called by these modules, names and shapes; what the story adds does not exist yet — test it through the interface its Independent Test names.\n"
+                    } else {
+                        "\n\n# The code as it is (its declarations)\n\nCall it by these modules, names and shapes; only what this task adds may be new.\n"
+                    });
                     for f in code {
                         text.push_str(&format!(
                             "\n## {}\n\n```\n{}```\n",
