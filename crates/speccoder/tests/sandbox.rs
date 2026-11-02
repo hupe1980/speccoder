@@ -502,6 +502,31 @@ fn the_helper_cages_a_server_and_relays_its_status() {
     assert!(!outside.exists(), "the server wrote outside the workspace");
 }
 
+/// Through the helper (an agent's terminal, the person's own commands) a
+/// test runner may put each test in a process group of its own, as
+/// cargo-nextest does.
+#[test]
+fn the_helper_runs_a_process_group_of_its_own() {
+    let w = world();
+    let script = "python3 -I -c 'import os; os.setpgid(0, 0)'";
+    let Some(argv) = wrapped(&w, &["sh", "-c", script]) else {
+        return;
+    };
+    let out = std::os::unix::process::CommandExt::process_group(
+        std::process::Command::new(&argv[0])
+            .args(&argv[1..])
+            .current_dir(w.root.path()),
+        0,
+    )
+    .output()
+    .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 /// The helper becomes the server (the same process), so SIGKILL to the
 /// helper's pid ends the server; on Linux the server also dies with the
 /// helper's parent.

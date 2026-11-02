@@ -4534,9 +4534,9 @@ dependencies = [
 
 [[package]]
 name = "procage"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "089d51503b8899fd4a9a5d71c906bf28517cf6a38f0f2e06ce12824c5c6ec991"
+checksum = "90e6bfd065e0211a43d15298f84543e3ffd8fe722a13a2176291ef3c1048b3fc"
 dependencies = [
  "libc",
  "procage-policy",
@@ -4547,9 +4547,9 @@ dependencies = [
 
 [[package]]
 name = "procage-policy"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81c53fe82eaffae2934a8c0d0a98e21e2f5cf23f895599fcf8ac4d8bde00a9ba"
+checksum = "1672803ddd65e471861deedd8f345141b66b16824432a9e720a5a60a9b73f85f"
 dependencies = [
  "serde",
 ]
