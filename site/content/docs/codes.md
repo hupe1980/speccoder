@@ -415,9 +415,9 @@ The `[executor]` agent answered over ACP that it needs signing in (or failed its
 
 The OS sandbox is not available and the project requires it.
 
-No OS sandbox is available (Linux without Landlock, a container without user namespaces, another OS) while `[sandbox] mode = "required"` or an autopilot run needs one.
+No OS sandbox is available (Linux without Landlock, another OS) while `[sandbox] mode = "required"` or an autopilot run needs one.
 
-- Run on macOS or Linux 6.2+ (Landlock ABI 3)
+- Run on macOS or Linux 5.13+ (Landlock)
 - Or set [sandbox] mode = "auto" to run unsandboxed and be told
 - Autopilot: choose Ask on Risky Calls, or enable the OS sandbox
 

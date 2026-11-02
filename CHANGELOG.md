@@ -16,16 +16,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **The sandbox is [procage](https://github.com/hupe1980/procage).**
-  `sandbox-exec` and speccoder's Landlock helper are gone; the rules are
-  the same, and also: container engines and, on Linux, D-Bus and systemd
-  are unreachable even with the network on; everything a command starts
-  ends with it; MCP servers die with their process; test servers on Unix
-  sockets in the workspace work on Linux with user namespaces. Linux needs
-  Landlock (5.13) instead of ABI 3; older than 6.12 a command can signal
-  your other processes, older than 6.2 truncating by path fails, older
-  than 5.19 files cannot move between directories, and each run says
-  which applies.
+- **The sandbox is [procage](https://github.com/hupe1980/procage).** The
+  rules are the same, and also: container engines and, on Linux, D-Bus
+  and systemd are unreachable even with the network on; everything a
+  command starts ends with it; test servers on Unix sockets in the
+  workspace work on Linux. Linux needs Landlock (5.13) instead of ABI 3;
+  each run says what an older kernel leaves out.
 - **One test per scenario.** A convergence task citing a story's scenario
   is judged by that story's oracle (written first when missing), never by
   a second test of its own; when what it cites already holds it stops
@@ -63,6 +59,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 - A gap test's author never saw the tests of tasks on the same
   requirement; an oracle with nothing kept is asked again, its stop naming
   the story.
+
+### Upgrading
+
+- A container engine (Docker, Podman) stays unreachable with
+  `[sandbox] network = "on"` or its socket's directory in
+  `[sandbox] writable`: a check that starts containers needs
+  `[sandbox] mode = "off"`.
 
 ## [0.8.4] - 2026-11-02
 

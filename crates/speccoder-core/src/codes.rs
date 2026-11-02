@@ -357,9 +357,9 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::ConfigError,
         "the OS sandbox is not available and the project requires it",
-        "No OS sandbox is available (Linux without Landlock, a container without user namespaces, another OS) while `[sandbox] mode = \"required\"` or an autopilot run needs one.",
+        "No OS sandbox is available (Linux without Landlock, another OS) while `[sandbox] mode = \"required\"` or an autopilot run needs one.",
         [
-            "→ run on macOS or Linux 6.2+ (Landlock ABI 3)",
+            "→ run on macOS or Linux 5.13+ (Landlock)",
             "→ or set [sandbox] mode = \"auto\" to run unsandboxed and be told",
             "→ autopilot: choose Ask on Risky Calls, or enable the OS sandbox"
         ]

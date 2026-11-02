@@ -68,9 +68,7 @@ Approvals stay narrow: a grant covers one resolved object and ends with its run,
 
 ## The OS sandbox
 
-Every command speccoder starts for a task (checks, the model's commands, the formatter, acceptance tests, mutation tools, MCP servers) runs inside it:
-
-speccoder confines them with the [procage](https://github.com/hupe1980/procage) library:
+Every command speccoder starts for a task (checks, the model's commands, the formatter, acceptance tests, mutation tools, MCP servers) runs inside it, confined by the [procage](https://github.com/hupe1980/procage) library:
 
 - **macOS:** Seatbelt, applied in the command's own process (no `sandbox-exec`).
 - **Linux:** Landlock for the filesystem, a seccomp filter for the network and, where the kernel allows unprivileged user namespaces, a mount namespace for the carve-outs, with `no_new_privs`. Needs Landlock (Linux 5.13 or later); see [older Linux kernels](#older-linux-kernels).

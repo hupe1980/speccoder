@@ -614,8 +614,8 @@ mod tests {
     }
 
     /// On older kernels every command is still caged; only the signal scope
-    /// (and below ABI 3, truncation by path) is given up, and the notice
-    /// says so. At the kernel's own ABI the scope holds.
+    /// (below ABI 3 also truncation by path, below ABI 2 moves between
+    /// directories) is given up, and the notice says so. At the kernel's own ABI the scope holds.
     #[cfg(target_os = "linux")]
     #[test]
     fn older_kernels_keep_commands_caged() {
