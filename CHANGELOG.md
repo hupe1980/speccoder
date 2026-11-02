@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-02
+
 ### Added
 
 - When a sandboxed command fails, speccoder says what the sandbox denied
@@ -736,7 +738,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.8.4...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/hupe1980/speccoder/compare/v0.8.4...v0.9.0
 [0.8.4]: https://github.com/hupe1980/speccoder/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/hupe1980/speccoder/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/hupe1980/speccoder/compare/v0.8.1...v0.8.2
