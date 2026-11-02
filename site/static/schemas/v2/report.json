@@ -796,6 +796,10 @@
           "description": "Every task done and every scenario green: the spec shows it, the\nreport and the board leave it out.",
           "type": "boolean"
         },
+        "finished": {
+          "description": "Every task of the story done.",
+          "type": "boolean"
+        },
         "before_oracle": {
           "description": "Every task done before the story had an oracle: nothing ran its\nscenarios, and nothing is still to turn them.",
           "type": "boolean"

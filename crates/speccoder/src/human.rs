@@ -915,9 +915,10 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         if st.before_oracle {
             writeln!(
                 w,
-                "Story      {} ticked before its oracle: its {} scenario(s) were never run",
+                "Story      {} ticked before its oracle: its {} scenario(s) were never run — `speccoder story check {}`",
                 st.story,
-                st.scenarios.len()
+                st.scenarios.len(),
+                st.story
             )?;
             continue;
         }
@@ -948,6 +949,10 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
             .collect();
         let rest = match (&st.checkpoint, green == n) {
             (_, true) => String::new(),
+            // Every task done, scenarios still red: the code does not hold them.
+            (None, false) if st.finished => {
+                " · not held by the code — `speccoder converge`".to_owned()
+            }
             (Some(c), false) => format!(" · {c} closes it"),
             (None, false) => {
                 " · no task closes it — add the task that implements it (`speccoder spec tasks`)"

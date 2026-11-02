@@ -698,6 +698,7 @@ mod look_tests {
             }),
             proven: false,
             before_oracle: false,
+            finished: false,
         };
         let r = report_with(
             |tasks| {
@@ -714,9 +715,14 @@ mod look_tests {
                 StoryScenarios {
                     oracle: None,
                     before_oracle: true,
+                    finished: true,
                     ..story("US1", 2)
                 },
                 story("US2", 1),
+                StoryScenarios {
+                    finished: true,
+                    ..story("US4", 1)
+                },
                 StoryScenarios {
                     proven: true,
                     ..story("US3", 1)
@@ -736,7 +742,7 @@ mod look_tests {
         );
         assert!(
             out.contains(
-                "Story      US1 ticked before its oracle: its 2 scenario(s) were never run"
+                "Story      US1 ticked before its oracle: its 2 scenario(s) were never run — `speccoder story check US1`"
             ),
             "{out}"
         );
@@ -746,6 +752,10 @@ mod look_tests {
             "{out}"
         );
         assert!(!out.contains("doctor"), "{out}");
+        assert!(
+            out.contains("US4 ○ 0 of 1 green · not held by the code — `speccoder converge`"),
+            "{out}"
+        );
         assert!(!out.contains("US3"), "a proven story is not listed: {out}");
     }
 

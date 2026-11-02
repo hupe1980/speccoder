@@ -770,6 +770,10 @@ fn speccoder(argv: &[String], constant: bool) -> How {
             perform(Runnable::Converge, a)
         }
         (Some("converge"), _) => perform(Runnable::Converge, a),
+        (Some("story"), Some("check")) => match task(2) {
+            Some(story) => perform(Runnable::CheckStory { story }, a),
+            None => run_cmd(),
+        },
         (Some("run"), _) => {
             // Only what a run from an interface does: one task or the
             // feature, nothing else changed. Other flags run as written.

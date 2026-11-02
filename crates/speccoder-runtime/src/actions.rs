@@ -581,6 +581,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::WidenPolicy
             | K::DecideBatch
             | K::OracleTests
+            | K::CheckStory
             | K::ApproveAndRun
             | K::Comment
             | K::CommentsSend
@@ -631,6 +632,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::WidenPolicy
             | K::DecideBatch
             | K::OracleTests
+            | K::CheckStory
             | K::ApproveAndRun
             | K::Comment
             | K::CommentsSend
@@ -678,6 +680,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::WidenPolicy
             | K::DecideBatch
             | K::OracleTests
+            | K::CheckStory
             | K::ApproveAndRun
             | K::Comment
             | K::CommentsSend
@@ -724,6 +727,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::BugKeep
             | K::WidenPolicy
             | K::OracleTests
+            | K::CheckStory
             | K::ApproveAndRun
             | K::Comment
             | K::CommentsSend
@@ -773,6 +777,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::WidenPolicy
             | K::DecideBatch
             | K::OracleTests
+            | K::CheckStory
             | K::ApproveAndRun
             | K::Comment
             | K::CommentsSend
@@ -1083,6 +1088,9 @@ pub fn perform_in(
                 state,
                 via,
             )
+        }
+        Runnable::CheckStory { story } => {
+            crate::pipeline::story::check_story(root, feature, story, options)
         }
         Runnable::OracleTests {
             req,

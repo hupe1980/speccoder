@@ -1210,6 +1210,14 @@ fn main() {
                 result
             }
         }
+        Command::Story {
+            action: cli::StoryAction::Check { story },
+        } => speccoder_runtime::pipeline::story::check_story(
+            path,
+            feature,
+            story,
+            &speccoder_runtime::RunOptions::default(),
+        ),
         Command::Task { action } => task_action(action, path, feature),
         Command::Ui {
             port,
@@ -2552,6 +2560,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Actions { .. } => "actions",
             C::Auth { .. } => "auth",
             C::Review { .. } => "review",
+            C::Story { .. } => "story",
             C::Shape { .. } => "shape",
             C::Ask { .. } => "ask",
             C::Run { .. } => "run",

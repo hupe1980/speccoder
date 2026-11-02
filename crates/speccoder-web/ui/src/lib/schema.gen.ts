@@ -100,7 +100,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "rule_scenario" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "rule_scenario" | "check_story" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -5002,6 +5002,15 @@ export type Runnable =
     revoke: boolean;
   }
   /**
+   * Check a story: its oracle written when it has none, run once on the
+   * feature's branch.
+   */
+  | {
+    kind: "check_story";
+    /** The story (`US3`). */
+    story: string;
+  }
+  /**
    * Rule that a task's tests are wrong (the input is the reason): one
    * scenario's oracle tests, or — none named — the task's own test
    * outside a story. The next run writes them again.
@@ -5810,6 +5819,8 @@ export interface StoryScenarios {
    * report and the board leave it out.
    */
   proven?: boolean;
+  /** Every task of the story done. */
+  finished?: boolean;
   /**
    * Every task done before the story had an oracle: nothing ran its
    * scenarios, and nothing is still to turn them.

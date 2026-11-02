@@ -1142,6 +1142,24 @@
           ]
         },
         {
+          "description": "Check a story: its oracle written when it has none, run once on the\nfeature's branch.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "check_story"
+            },
+            "story": {
+              "description": "The story (`US3`).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "story"
+          ]
+        },
+        {
           "description": "Rule that a task's tests are wrong (the input is the reason): one\nscenario's oracle tests, or — none named — the task's own test\noutside a story. The next run writes them again.",
           "type": "object",
           "properties": {
@@ -2401,6 +2419,11 @@
           "description": "[`Runnable::RuleScenario`].",
           "type": "string",
           "const": "rule_scenario"
+        },
+        {
+          "description": "[`Runnable::CheckStory`].",
+          "type": "string",
+          "const": "check_story"
         },
         {
           "description": "[`Runnable::PresetAdd`].",

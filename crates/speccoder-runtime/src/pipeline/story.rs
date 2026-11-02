@@ -157,6 +157,185 @@ pub(crate) struct Ensure<'a> {
     pub(crate) resuming: bool,
 }
 
+/// `speccoder story check <story>`: the story's oracle written now (when
+/// it has none) and run once on the feature's branch — a story ticked
+/// before its oracle is then held, or not, scenario by scenario.
+#[must_use]
+pub fn check_story(
+    path: &Path,
+    feature: Option<&str>,
+    story: &str,
+    options: &crate::RunOptions,
+) -> speccoder_core::CommandResult {
+    super::feature::with_driver("story", path, feature, |state, provider, _| {
+        check_with(path, feature, story, state, provider, options)
+    })
+}
+
+/// [`check_story`] against `state`, with `provider` for the author's call.
+#[must_use]
+pub fn check_with(
+    path: &Path,
+    feature: Option<&str>,
+    story: &str,
+    state: &Path,
+    provider: &std::sync::Arc<dyn agentplane::model::ModelProvider>,
+    options: &crate::RunOptions,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandData, CommandResult, CommandStatus};
+    let refuse = |status, m: String| CommandResult::new("story", status, &m);
+    let s = match super::setup(path, feature, state, "story") {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    let Some(name) = s.snapshot.feature.as_ref().map(|f| f.feature.name.clone()) else {
+        return refuse(
+            CommandStatus::SelectionNeeded,
+            "no feature selected; pass --feature".to_owned(),
+        );
+    };
+    // The feature's branch: where its ticks are, never the checkout.
+    let wt = super::workspace(path, Some(&name), state, options);
+    let Some(CommandData::Worktree(w)) = wt.data() else {
+        return CommandResult::carried("story", &wt);
+    };
+    if wt.status() != CommandStatus::Ok {
+        return CommandResult::carried("story", &wt);
+    }
+    let (Some(wt_path), Some(project_dir)) = (w.path.clone(), w.project_dir.clone()) else {
+        return refuse(CommandStatus::Error, "worktree without a path".to_owned());
+    };
+    let (project, wt_root) = (
+        std::path::PathBuf::from(project_dir),
+        std::path::PathBuf::from(wt_path),
+    );
+    let format = crate::format::at(&project);
+    let Some(snap) = format.inspect(&project, Some(&name)) else {
+        return refuse(
+            CommandStatus::NotAProject,
+            "the feature's branch holds no spec".to_owned(),
+        );
+    };
+    let tasks: Vec<&speccoder_core::snapshot::Task> = snap
+        .feature
+        .as_ref()
+        .and_then(|f| f.tasks.as_ref())
+        .map(|ts| ts.tasks.iter().collect())
+        .unwrap_or_default();
+    let whole = format.kind() == speccoder_core::spec::FormatKind::Openspec && story == name;
+    let members: Vec<&&speccoder_core::snapshot::Task> = tasks
+        .iter()
+        .filter(|t| whole || t.story.as_deref() == Some(story))
+        .collect();
+    let Some(first) = members.first() else {
+        let mut known: Vec<&str> = tasks.iter().filter_map(|t| t.story.as_deref()).collect();
+        known.sort_unstable();
+        known.dedup();
+        return refuse(
+            CommandStatus::NotFound,
+            format!("{story} is no story of {name} ({})", known.join(", ")),
+        );
+    };
+    let scenarios = format.scenarios(&snap, &first.id);
+    if scenarios.is_empty() {
+        return refuse(
+            CommandStatus::NotFound,
+            format!("{story} has no acceptance scenario to check"),
+        );
+    }
+    let (runner, _) = match sandbox::runner_at(&wt_root) {
+        Ok(r) => r,
+        Err(e) => return refuse(CommandStatus::ConfigError, e),
+    };
+    let rt = match super::tokio_runtime() {
+        Ok(rt) => rt,
+        Err(e) => return refuse(CommandStatus::RunFailed, e),
+    };
+    let plane = match rt.block_on(async {
+        crate::substrate::Plane::open_with(
+            &s.plane_dir,
+            &s.model,
+            std::sync::Arc::clone(provider),
+            None,
+            crate::substrate::Hooks {
+                format: Some(format),
+                progress: options.progress.clone(),
+                ..crate::substrate::Hooks::default()
+            },
+        )
+    }) {
+        Ok(p) => p,
+        Err(e) => return refuse(CommandStatus::RunFailed, e.0),
+    };
+    let e = Ensure {
+        key: story,
+        scenarios: &scenarios,
+        feature: &name,
+        project: &project,
+        wt_root: &wt_root,
+        state,
+        plane_dir: &s.plane_dir,
+        runner: &runner,
+        rt: &rt,
+        plane: &plane,
+        options,
+        format,
+        snapshot: &snap,
+        fresh: false,
+        resuming: false,
+    };
+    let (oracle, wrote, _) = match ensure(&e) {
+        Ok(x) => x,
+        Err(r) => return *r,
+    };
+    let now = states(&project, &oracle, &runner);
+    let finished = members.iter().all(|t| t.done);
+    let red: Vec<&str> = scenarios
+        .iter()
+        .filter(|sc| now.get(&sc.id) == Some(&ScenarioState::Red))
+        .map(|sc| sc.id.as_str())
+        .collect();
+    let green = scenarios
+        .iter()
+        .filter(|sc| now.get(&sc.id) == Some(&ScenarioState::Green))
+        .count();
+    let how = if wrote {
+        "its oracle written and run"
+    } else {
+        "its oracle run again"
+    };
+    let message = if red.is_empty() {
+        format!(
+            "{story}: {how} — {green} of {} scenario(s) hold",
+            scenarios.len()
+        )
+    } else {
+        format!(
+            "{story}: {how} — {green} of {} scenario(s) hold; {} {}",
+            scenarios.len(),
+            red.join(", "),
+            if finished {
+                "not held by the code"
+            } else {
+                "still to turn green"
+            }
+        )
+    };
+    let f = feature.map_or_else(String::new, |f| format!(" --feature {f}"));
+    let next = if red.is_empty() || !finished {
+        speccoder_core::next::NextStep {
+            command: format!("speccoder report{f}"),
+            why: "each story on its oracle".to_owned(),
+        }
+    } else {
+        speccoder_core::next::NextStep {
+            command: format!("speccoder converge{f}"),
+            why: "append the tasks that make the code hold them".to_owned(),
+        }
+    };
+    CommandResult::new("story", CommandStatus::Ok, &message).with_next(vec![next])
+}
+
 fn stop(code: &str, message: String) -> Box<speccoder_core::CommandResult> {
     Box::new(
         speccoder_core::CommandResult::new(
@@ -1204,6 +1383,7 @@ pub(crate) fn story_view(
             }),
             proven,
             before_oracle,
+            finished: done,
         });
     }
     (out, shown)

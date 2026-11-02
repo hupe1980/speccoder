@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Check a story.** `speccoder story check US3` (or **Check This Story**
+  on its card in the spec view) writes a story's oracle when it has none
+  and runs it once on the feature's branch: each scenario then reads held
+  or not, and a finished story's red ones point to `speccoder converge`.
+  For stories ticked before they had an oracle.
+
 ### Fixed
 
 - A stop could offer the same command twice, once naming the feature and

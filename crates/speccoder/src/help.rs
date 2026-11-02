@@ -27,6 +27,7 @@ pub const ADVANCED: &[&str] = &[
     "attest",
     "verify",
     "converge",
+    "story",
     "inspect",
     "replay",
     "worktree",

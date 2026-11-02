@@ -469,6 +469,13 @@ pub enum Command {
         #[arg(long = "return", requires = "in_place", conflicts_with_all = ["task", "converge", "max_tasks"])]
         return_: bool,
     },
+    /// Act on one story: check it — its acceptance tests written (when it has
+    /// none) and run on the feature's branch.
+    #[command(hide = true)]
+    Story {
+        #[command(subcommand)]
+        action: StoryAction,
+    },
     /// Act on one task: approve, reject, accept, skip, nudge, rule or show it.
     Task {
         #[command(subcommand)]
@@ -619,6 +626,17 @@ pub enum Command {
     /// The dashboard: tasks with evidence, the live attempt, the approval queue.
     #[command(hide = true)]
     Tui,
+}
+
+/// `speccoder story` verbs.
+#[derive(Debug, Subcommand)]
+pub enum StoryAction {
+    /// Write the story's oracle when it has none, run it once on the
+    /// feature's branch, and say which scenarios the code holds.
+    Check {
+        /// The story, e.g. US3.
+        story: String,
+    },
 }
 
 /// `speccoder task` verbs; the task comes first after the verb.

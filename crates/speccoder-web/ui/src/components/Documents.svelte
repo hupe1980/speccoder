@@ -14,6 +14,7 @@
   import { get, q } from "../lib/api";
   import { passage, plain, revisedHeadings } from "../lib/review";
   import { living } from "../lib/living";
+  import { offer } from "../lib/actions";
   const docs = $derived(app.documents);
   // Review is offered when the spec names requirements to review.
   const reviewable = $derived(!!app.report?.data?.review);
@@ -162,6 +163,18 @@
       else h.removeAttribute("title");
     }
   });
+  // A story card's Check This Story: its oracle written and run now.
+  function clicked(e: MouseEvent) {
+    const b = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-check-story]");
+    const story = b?.dataset.checkStory;
+    if (!story || app.job?.running) return;
+    void app.perform(
+      offer(
+        { kind: "check_story", story },
+        { group: "work", label: `check ${story}`, why: "its acceptance tests written and run on the feature's branch", command: `speccoder story check ${story}` },
+      ),
+    );
+  }
   function key(e: KeyboardEvent) {
     if (e.key === "c" && !e.metaKey && !e.ctrlKey && picked && !composing && !(e.target as HTMLElement)?.closest("input, textarea, select")) {
       e.preventDefault();
@@ -228,7 +241,7 @@
     {:else}
       <!-- A selection's Comment button; the keyboard's is `c`. -->
       <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-      <article class="prose" bind:this={article} use:diagrams={html} onmouseup={selected} onkeyup={selected}>
+      <article class="prose" bind:this={article} use:diagrams={html} onmouseup={selected} onkeyup={selected} onclick={clicked}>
         {#if picked && !composing}
           <button class="cbtn" style="left:{picked.x}px;top:{picked.y}px" onclick={() => (composing = true)} title="Comment on the selection (c)">Comment <kbd>c</kbd></button>
         {:else if picked && composing}
@@ -328,6 +341,7 @@
   .prose :global(.strip .d.green) { background: var(--verified-fill); }
   .prose :global(.strip .d.red) { background: transparent; box-shadow: inset 0 0 0 1.5px var(--regression-fill); }
   .prose :global(.strip .n) { margin-left: 0.35rem; }
+  .prose :global(.story-head .check) { margin-left: auto; }
   .prose :global(.story.proven .strip .n) { color: var(--verified); font-weight: 600; }
   .prose :global(p.why) { font-size: 0.88rem; }
   .prose :global(p.itest) { padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }

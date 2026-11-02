@@ -87,7 +87,7 @@ A story's acceptance is written once — its **oracle** — and every task of th
 - **Outside a story.** A convergence gap writes its own test, cited to the scenario it closes; a bug is judged by its reproductions. When that test asserts what the spec does not say, the stop names it: `speccoder task rule T027 --tests-wrong --reason "FR-005 keeps cell whitespace"` has it written again, your words told to its author and recorded on the tick (`Ruling: tests-wrong`).
 - **The suite.** Every test author is shown the project's tests on the code its task or story names in backticks, and told not to contradict them; a scenario it could only state against them is *untested*.
 
-`speccoder report` and the board show each story on its oracle — `US1 ●●○ 2 of 3 green · T008 turned US1-1, US1-2 · T010 closes it` — and each open task what judges it. A story whose every task is documentation or yours has no checkpoint (`PLAN-STORY-UNJUDGED`); one ticked before it had an oracle reads *ticked before its oracle*, its scenarios never run.
+`speccoder report` and the board show each story on its oracle — `US1 ●●○ 2 of 3 green · T008 turned US1-1, US1-2 · T010 closes it` — and each open task what judges it. A story whose every task is documentation or yours has no checkpoint (`PLAN-STORY-UNJUDGED`); one ticked before it had an oracle reads *ticked before its oracle*, its scenarios never run: `speccoder story check US1` (or **Check This Story** in the spec view) writes its oracle now and runs it on the feature's branch — each scenario then held or not, the rest to [converge](@/docs/running.md#convergence).
 
 ## Why a tick is regression-only
 

@@ -719,3 +719,89 @@ fn a_feature_counts_its_tasks_from_one_list() {
     let f = &f.features[0];
     assert_eq!((f.done, f.tasks), (5, 5), "{f:?}");
 }
+
+/// A story ticked before its oracle, checked: its oracle is written now
+/// and run on the feature's branch — the scenarios the code holds read
+/// green, the rest red with `speccoder converge`; checked again, it is run
+/// without an author call.
+#[test]
+fn a_story_ticked_before_its_oracle_is_checked() {
+    let r = repo_with(&TASKS.replace("- [ ]", "- [x]"));
+    fs::write(
+        r.path().join("src/lib.rs"),
+        "pub fn ok() {}\npub fn alpha() {}\n",
+    )
+    .unwrap();
+    git(
+        r.path(),
+        &["commit", "-qam", "alpha, ticked before oracles"],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(oracle_answer());
+    let d: Arc<dyn ModelProvider> = f.clone();
+    let opts = speccoder_runtime::RunOptions::default();
+    let res = speccoder_runtime::pipeline::story::check_with(
+        r.path(),
+        None,
+        "US1",
+        state.path(),
+        &d,
+        &opts,
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert!(
+        res.message().contains("its oracle written and run — 1 of 3 scenario(s) hold; US1-2, US1-3 not held by the code"),
+        "{}",
+        res.message()
+    );
+    assert_eq!(
+        res.next()
+            .iter()
+            .map(|n| n.command.as_str())
+            .collect::<Vec<_>>(),
+        ["speccoder converge"]
+    );
+    let oracle = on_branch(
+        r.path(),
+        &[
+            "log",
+            "--format=%(trailers:key=Oracle-Scenarios,valueonly)",
+            "--grep=^Oracle: US1$",
+        ],
+    );
+    assert!(
+        oracle.contains("US1-1=green, US1-2=red, US1-3=red"),
+        "{oracle}"
+    );
+    // The report: no longer "ticked before its oracle", each scenario held or not.
+    let status = speccoder_runtime::status::report(r.path(), None);
+    let Some(CommandData::Report(st)) = status.data() else {
+        panic!("{}", status.message());
+    };
+    let story = st.stories.first().expect("US1");
+    assert!(!story.before_oracle && !story.proven, "{story:?}");
+    let marks: Vec<ScenarioState> = story.scenarios.iter().map(|m| m.state).collect();
+    assert_eq!(
+        marks,
+        [ScenarioState::Green, ScenarioState::Red, ScenarioState::Red]
+    );
+
+    // Again: run, not written — no author call.
+    let f = FakeProvider::new();
+    let d: Arc<dyn ModelProvider> = f.clone();
+    let again = speccoder_runtime::pipeline::story::check_with(
+        r.path(),
+        None,
+        "US1",
+        state.path(),
+        &d,
+        &opts,
+    );
+    assert!(
+        again.message().contains("its oracle run again"),
+        "{}",
+        again.message()
+    );
+    assert!(f.asked().is_empty());
+}

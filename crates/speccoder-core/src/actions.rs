@@ -274,6 +274,12 @@ pub enum Runnable {
         /// Take the decision back.
         revoke: bool,
     },
+    /// Check a story: its oracle written when it has none, run once on the
+    /// feature's branch.
+    CheckStory {
+        /// The story (`US3`).
+        story: String,
+    },
     /// Rule that a task's tests are wrong (the input is the reason): one
     /// scenario's oracle tests, or — none named — the task's own test
     /// outside a story. The next run writes them again.
@@ -604,6 +610,8 @@ pub enum ActionKind {
     AcceptanceAt,
     /// [`Runnable::RuleScenario`].
     RuleScenario,
+    /// [`Runnable::CheckStory`].
+    CheckStory,
     /// [`Runnable::PresetAdd`].
     PresetAdd,
     /// [`Runnable::PlanThrough`].
@@ -667,6 +675,7 @@ impl ActionKind {
         Self::CodeNudge,
         Self::AcceptanceAt,
         Self::RuleScenario,
+        Self::CheckStory,
         Self::PresetAdd,
         Self::PlanThrough,
         Self::NewProject,
@@ -720,6 +729,7 @@ impl ActionKind {
             Self::CodeNudge => "code_nudge",
             Self::AcceptanceAt => "acceptance_at",
             Self::RuleScenario => "rule_scenario",
+            Self::CheckStory => "check_story",
             Self::PresetAdd => "preset_add",
             Self::PlanThrough => "plan_through",
             Self::NewProject => "new_project",
@@ -864,6 +874,9 @@ impl ActionKind {
                 task: "T003".to_owned(),
                 revoke: false,
             },
+            Self::CheckStory => Runnable::CheckStory {
+                story: "US3".to_owned(),
+            },
             Self::RuleScenario => Runnable::RuleScenario {
                 task: "T021".to_owned(),
                 scenario: Some("US3-2".to_owned()),
@@ -960,6 +973,7 @@ impl Runnable {
             Self::CodeNudge { .. } => ActionKind::CodeNudge,
             Self::AcceptanceAt { .. } => ActionKind::AcceptanceAt,
             Self::RuleScenario { .. } => ActionKind::RuleScenario,
+            Self::CheckStory { .. } => ActionKind::CheckStory,
             Self::PresetAdd { .. } => ActionKind::PresetAdd,
             Self::PlanThrough { .. } => ActionKind::PlanThrough,
             Self::NewProject { .. } => ActionKind::NewProject,
@@ -1027,6 +1041,7 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         Runnable::Explore { resume, .. } => resume.clone(),
         Runnable::ExploreChoose { session, .. } => Some(session.clone()),
         Runnable::OracleTests { req, .. } => Some(req.clone()),
+        Runnable::CheckStory { story } => Some(story.clone()),
         Runnable::ApproveAndRun { mode, .. } => Some(mode.as_str().to_owned()),
         Runnable::Comment { id, .. } => id.clone(),
         Runnable::RevisionUndo { turn } => turn.clone(),

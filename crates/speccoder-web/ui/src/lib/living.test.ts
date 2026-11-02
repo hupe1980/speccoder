@@ -31,6 +31,7 @@ describe("the living spec", () => {
     expect(card?.querySelector("h3")?.textContent).toBe("User Story 1 - Count words (Priority: P1) 🎯 MVP");
     expect(card?.querySelector(".pri")?.getAttribute("data-p")).toBe("P1");
     expect(card?.querySelector(".strip")?.textContent).toBe("1 of 2 green");
+    expect(card?.querySelector("button[data-check-story]")).toBeNull();
     const [one, two] = Array.from(card?.querySelectorAll("li.scenario") ?? []);
     expect(one?.className).toContain("green");
     expect(one?.querySelector(".sid")?.textContent).toBe("US1-1");
@@ -57,5 +58,6 @@ describe("the living spec", () => {
     expect(div.querySelectorAll(".strip .d").length).toBe(0);
     expect(div.querySelector("li.scenario")?.className).toContain("before");
     expect(div.querySelector("li.scenario .sb")?.textContent).toBe("not run");
+    expect(div.querySelector<HTMLButtonElement>("button[data-check-story]")?.dataset.checkStory).toBe("US1");
   });
 });

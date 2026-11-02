@@ -82,6 +82,13 @@ export function living(html: string, stories: StoryScenarios[]): string {
     let n = h.nextSibling;
     head.append(h);
     head.insertAdjacentHTML("beforeend", strip(st));
+    // Ticked before its oracle: nothing ran its scenarios — check it.
+    if (st?.before_oracle) {
+      head.insertAdjacentHTML(
+        "beforeend",
+        `<button class="btn small check" type="button" data-check-story="${esc(key)}" title="speccoder story check ${esc(key)}">Check This Story</button>`,
+      );
+    }
     card.append(head);
     while (n && !(n instanceof HTMLElement && /^H[1-3]$/.test(n.tagName))) {
       const next = n.nextSibling;
