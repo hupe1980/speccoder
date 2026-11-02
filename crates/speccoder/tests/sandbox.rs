@@ -127,6 +127,27 @@ fn writes_stay_in_the_workspace_and_its_temporary_directory() {
     });
 }
 
+/// Tools write a file in one directory and rename it into another (rustc's
+/// metadata from `TMPDIR`, package managers, atomic saves): within the
+/// workspace and from its temporary directory that works. `rename(2)`
+/// itself, since `mv` falls back to copying.
+#[test]
+fn files_move_between_directories_of_the_workspace_and_its_temporary_directory() {
+    each(Network::Loopback, |w, s| {
+        let rename = "python3 -c 'import os,sys; os.rename(sys.argv[1], sys.argv[2])'";
+        let (ok, out) = sh(
+            &s,
+            w.root.path(),
+            &format!(
+                "mkdir -p a target && echo m > a/x && {rename} a/x target/x && \
+                 echo t > \"$TMPDIR/lib.rmeta\" && {rename} \"$TMPDIR/lib.rmeta\" target/lib.rmeta && \
+                 cat target/x target/lib.rmeta"
+            ),
+        );
+        assert!(ok && out.contains("m\nt"), "{out}");
+    });
+}
+
 /// macOS's `mktemp` ignores `TMPDIR`: its default names in the per-user
 /// temporary directory work, and nothing else there is writable.
 #[cfg(target_os = "macos")]
