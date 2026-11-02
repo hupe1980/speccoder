@@ -80,8 +80,9 @@ pub fn policy(profile: &Profile) -> Result<Policy, String> {
         p.fs.push(FsRule::new(Access::Hide, FsTarget::Subpath(h)));
     }
     // Test servers and databases in the writable trees talk over Unix
-    // sockets; sockets elsewhere (a container engine's) stay out.
-    if profile.network != Network::On && !profile.unenforced.workspace_sockets {
+    // sockets; sockets elsewhere (a container engine's) stay out, with the
+    // network on too.
+    if !profile.unenforced.workspace_sockets {
         p.ipc.unix_sockets = writable;
     }
     if profile.unenforced.trust_handoff {
@@ -92,7 +93,9 @@ pub fn policy(profile: &Profile) -> Result<Policy, String> {
         // On Linux loopback is no network: seccomp cannot tell addresses apart.
         Network::Loopback if cfg!(target_os = "linux") => Net::None,
         Network::Loopback => Net::Loopback(Ports::Any),
-        Network::On => Net::All,
+        // IP only: Unix sockets as above, so the container engines and D-Bus
+        // stay out on tier T2 too.
+        Network::On => Net::Ip,
     };
     Ok(p)
 }
@@ -694,12 +697,18 @@ mod tests {
         let _ = sleeper.wait();
     }
 
+    /// With the network on a command still reaches only the workspace's
+    /// Unix sockets, and none where they cannot be kept apart (fitted).
     #[test]
-    fn the_workspace_sockets_follow_the_network() {
+    fn the_network_on_keeps_the_unix_socket_rule() {
         let dir = tempfile::tempdir().unwrap();
         let mut p = Profile::new(dir.path(), &super::super::Config::default(), None);
-        assert!(!policy(&p).unwrap().ipc.unix_sockets.is_empty());
+        let sockets = policy(&p).unwrap().ipc.unix_sockets;
+        assert!(!sockets.is_empty());
         p.network = Network::On;
+        let on = policy(&p).unwrap();
+        assert_eq!((on.net, on.ipc.unix_sockets), (Net::Ip, sockets));
+        p.unenforced.workspace_sockets = true;
         assert!(policy(&p).unwrap().ipc.unix_sockets.is_empty());
     }
 }

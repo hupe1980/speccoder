@@ -458,6 +458,16 @@ fn network_allow_opens_the_network_for_that_command() {
         s.network_allow = vec![vec!["sh".to_owned(), "-c".to_owned(), script.clone()]];
         let (ok, out) = sh(&s, w.root.path(), &script);
         assert!(ok, "the allowed command: {out}");
+        // The network is IP: a daemon's socket stays out of reach.
+        let path = w.outside.path().join("d.sock");
+        let _daemon = std::os::unix::net::UnixListener::bind(&path).unwrap();
+        let connect = format!(
+            "python3 -I -c \"import socket; c=socket.socket(socket.AF_UNIX); c.connect('{}')\"",
+            path.display()
+        );
+        s.network_allow = vec![vec!["sh".to_owned(), "-c".to_owned(), connect.clone()]];
+        let (ok, out) = sh(&s, w.root.path(), &connect);
+        assert!(!ok, "an allowed command reached a daemon socket: {out}");
     });
 }
 

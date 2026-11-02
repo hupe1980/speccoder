@@ -6,7 +6,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-11-02
+## [0.9.0] - 2026-11-03
 
 ### Added
 
@@ -68,6 +68,9 @@ adheres to [Semantic Versioning](https://semver.org/).
   `[sandbox] network = "on"` or its socket's directory in
   `[sandbox] writable`: a check that starts containers needs
   `[sandbox] mode = "off"`.
+- A command with the network on reaches only the Unix sockets in the
+  writable paths, as with it off; list a socket's directory in
+  `[sandbox] writable` when a command needs it.
 
 ## [0.8.4] - 2026-11-02
 
