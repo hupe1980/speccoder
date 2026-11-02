@@ -48,7 +48,7 @@ keyring = { version = "3", default-features = false, features = ["apple-native",
 serde-saphyr = "2.0.0"
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
 # The sandbox. Pre-1.0 minors break the policy surface: pinned exactly.
-procage = "=0.3.1"
+procage = "=0.3.2"
 nix = { version = "0.31", default-features = false, features = ["signal", "process", "sched", "mount", "user", "fs"] }
 
 assert_cmd = "2"

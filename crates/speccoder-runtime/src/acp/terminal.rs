@@ -9,8 +9,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use nix::sys::signal::{Signal, killpg};
-use nix::unistd::Pid;
+use nix::sys::signal::Signal;
 
 /// The most of a terminal's output kept (the agent may ask for less).
 pub const KEPT: usize = 1024 * 1024;
@@ -34,7 +33,7 @@ struct Shared {
 #[derive(Debug)]
 struct Term {
     shared: Arc<(Mutex<Shared>, Condvar)>,
-    pgid: Option<Pid>,
+    pid: Option<u32>,
     limit: Option<usize>,
 }
 
@@ -45,9 +44,10 @@ pub struct Terminals {
     all: Mutex<HashMap<String, Term>>,
 }
 
-fn kill(pgid: Option<Pid>) {
-    if let Some(p) = pgid {
-        let _ = killpg(p, Signal::SIGKILL);
+/// Ends the command and everything it started.
+fn kill(pid: Option<u32>) {
+    if let Some(p) = pid {
+        crate::session::end(p);
     }
 }
 
@@ -68,6 +68,9 @@ impl Terminals {
         deadline: Duration,
     ) -> Result<String, String> {
         let (wrapped, tmp) = runner.wrap(argv)?;
+        // Through the sandbox helper it leads a session of its own, else a
+        // process group.
+        let caged = tmp.is_some();
         if let Some(tmp) = tmp {
             env.retain(|(k, _)| !matches!(k.as_str(), "TMPDIR" | "TMP" | "TEMP"));
             let t = tmp.to_string_lossy().into_owned();
@@ -85,11 +88,13 @@ impl Terminals {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         #[cfg(unix)]
-        std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+        if !caged {
+            std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+        }
         let mut child = cmd
             .spawn()
             .map_err(|e| format!("could not start `{}`: {e}", argv.join(" ")))?;
-        let pgid = i32::try_from(child.id()).ok().map(Pid::from_raw);
+        let pid = Some(child.id());
         let shared: Arc<(Mutex<Shared>, Condvar)> = Arc::default();
         let finished_reading = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let readers: Vec<std::thread::JoinHandle<()>> = [
@@ -135,7 +140,7 @@ impl Terminals {
                 match child.try_wait() {
                     Ok(Some(s)) => break Some(s),
                     Ok(None) if began.elapsed() >= deadline => {
-                        kill(pgid);
+                        kill(pid);
                         break child.wait().ok();
                     }
                     Ok(None) => std::thread::sleep(Duration::from_millis(10)),
@@ -143,9 +148,9 @@ impl Terminals {
                 }
             };
             // Stragglers that outlived the leader go too.
-            kill(pgid);
+            kill(pid);
             // Its output, as far as it comes within a moment: a process
-            // that left the group (`setsid`) may hold the pipes open for
+            // that left the run (`setsid` where it can) may hold the pipes open for
             // ever, and never keeps the exit from being said.
             let n = readers.len();
             let read_until = Instant::now() + Duration::from_secs(2);
@@ -182,14 +187,10 @@ impl Terminals {
             *n += 1;
             format!("term-{n}")
         };
-        self.all.lock().map_err(|e| e.to_string())?.insert(
-            id.clone(),
-            Term {
-                shared,
-                pgid,
-                limit,
-            },
-        );
+        self.all
+            .lock()
+            .map_err(|e| e.to_string())?
+            .insert(id.clone(), Term { shared, pid, limit });
         Ok(id)
     }
 
@@ -245,7 +246,7 @@ impl Terminals {
     ///
     /// No such terminal.
     pub fn kill(&self, id: &str) -> Result<(), String> {
-        self.with(id, |t| kill(t.pgid))
+        self.with(id, |t| kill(t.pid))
     }
 
     /// Kills it and forgets it.
@@ -260,7 +261,7 @@ impl Terminals {
             .map_err(|e| e.to_string())?
             .remove(id)
             .ok_or_else(|| format!("no terminal `{id}`"))?;
-        kill(t.pgid);
+        kill(t.pid);
         Ok(())
     }
 
@@ -269,7 +270,7 @@ impl Terminals {
         if let Ok(all) = self.all.lock() {
             for t in all.values() {
                 if t.shared.0.lock().is_ok_and(|s| s.exit.is_none()) {
-                    kill(t.pgid);
+                    kill(t.pid);
                 }
             }
         }

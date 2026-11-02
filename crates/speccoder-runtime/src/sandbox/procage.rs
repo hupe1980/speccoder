@@ -438,8 +438,9 @@ impl crate::verify::process::Supervised for Caged {
 
 /// The helper (`speccoder __sandbox <profile> -- argv…`): confines this
 /// process with `profile` and becomes the command, keeping this process's
-/// pid, standard streams, environment and process group; returns only on
-/// failure, with the reason.
+/// pid, standard streams and environment, leading a session of its own
+/// that the command's processes cannot leave (the caller ends it with
+/// [`crate::session::end`]); returns only on failure, with the reason.
 pub fn exec(profile: &Profile, argv: &[String]) -> String {
     let cage = match cage(profile) {
         Ok(c) => c,
@@ -455,7 +456,7 @@ pub fn exec(profile: &Profile, argv: &[String]) -> String {
         .envs(foreground_git(
             std::env::var("GIT_CONFIG_COUNT").ok().as_deref(),
         ));
-    let err = cage.exec(&mut cmd, &Grants::new());
+    let err = cage.exec_session(&mut cmd, &Grants::new());
     format!("could not start `{program}` in the sandbox: {err}")
 }
 

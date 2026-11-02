@@ -65,6 +65,7 @@ pub mod sandbox;
 pub mod secrets;
 pub mod seed;
 pub mod service;
+pub mod session;
 pub mod settings;
 pub mod shape;
 pub mod skills;

@@ -74,7 +74,8 @@ fn signal(child: &Child, sig: nix::sys::signal::Signal) {
     }
 }
 
-/// Ends the group: `first` (a request to stop), then a kill after the grace.
+/// Ends the command: `first` (a request to stop) to its group, then a kill of
+/// everything it started after the grace.
 fn end_group(child: &mut Child, first: nix::sys::signal::Signal) {
     signal(child, first);
     let until = Instant::now() + GRACE;
@@ -84,17 +85,20 @@ fn end_group(child: &mut Child, first: nix::sys::signal::Signal) {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    signal(child, nix::sys::signal::Signal::SIGKILL);
+    crate::session::end(child.id());
     let _ = child.wait();
 }
 
-/// Starts `cmd` in a group of its own, its output piped.
-fn spawn(mut cmd: Command, root: &Path) -> std::io::Result<Child> {
+/// Starts `cmd`, its output piped: through the sandbox helper it leads a
+/// session of its own (`caged`), else a process group.
+fn spawn(mut cmd: Command, root: &Path, caged: bool) -> std::io::Result<Child> {
     cmd.current_dir(root)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    if !caged {
+        std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    }
     cmd.spawn()
 }
 
@@ -166,8 +170,8 @@ fn follow(
         if let Some((s, at)) = exited
             && at.elapsed() >= DRAIN
         {
-            // It exited; what it left running in its group goes with it.
-            signal(child, nix::sys::signal::Signal::SIGKILL);
+            // It exited; what it left running goes with it.
+            crate::session::end(child.id());
             return End::Exited(s);
         }
         if cancel.load(Ordering::SeqCst) {
@@ -226,7 +230,7 @@ fn confined(
     argv: &[String],
     root: &Path,
     env: &[(String, String)],
-) -> Result<(Vec<String>, Env), String> {
+) -> Result<(Vec<String>, Env, bool), String> {
     let (name, args) = argv.split_first().ok_or("an empty command")?;
     let mut full = vec![program(name, root, env)?.display().to_string()];
     full.extend(args.iter().cloned());
@@ -236,7 +240,7 @@ fn confined(
         .cloned()
         .collect();
     if speccoder_core::step::outside(argv).is_some() {
-        return Ok((full, env));
+        return Ok((full, env, false));
     }
     // As `sandboxed()` reports: confined when there is a sandbox and the
     // `speccoder` binary that starts commands in it.
@@ -244,7 +248,7 @@ fn confined(
         .ok()
         .filter(|b| b.helper.is_some())
     else {
-        return Ok((full, env));
+        return Ok((full, env, false));
     };
     let home = env
         .iter()
@@ -263,7 +267,7 @@ fn confined(
     let tmp = profile.tmp.display().to_string();
     env.retain(|(k, _)| !matches!(k.as_str(), "TMPDIR" | "TMP" | "TEMP"));
     env.extend(["TMPDIR", "TMP", "TEMP"].map(|k| (k.to_owned(), tmp.clone())));
-    Ok((crate::sandbox::wrap(&profile, &backend, &full)?, env))
+    Ok((crate::sandbox::wrap(&profile, &backend, &full)?, env, true))
 }
 
 /// Whether the person's commands run in an OS sandbox here: there is one,
@@ -304,7 +308,7 @@ fn run_in(
     let deadline = Instant::now() + timeout;
     for argv in argvs {
         let one = shown(std::slice::from_ref(argv));
-        let (start, vars) = match confined(argv, root, env) {
+        let (start, vars, caged) = match confined(argv, root, env) {
             Ok(x) => x,
             Err(e) => return failed(format!("`{one}` could not start: {e}")),
         };
@@ -313,7 +317,7 @@ fn run_in(
         };
         let mut cmd = Command::new(program);
         cmd.args(args).env_clear().envs(vars);
-        let mut child = match spawn(cmd, root) {
+        let mut child = match spawn(cmd, root, caged) {
             Ok(c) => c,
             Err(e) => return failed(format!("`{one}` could not start: {e}")),
         };
@@ -357,7 +361,8 @@ pub fn speccoder(
         std::env::current_exe().map_err(|e| format!("speccoder could not find itself: {e}"))?;
     let mut cmd = Command::new(exe);
     cmd.args(args).arg("--json");
-    let mut child = spawn(cmd, root).map_err(|e| format!("speccoder could not start: {e}"))?;
+    let mut child =
+        spawn(cmd, root, false).map_err(|e| format!("speccoder could not start: {e}"))?;
     let mut out = String::new();
     let end = follow(
         &mut child,

@@ -508,18 +508,17 @@ fn the_helper_cages_a_server_and_relays_its_status() {
 #[test]
 fn the_helper_runs_a_process_group_of_its_own() {
     let w = world();
-    let script = "python3 -I -c 'import os; os.setpgid(0, 0)'";
+    // A child of the command, as a runner's tests are: the command itself
+    // leads the session, and a session leader cannot start a group.
+    let script = "python3 -I -c 'import os; os.setpgid(0, 0)' && echo grouped";
     let Some(argv) = wrapped(&w, &["sh", "-c", script]) else {
         return;
     };
-    let out = std::os::unix::process::CommandExt::process_group(
-        std::process::Command::new(&argv[0])
-            .args(&argv[1..])
-            .current_dir(w.root.path()),
-        0,
-    )
-    .output()
-    .unwrap();
+    let out = std::process::Command::new(&argv[0])
+        .args(&argv[1..])
+        .current_dir(w.root.path())
+        .output()
+        .unwrap();
     assert!(
         out.status.success(),
         "{}",
