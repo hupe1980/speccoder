@@ -34,6 +34,18 @@ fn words(text: &str) -> std::collections::BTreeSet<String> {
         .collect()
 }
 
+/// The share of two wordings' distinguishing words they have in common.
+fn overlap(a: &str, b: &str) -> f64 {
+    let (a, b) = (words(a), words(b));
+    let union = a.union(&b).count();
+    if union == 0 {
+        return 0.0;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let share = a.intersection(&b).count() as f64 / union as f64;
+    share
+}
+
 /// Two wordings of one task: at least half of their distinguishing words
 /// are shared (Jaccard ≥ 0.5). Measured on a real run, rewordings scored
 /// 0.65 and distinct tasks ≤ 0.24.
@@ -42,6 +54,41 @@ pub fn same_task(a: &str, b: &str) -> bool {
     let (a, b) = (words(a), words(b));
     let union = a.union(&b).count();
     union > 0 && a.intersection(&b).count() * 2 >= union
+}
+
+/// A scenario id as Spec Kit's converge cites it: `US1-3` → `US1/AC3`.
+fn cite(id: &str) -> String {
+    match id.split_once('-') {
+        Some((story, n))
+            if story.starts_with("US")
+                && !n.is_empty()
+                && n.chars().all(|c| c.is_ascii_digit()) =>
+        {
+            format!("{story}/AC{n}")
+        }
+        _ => format!("(scenarios {id})"),
+    }
+}
+
+/// The scenario ids a finding cites: `US1/AC3` → `US1-3`, and ids written
+/// as they are (`US1-3`).
+fn scenario_cites(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = text
+        .split(|c: char| !(c.is_alphanumeric() || c == '/' || c == '-'))
+        .filter_map(|w| {
+            let w = w.trim_matches('-').to_ascii_uppercase();
+            let (story, n) = w.split_once("/AC").or_else(|| w.split_once('-'))?;
+            let num = story.strip_prefix("US")?;
+            (!num.is_empty()
+                && num.chars().all(|c| c.is_ascii_digit())
+                && !n.is_empty()
+                && n.chars().all(|c| c.is_ascii_digit()))
+            .then(|| format!("{story}-{n}"))
+        })
+        .collect();
+    out.sort();
+    out.dedup();
+    out
 }
 
 /// The task line speccoder appends for a finding (Spec Kit's format).
@@ -289,6 +336,8 @@ fn assess(
         appended: Vec::new(),
         unrequested: Vec::new(),
         repeated: Vec::new(),
+        dropped: Vec::new(),
+        stories: Vec::new(),
         commit: None,
         usage: None,
         tool_calls: Vec::new(),
@@ -308,6 +357,76 @@ fn assess(
                 run_config.max_converge_rounds
             ),
         );
+    }
+
+    // Evidence first: every finished story's oracle, written when it has
+    // none, run on the branch. Its red scenarios are this round's gaps,
+    // named without asking the model; what holds is no gap.
+    // With acceptance tests off there are no oracles to read.
+    let stories: Vec<String> = if !run_config.acceptance {
+        Vec::new()
+    } else if format.kind() == speccoder_core::spec::FormatKind::Openspec {
+        vec![feature_name.clone()]
+    } else {
+        let mut keys: Vec<String> = tasks.tasks.iter().filter_map(|t| t.story.clone()).collect();
+        keys.sort();
+        keys.dedup();
+        keys
+    };
+    let mut holds = std::collections::BTreeSet::new();
+    let mut red = std::collections::BTreeSet::new();
+    let mut evidence: Vec<Value> = Vec::new();
+    for key in &stories {
+        let checked = crate::pipeline::story::checked(
+            path,
+            Some(&feature_name),
+            key,
+            state,
+            &provider,
+            options,
+        );
+        let c = match checked {
+            Ok(c) if c.finished => c,
+            Ok(_) => continue,
+            Err(r) => {
+                report
+                    .stories
+                    .push(format!("{key}: no oracle — {}", r.message()));
+                continue;
+            }
+        };
+        let green = c
+            .scenarios
+            .iter()
+            .filter(|s| c.states.get(&s.id) == Some(&speccoder_core::story::ScenarioState::Green))
+            .count();
+        report.usage = crate::pipeline::commit::add_usage(report.usage.as_ref(), c.usage.as_ref());
+        report.stories.push(format!(
+            "{key}: {green} of {} hold{}",
+            c.scenarios.len(),
+            if c.wrote { " (oracle written now)" } else { "" }
+        ));
+        for sc in &c.scenarios {
+            match c.states.get(&sc.id) {
+                Some(speccoder_core::story::ScenarioState::Green) => {
+                    holds.insert(sc.id.clone());
+                }
+                Some(speccoder_core::story::ScenarioState::Red)
+                    if !c.untestable.contains(&sc.id) =>
+                {
+                    red.insert(sc.id.clone());
+                    evidence.push(serde_json::json!({
+                        "task": format!("Make {} hold through the story's interface", sc.id),
+                        "source_ref": cite(&sc.id),
+                        "gap_type": "scenario",
+                        "severity": "HIGH",
+                        "source": "oracle",
+                        "evidence": sc.text,
+                    }));
+                }
+                _ => {}
+            }
+        }
     }
 
     // The assessment: read-only tools, everything it depends on journaled.
@@ -376,7 +495,7 @@ fn assess(
         .as_ref()
         .map(|o| o.peek().clone())
         .unwrap_or(Value::Null);
-    report.usage = output.get("usage").cloned();
+    report.usage = crate::pipeline::commit::add_usage(report.usage.as_ref(), output.get("usage"));
     report.tool_calls = output["tool_calls"].as_array().cloned().unwrap_or_default();
     if output["status"] != "completed" {
         report.outcome = "failed".to_owned();
@@ -407,9 +526,60 @@ fn assess(
                 .map_or(t.title.clone(), |(task, _)| task.to_owned())
         })
         .collect();
+    // Done tasks of the plan; an earlier round's own repeat is "no progress".
+    let ticked: Vec<&speccoder_core::snapshot::Task> = tasks
+        .tasks
+        .iter()
+        .filter(|t| t.done && !t.phase.as_deref().is_some_and(is_convergence))
+        .collect();
     let mut actionable: Vec<Value> = Vec::new();
+    for finding in &evidence {
+        if earlier
+            .iter()
+            .any(|e| same_task(e, finding["task"].as_str().unwrap_or_default()))
+        {
+            report.repeated.push(finding.clone());
+        } else {
+            actionable.push(finding.clone());
+        }
+    }
     for finding in &report.findings {
-        if finding["gap_type"] == "unrequested" {
+        let text = format!(
+            "{} {}",
+            finding["task"].as_str().unwrap_or_default(),
+            finding["source_ref"].as_str().unwrap_or_default()
+        );
+        let cites = scenario_cites(&text);
+        // A done task said again: its wording, or its id with much of it.
+        let said = finding["task"].as_str().unwrap_or_default();
+        let restates = ticked
+            .iter()
+            .find(|t| {
+                same_task(said, &t.title)
+                    || (text
+                        .split(|c: char| !c.is_alphanumeric())
+                        .any(|w| w == t.id)
+                        && overlap(said, &t.title) >= 0.3)
+            })
+            .map(|t| t.id.as_str());
+        let why = if !cites.is_empty() && cites.iter().all(|c| holds.contains(c)) {
+            Some(format!(
+                "{} already hold{}",
+                cites.join(", "),
+                if cites.len() == 1 { "s" } else { "" }
+            ))
+        } else if cites.iter().any(|c| red.contains(c)) {
+            Some("its scenario's gap is appended from the oracle".to_owned())
+        } else {
+            restates
+                .filter(|_| !cites.iter().any(|c| red.contains(c)))
+                .map(|id| format!("restates {id}, which is done, with no red scenario"))
+        };
+        if let Some(why) = why {
+            let mut dropped = finding.clone();
+            dropped["why"] = Value::String(why);
+            report.dropped.push(dropped);
+        } else if finding["gap_type"] == "unrequested" {
             report.unrequested.push(finding.clone());
         } else if earlier
             .iter()

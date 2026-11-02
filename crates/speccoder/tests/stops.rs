@@ -16,7 +16,7 @@ use serde_json::json;
 
 const SPEC: &str = "# Spec\n\n### User Story 1 - Tables (Priority: P1)\n\nTables convert.\n\n**Independent Test**: run the command with a table.\n\n**Acceptance Scenarios**:\n\n1. **Given** a table, **When** converted, **Then** alpha holds.\n";
 
-const TASKS: &str = "# Tasks\n\n## Phase 3: User Story 1 - Tables\n\n- [x] T001 [US1] Parse tables in src/lib.rs\n\n## Phase 7: Convergence\n\n- [ ] T026 Route both tables in `src/lib.rs` per US1/AC1 (partial)\n";
+const TASKS: &str = "# Tasks\n\n## Phase 3: User Story 1 - Tables\n\n- [x] T001 [US1] Parse tables in src/lib.rs\n\n## Phase 7: Convergence\n\n- [ ] T026 Route both tables in `src/lib.rs` per FR-003 (partial)\n";
 
 /// One test: its file must exist, then "the pattern is in src/lib.rs".
 const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\n[ -f \"$1\" ] || { echo \"error: no test file $1\" >&2; exit 2; }\nshift\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";

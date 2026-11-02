@@ -430,6 +430,7 @@ fn project_view(c: &Ctx<'_>) -> (Vec<String>, String) {
         layout: None,
         told: &[],
         related: &[],
+        oracle: false,
     };
     let files: Vec<String> = worktree::checkpoint(setup.worktree, setup.tmp)
         .and_then(|cp| worktree::files(setup.worktree, &cp))

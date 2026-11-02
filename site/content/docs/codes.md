@@ -115,6 +115,8 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`NOT-DEMONSTRATED`](#not-demonstrated) | stop | 23 | the evidence the task needs could not be produced |
 | [`TESTS-COLLECTION-UNKNOWN`](#tests-collection-unknown) | stop | 23 | speccoder cannot tell whether the runner ran a test file |
 | [`STORY-OPEN`](#story-open) | stop | 23 | the story's last task left scenarios of its oracle red |
+| [`STORY-UNTESTABLE`](#story-untestable) | stop | 23 | the story's last task waits on scenarios called untestable |
+| [`TASK-HOLDS`](#task-holds) | stop | 23 | the scenarios the task cites already hold |
 | [`ORACLE-UNWRITTEN`](#oracle-unwritten) | stop | 23 | the story's oracle got no usable test for any scenario |
 | [`ACCEPTANCE-UNWRITTEN`](#acceptance-unwritten) | stop | 23 | the acceptance tests could not be written, so nothing was attempted |
 | [`SUSPECTED-GAMING`](#suspected-gaming) | stop | 23 | the gaming monitor suspects a shortcut |
@@ -1035,6 +1037,23 @@ The story's last open code task must leave every scenario of the story's oracle 
 
 - `speccoder task nudge <task> --note "…"`
 - `speccoder task rule <task> --tests-wrong --scenario <id> --reason "…"`
+
+### STORY-UNTESTABLE
+
+The story's last task waits on scenarios called untestable.
+
+The test author called a scenario of the story untestable, so no test judges it and no attempt can turn it. The story's last task waits for a person before any model is called: accept it (`speccoder story accept US2-2 --reason "…"`, recorded on the feature's branch), or rule its test wrong so it is written again.
+
+- `speccoder task rule <task> --tests-wrong --scenario <scenario> --reason "…"`
+
+### TASK-HOLDS
+
+The scenarios the task cites already hold.
+
+A task outside a story that cites scenarios is judged by their story's oracle. Every one it cites already passes on the feature's branch, so there is nothing for it to do and no model was called. Tick it on your word, or skip it.
+
+- `speccoder task accept <task> --reason "…"`
+- `speccoder task skip <task> --reason "…"`
 
 ### ORACLE-UNWRITTEN
 

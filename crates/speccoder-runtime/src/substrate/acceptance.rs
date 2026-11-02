@@ -23,9 +23,8 @@ pub fn policy(w: &Wording) -> String {
 BEFORE it is implemented. Turn {examples} into \
 executable tests in the project's own language and test framework, exactly as the spec \
 states them — do not invent behaviour the spec does not state, and do not weaken an \
-example. Put them where the project's test runner collects them: in the file named under \
-\"Where the tests go\" below (the story's file, to which you only ADD a section, or a NEW \
-file), using the crate or package name from the manifest — and give the command that \
+example. Put them where the project's test runner collects them: in the NEW file named under \
+\"Where the tests go\" below, using the crate or package name from the manifest — and give the command that \
 runs only that file (named there too). Call the project's code by the modules, names and \
 return shapes it has (under \"The code as it is\"): only what this task itself adds may not \
 exist yet — never a module, name or shape you imagine. No two tests — yours or \
@@ -296,8 +295,9 @@ pub fn held_out_input(
     composition: bool,
     instructions: &[crate::instructions::Instruction],
     test_layout: Option<&str>,
+    known: &Known<'_>,
 ) -> Tainted<Value> {
-    Tainted::object([
+    let mut parts = vec![
         ("test_layout", layout_part(test_layout)),
         ("instructions", instructions_part(instructions)),
         ("set", Tainted::trusted(json!("held_out"))),
@@ -321,7 +321,23 @@ pub fn held_out_input(
                     .collect::<Vec<_>>()
             )),
         ),
-    ])
+    ];
+    // A person's rulings, the suite and the code: as the visible author.
+    if !known.told.is_empty() {
+        parts.push(("told", Tainted::trusted(json!(known.told))));
+    }
+    for (key, part) in [("suite", known.suite), ("interface", known.interface)] {
+        if !part.is_empty() {
+            parts.push((
+                key,
+                Tainted::with_label(
+                    json!(part),
+                    super::provenance::from(super::provenance::WORKTREE),
+                ),
+            ));
+        }
+    }
+    Tainted::object(parts)
 }
 
 /// What the test author is told at review: the same author,
@@ -437,6 +453,11 @@ pub struct ReviewParts<'a> {
     pub suite: &'a [SuiteTest],
     /// The code's declarations, as it is.
     pub interface: &'a [SuiteTest],
+    /// The commands a test of the story runs (its interface is a command
+    /// line): as a person types them.
+    pub commands: &'a [String],
+    /// Why speccoder refused the earlier answer.
+    pub refused: &'a [String],
 }
 
 /// The review-time author's input: `{ mode: "review", … }`.
@@ -471,6 +492,12 @@ pub fn review_input(p: &ReviewParts<'_>) -> Tainted<Value> {
                 ),
             ));
         }
+    }
+    if !p.commands.is_empty() {
+        parts.push(("commands", Tainted::trusted(json!(p.commands))));
+    }
+    if !p.refused.is_empty() {
+        parts.push(("refused", Tainted::trusted(json!(p.refused))));
     }
     if let Some((path, content)) = p.again {
         parts.push((
@@ -827,6 +854,18 @@ impl Skill for Acceptance {
                     text.push_str("\n\n# speccoder refused your earlier answer\n\nWrite the tests again without this:\n");
                     for r in refused {
                         text.push_str(&format!("\n- {r}"));
+                    }
+                }
+                let commands: Vec<&str> = input["commands"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .collect();
+                if !commands.is_empty() {
+                    text.push_str("\n\n# The project's commands\n\nThe story's interface: each test runs one of these as a person would (a subprocess, the binary) — never only a module behind it; a test that does not is discarded.\n");
+                    for c in commands {
+                        text.push_str(&format!("\n- `{c}`"));
                     }
                 }
                 if let Some(code) = input["interface"].as_array().filter(|a| !a.is_empty()) {

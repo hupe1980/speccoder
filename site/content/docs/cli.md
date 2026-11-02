@@ -92,6 +92,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder task rule T --tests-wrong [--scenario ID] --reason R` | Rule that tests are wrong: a story task's scenario (`--scenario`), or a task's own test outside a story. The next run writes them again, your reason told to their author ([what judges each task](@/docs/evidence.md#what-judges-each-task)) |
 | `speccoder task restore T` / `task drop T` | Keep or discard the [changes set aside](@/docs/running.md#changes-set-aside) |
 | `speccoder task acceptance-at T --story US [--revoke]` | Write the story's oracle before this Setup or Foundational task ([plan checks](@/docs/planning.md#plan-checks)) |
+| `speccoder story accept SCENARIO --reason R` | Accept a scenario its test author called untestable: the story's last task no longer waits for it; your reason is committed on the feature's branch ([what judges each task](@/docs/evidence.md#what-judges-each-task)) |
 | `speccoder story check US` | Write the story's oracle when it has none, run it once on the feature's branch, and say which scenarios the code holds ([what judges each task](@/docs/evidence.md#what-judges-each-task)) |
 | `speccoder task show T [--account]` | The task's state and evidence; `--account` adds what the model said in its last attempt (a claim) |
 

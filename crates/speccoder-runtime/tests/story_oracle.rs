@@ -22,7 +22,7 @@ const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n
 
 /// One test: its file must exist, then "the pattern is in src/lib.rs",
 /// with libtest's summary line.
-const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\n[ -f \"$1\" ] || { echo \"error: no test file $1\" >&2; exit 2; }\nshift\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\n[ -f \"$1\" ] || { echo \"error: no test file $1\" >&2; exit 2; }\nshift\ncase \"$1\" in missing:*) echo \"FAILED tests/t.py::t - ModuleNotFoundError: No module named 'src.nope'\"; echo '============ 1 failed in 0.01s ============'; exit 1;; esac\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 const SPEC: &str = "# Spec\n\n### User Story 1 - Tables (Priority: P1)\n\nTables convert.\n\n**Independent Test**: run the command with a table.\n\n**Acceptance Scenarios**:\n\n1. **Given** a table, **When** converted, **Then** alpha holds.\n2. **Given** a bad table, **When** converted, **Then** beta holds.\n3. **Given** two tables, **When** converted, **Then** gamma holds.\n";
 
@@ -435,36 +435,70 @@ fn given(r: &Path, task: &str) -> String {
         .unwrap_or_default()
 }
 
-/// The scenario ids under the prompt's scenarios heading.
-fn judged(asked: &str) -> Vec<String> {
-    let text = asked.replace("\\n", "\n");
-    let Some(at) = text.find("# Scenarios") else {
-        return Vec::new();
-    };
-    text[at..]
-        .lines()
-        .skip(1)
-        .filter_map(|l| l.trim().strip_prefix("- "))
-        .take_while(|l| l.starts_with("US"))
-        .filter_map(|l| l.split(':').next().map(str::to_owned))
-        .collect()
-}
-
-/// A Convergence task closes one gap the stories left: its own test,
-/// judged by the scenario its line cites (`US1/AC3`, as Spec Kit's
-/// converge writes it), seeing its phase's other gaps.
+/// A Convergence task citing a scenario (`US1/AC3`, as Spec Kit's converge
+/// writes it) is judged by that scenario's one test — its story's oracle,
+/// written first when the story has none — never a second test of its own.
 #[test]
-fn a_convergence_task_is_judged_by_the_scenario_it_cites() {
+fn a_convergence_task_is_judged_by_its_scenario_s_oracle_test() {
     let tasks = format!(
-        "{}\n## Phase 7: Convergence\n\n- [ ] T026 Route both tables in src/lib.rs per FR-008, US1/AC3 (partial)\n- [ ] T027 Keep cell whitespace in src/lib.rs per FR-005 (partial)\n",
+        "{}\n## Phase 7: Convergence\n\n- [ ] T026 Route both tables in src/lib.rs per FR-008, US1/AC3 (partial)\n",
         TASKS.replace("- [ ]", "- [x]")
     );
     let r = repo_with(&tasks);
-    let asked = given(r.path(), "T026");
-    assert_eq!(judged(&asked), ["US1-3"], "{asked}");
-    for s in ["The phase's other tasks", "T027 Keep cell whitespace"] {
-        assert!(asked.contains(s), "{s} missing from {asked}");
-    }
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(oracle_answer());
+    implements(&f, "pub fn gamma() {}");
+    let res = run(r.path(), state.path(), "T026", &f);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let authors = f.asked().iter().filter(|a| a.tools.is_empty()).count();
+    assert_eq!(
+        authors, 1,
+        "the story's oracle, once; no test of the task's own"
+    );
+    assert!(
+        trailer(r.path(), "Scenarios").contains("US1-3@"),
+        "{}",
+        trailer(r.path(), "Scenarios")
+    );
+    let files = on_branch(r.path(), &["ls-tree", "-r", "--name-only"]);
+    assert!(!files.contains("t026"), "no second test of US1-3: {files}");
+    assert_eq!(
+        report(&res).verdict,
+        Some(speccoder_core::verify::Verdict::Verified)
+    );
+
+    // What it cites already holds: no attempt, no tick — the person says.
+    let r = repo_with(&tasks);
+    fs::write(
+        r.path().join("src/lib.rs"),
+        "pub fn ok() {}\npub fn gamma() {}\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "gamma"]);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(oracle_answer());
+    let res = speccoder_runtime::next::attach(run(r.path(), state.path(), "T026", &f), None);
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("TASK-HOLDS"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        res.message().starts_with("US1-3 already holds"),
+        "{}",
+        res.message()
+    );
+    assert_eq!(f.asked().len(), 1, "the oracle's author only");
+    assert_eq!(
+        res.fix(),
+        [
+            "speccoder task accept T026 --reason \"…\"",
+            "speccoder task skip T026 --reason \"…\""
+        ]
+    );
 }
 
 /// A link to no scenario of its story, and a story with no code task, are
@@ -497,7 +531,7 @@ fn the_plan_says_when_a_link_names_nothing_or_no_task_judges_a_story() {
 #[test]
 fn a_task_outside_a_story_has_its_wrong_test_ruled_and_written_again() {
     let tasks = format!(
-        "{}\n## Phase 7: Convergence\n\n- [ ] T026 Route both tables in `src/lib.rs` per US1/AC3 (partial)\n- [ ] T028 Describe it in specs/001-graph/quickstart.md\n",
+        "{}\n## Phase 7: Convergence\n\n- [ ] T026 Route both tables in `src/lib.rs` per FR-003 (partial)\n- [ ] T028 Describe it in specs/001-graph/quickstart.md\n",
         TASKS.replace("- [ ]", "- [x]")
     );
     let r = repo_with(&tasks);
@@ -641,7 +675,7 @@ fn a_story_ticked_before_its_oracle_is_said_as_such() {
 #[test]
 fn the_author_sees_the_suite_s_tests_on_the_same_code() {
     let tasks = format!(
-        "{}\n## Phase 7: Convergence\n\n- [ ] T026 Keep whitespace in `escape_cell` in src/lib.rs per US1/AC3 (partial)\n",
+        "{}\n## Phase 7: Convergence\n\n- [ ] T026 Keep whitespace in `escape_cell` in src/lib.rs per FR-005 (partial)\n",
         TASKS.replace("- [ ]", "- [x]")
     );
     let r = repo_with(&tasks);
@@ -713,12 +747,278 @@ fn a_story_check_that_keeps_nothing_says_why_and_names_the_story() {
     assert_eq!(res.fix(), ["speccoder review tests US1 --write"]);
 }
 
+/// A story whose Independent Test runs the command: an oracle test that
+/// only greps the code is refused, the author told the command (the sample's
+/// US2/US3 tests imported services while the command ran on stubs).
+#[test]
+fn an_oracle_test_runs_the_product_s_command() {
+    let r = repo_with(&TASKS.replace("- [ ]", "- [x]"));
+    fs::write(r.path().join("Cargo.toml"), "[package]\nname = \"graph\"\n").unwrap();
+    fs::write(r.path().join("src/main.rs"), "fn main() {}\n").unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-qm", "a command"]);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(oracle_answer());
+    let mut through = oracle_answer();
+    for file in through["files"].as_array_mut().unwrap() {
+        let c = file["content"].as_str().unwrap().to_owned();
+        file["content"] = json!(format!("runs cargo run -- and {c}"));
+    }
+    f.will_structure(through);
+    let d: Arc<dyn ModelProvider> = f.clone();
+    let res = speccoder_runtime::pipeline::story::check_with(
+        r.path(),
+        None,
+        "US1",
+        state.path(),
+        &d,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let first = serde_json::to_string(&f.asked()[0].prompt).unwrap();
+    assert!(
+        first.contains("# The project's commands") && first.contains("`graph`"),
+        "{first}"
+    );
+    let again = serde_json::to_string(&f.asked()[1].prompt).unwrap();
+    assert!(
+        again.contains("speccoder refused your earlier answer"),
+        "{again}"
+    );
+    assert!(
+        again.contains("never runs the project's command"),
+        "{again}"
+    );
+    assert!(
+        !again.contains("# The person's notes on earlier tests"),
+        "speccoder's words are not the person's: {again}"
+    );
+}
+
+/// A gap test red only by its own import error (the sample's T032) is no
+/// evidence: taken out and asked again, told the runner's own line.
+#[test]
+fn a_test_red_only_by_its_own_error_is_written_again() {
+    let tasks = format!(
+        "{}\n## Phase 7: Convergence\n\n- [ ] T032 Report a missing header in `src/lib.rs` per FR-004 (partial)\n",
+        TASKS.replace("- [ ]", "- [x]")
+    );
+    let r = repo_with(&tasks);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    let gap = |pattern: &str| {
+        json!({
+            "files": [{ "path": "tests/acceptance_t032.txt", "content": format!("checks {pattern}\n"), "scenarios": ["US1-3"] }],
+            "argv": ["./accept.sh", "--", "tests/acceptance_t032.txt", pattern],
+            "notes": [],
+        })
+    };
+    f.will_structure(gap("missing:src.nope"));
+    f.will_structure(gap("fn gamma"));
+    implements(&f, "pub fn gamma() {}");
+    let res = run(r.path(), state.path(), "T032", &f);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let again = serde_json::to_string(&f.asked()[1].prompt).unwrap();
+    assert!(
+        again.contains("fail only on what the code does not have (src.nope)"),
+        "{again}"
+    );
+    assert_eq!(
+        report(&res).verdict,
+        Some(speccoder_core::verify::Verdict::Verified)
+    );
+
+    // A module the task adds (its line names it) is the task's red: no
+    // second author call.
+    let tasks = format!(
+        "{}\n## Phase 7: Convergence\n\n- [ ] T032 Add `src/nope.py` reporting a missing header per FR-004 (partial)\n",
+        TASKS.replace("- [ ]", "- [x]")
+    );
+    let r = repo_with(&tasks);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(gap("missing:src.nope"));
+    implements(&f, "pub fn gamma() {}");
+    let _ = run(r.path(), state.path(), "T032", &f);
+    assert_eq!(
+        f.asked().iter().filter(|a| a.tools.is_empty()).count(),
+        1,
+        "one author call: red of what the task adds"
+    );
+}
+
+/// A scenario its author called untestable: the story's last task waits on
+/// a person before any attempt; accepted, it closes the story and its tick
+/// names who accepted it and why.
+#[test]
+fn an_untestable_scenario_waits_for_a_person_at_the_checkpoint() {
+    let tasks = TASKS
+        .replace("- [ ] T001", "- [x] T001")
+        .replace("- [ ] T002", "- [x] T002")
+        .replace("- [ ] T004", "- [x] T004");
+    let r = repo_with(&tasks);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    let mut oracle = oracle_answer();
+    oracle["files"].as_array_mut().unwrap().truncate(2);
+    oracle["untestable"] = json!([{ "scenario": "US1-3", "why": "needs a second screen" }]);
+    f.will_structure(oracle);
+    let res = speccoder_runtime::next::attach(run(r.path(), state.path(), "T003", &f), None);
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("STORY-UNTESTABLE"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        res.message().contains("US1-3 (\"needs a second screen\")"),
+        "{}",
+        res.message()
+    );
+    assert_eq!(f.asked().len(), 1, "the oracle's author only, no attempt");
+    assert_eq!(
+        res.fix(),
+        [
+            "speccoder story accept US1-3 --reason \"…\"",
+            "speccoder task rule T003 --tests-wrong --scenario US1-3 --reason \"…\""
+        ]
+    );
+    let accepted = speccoder_runtime::acceptance_at::accept_untestable(
+        r.path(),
+        None,
+        "US1-3",
+        "a person checks the second screen",
+        speccoder_core::actions::Via::Terminal,
+        state.path(),
+    );
+    assert_eq!(
+        accepted.status(),
+        CommandStatus::Ok,
+        "{}",
+        accepted.message()
+    );
+    let f = FakeProvider::new();
+    implements(&f, "pub fn alpha() {}\npub fn beta() {}");
+    let res = run(r.path(), state.path(), "T003", &f);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    // Committed on the feature's branch when accepted, ahead of the tick.
+    let said = on_branch(
+        r.path(),
+        &[
+            "log",
+            "--format=%(trailers:key=Untestable-Accepted,valueonly)",
+        ],
+    )
+    .trim()
+    .to_owned();
+    assert!(
+        said.starts_with("US1-3 by ") && said.ends_with(" — a person checks the second screen"),
+        "{said}"
+    );
+    let status = speccoder_runtime::status::report(r.path(), None);
+    let Some(CommandData::Report(st)) = status.data() else {
+        panic!("{}", status.message());
+    };
+    assert!(
+        st.stories.first().is_some_and(|s| s.proven),
+        "{:?}",
+        st.stories
+    );
+}
+
+/// A story check finding every scenario green on finished code: it holds,
+/// never *proven* — no tick turned a scenario red→green.
+#[test]
+fn a_story_checked_after_its_code_holds_and_is_not_proven() {
+    let r = repo_with(&TASKS.replace("- [ ]", "- [x]"));
+    fs::write(
+        r.path().join("src/lib.rs"),
+        "pub fn ok() {}\npub fn alpha() {}\npub fn beta() {}\npub fn gamma() {}\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "all built before oracles"]);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(oracle_answer());
+    let d: Arc<dyn ModelProvider> = f.clone();
+    let res = speccoder_runtime::pipeline::story::check_with(
+        r.path(),
+        None,
+        "US1",
+        state.path(),
+        &d,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    assert!(
+        res.message().contains("3 of 3 scenario(s) hold"),
+        "{}",
+        res.message()
+    );
+    let status = speccoder_runtime::status::report(r.path(), None);
+    let Some(CommandData::Report(st)) = status.data() else {
+        panic!("{}", status.message());
+    };
+    let story = st.stories.first().expect("US1");
+    assert!(story.finished && !story.proven, "{story:?}");
+}
+
+/// A tick counts every model call of its run: the story's oracle it wrote
+/// costs the task (the sample's `report --cost` left 43 author runs out).
+#[test]
+fn a_tick_counts_the_oracle_it_wrote() {
+    let tasks = format!(
+        "{}\n## Phase 7: Convergence\n\n- [ ] T026 Route both tables in src/lib.rs per US1/AC3 (partial)\n",
+        TASKS.replace("- [ ]", "- [x]")
+    );
+    let input = |r: &Path| -> u64 {
+        let u = trailer(r, "Usage");
+        u.split_whitespace()
+            .find_map(|w| w.strip_prefix("input="))
+            .and_then(|n| n.parse().ok())
+            .unwrap_or_else(|| panic!("no input in {u}"))
+    };
+    // The oracle written in the task's run.
+    let r = repo_with(&tasks);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(oracle_answer());
+    implements(&f, "pub fn gamma() {}");
+    let res = run(r.path(), state.path(), "T026", &f);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let with_oracle = input(r.path());
+    // The oracle written before, by a story check: the task's run only.
+    let r = repo_with(&tasks);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(oracle_answer());
+    let d: Arc<dyn ModelProvider> = f.clone();
+    let checked = speccoder_runtime::pipeline::story::check_with(
+        r.path(),
+        None,
+        "US1",
+        state.path(),
+        &d,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    assert_eq!(checked.status(), CommandStatus::Ok, "{}", checked.message());
+    let f = FakeProvider::new();
+    implements(&f, "pub fn gamma() {}");
+    let res = run(r.path(), state.path(), "T026", &f);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert!(
+        with_oracle > input(r.path()),
+        "{with_oracle} vs {}",
+        input(r.path())
+    );
+}
+
 /// A gap test on a requirement another task's test already judges (the
 /// sample's T032 contradicted T029's): its author is shown that test.
 #[test]
 fn the_author_sees_the_tests_of_tasks_on_the_same_requirement() {
     let tasks = format!(
-        "{}\n## Phase 7: Convergence\n\n- [x] T029 Validate the header per US1/AC3 (partial)\n- [ ] T032 Report a missing header per US1/AC3, T029 (partial)\n- [ ] T033 Describe it per US1/AC1\n",
+        "{}\n## Phase 7: Convergence\n\n- [x] T029 Validate the header per FR-004 (partial)\n- [ ] T032 Report a missing header per FR-004, T029 (partial)\n- [ ] T033 Describe it per FR-001\n",
         TASKS.replace("- [ ]", "- [x]")
     );
     let r = repo_with(&tasks);
@@ -746,7 +1046,7 @@ fn the_author_sees_the_tests_of_tasks_on_the_same_requirement() {
 #[test]
 fn a_placeholder_test_is_refused_never_red() {
     let tasks = format!(
-        "{}\n## Phase 7: Convergence\n\n- [ ] T029 Validate the header in `src/lib.rs` per US1/AC3 (partial)\n",
+        "{}\n## Phase 7: Convergence\n\n- [ ] T029 Validate the header in `src/lib.rs` per FR-004 (partial)\n",
         TASKS.replace("- [ ]", "- [x]")
     );
     let r = repo_with(&tasks);
@@ -791,7 +1091,7 @@ fn a_placeholder_test_is_refused_never_red() {
 #[test]
 fn a_test_of_imagined_code_is_written_again_before_any_attempt() {
     let tasks = format!(
-        "{}\n## Phase 7: Convergence\n\n- [ ] T032 Validate the header in the conversion flow per US1/AC3 (partial)\n",
+        "{}\n## Phase 7: Convergence\n\n- [ ] T032 Validate the header in the conversion flow per FR-004 (partial)\n",
         TASKS.replace("- [ ]", "- [x]")
     );
     let r = repo_with(&tasks);
@@ -886,7 +1186,10 @@ fn a_story_ticked_before_its_oracle_is_checked() {
             .iter()
             .map(|n| n.command.as_str())
             .collect::<Vec<_>>(),
-        ["speccoder converge"]
+        [
+            "speccoder converge",
+            "speccoder task rule T004 --tests-wrong --scenario US1-2 --reason \"…\""
+        ]
     );
     let oracle = on_branch(
         r.path(),

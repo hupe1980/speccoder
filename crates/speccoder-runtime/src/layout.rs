@@ -647,3 +647,231 @@ mod tests {
         );
     }
 }
+
+/// A command the project declares: what a person runs, and the words a
+/// test that runs it names (the command, its entry module, its binary).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Command {
+    /// As a person types it: `md2csv`, `python -m pkg`.
+    pub shown: String,
+    /// Any of these in a test's text means it runs the command.
+    pub runs: Vec<String>,
+}
+
+impl Command {
+    /// Whether `test` runs this command.
+    #[must_use]
+    pub fn run_by(&self, test: &str) -> bool {
+        self.runs.iter().any(|w| test.contains(w.as_str()))
+    }
+}
+
+/// The commands `root` declares: `[project.scripts]` and a package's
+/// `__main__.py` (Python), a Cargo binary, a `package.json` `bin`.
+#[must_use]
+pub fn commands(root: &Path) -> Vec<Command> {
+    let read = |p: &str| std::fs::read_to_string(root.join(p)).ok();
+    let quoted = |w: &str| vec![format!("\"{w}\""), format!("'{w}'")];
+    let mut out = Vec::new();
+    if let Some(t) = read("pyproject.toml").and_then(|t| t.parse::<toml::Table>().ok()) {
+        let scripts = t
+            .get("project")
+            .and_then(|p| p.get("scripts"))
+            .and_then(toml::Value::as_table);
+        for (name, target) in scripts.into_iter().flatten() {
+            let module = target
+                .as_str()
+                .and_then(|s| s.split(':').next())
+                .unwrap_or_default();
+            let top = module.split('.').next().unwrap_or_default();
+            let mut runs = quoted(name);
+            if !top.is_empty() {
+                runs.extend([
+                    format!("import {top}"),
+                    format!("from {top}"),
+                    format!("\"{top}\""),
+                    format!("'{top}'"),
+                ]);
+            }
+            out.push(Command {
+                shown: name.clone(),
+                runs,
+            });
+        }
+    }
+    for base in ["src", "."] {
+        let Ok(dirs) = std::fs::read_dir(root.join(base)) else {
+            continue;
+        };
+        for d in dirs.flatten() {
+            let pkg = d.file_name().to_string_lossy().into_owned();
+            if d.path().join("__main__.py").is_file()
+                && !out.iter().any(|c| c.runs.contains(&format!("\"{pkg}\"")))
+            {
+                let mut runs = quoted(&pkg);
+                runs.extend([
+                    format!("-m {pkg}"),
+                    format!("import {pkg}"),
+                    format!("from {pkg}"),
+                ]);
+                out.push(Command {
+                    shown: format!("python -m {pkg}"),
+                    runs,
+                });
+            }
+        }
+    }
+    if let Some(t) = read("Cargo.toml").and_then(|t| t.parse::<toml::Table>().ok()) {
+        let mut bins: Vec<String> = t
+            .get("bin")
+            .and_then(toml::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|b| {
+                b.get("name")
+                    .and_then(toml::Value::as_str)
+                    .map(str::to_owned)
+            })
+            .collect();
+        if root.join("src/main.rs").is_file()
+            && let Some(name) = t
+                .get("package")
+                .and_then(|p| p.get("name"))
+                .and_then(toml::Value::as_str)
+        {
+            bins.push(name.to_owned());
+        }
+        for name in bins {
+            let env = format!("CARGO_BIN_EXE_{name}");
+            out.push(Command {
+                shown: name.clone(),
+                runs: vec![
+                    env,
+                    format!("cargo_bin(\"{name}\")"),
+                    "\"cargo\", \"run\"".to_owned(),
+                    "cargo run".to_owned(),
+                ],
+            });
+        }
+    }
+    if let Some(v) =
+        read("package.json").and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+    {
+        let name = v["name"]
+            .as_str()
+            .unwrap_or_default()
+            .rsplit('/')
+            .next()
+            .unwrap_or_default()
+            .to_owned();
+        let bins: Vec<(String, String)> = match &v["bin"] {
+            serde_json::Value::String(path) => vec![(name, path.clone())],
+            serde_json::Value::Object(m) => m
+                .iter()
+                .filter_map(|(k, p)| p.as_str().map(|p| (k.clone(), p.to_owned())))
+                .collect(),
+            _ => Vec::new(),
+        };
+        for (name, path) in bins {
+            let path = path.trim_start_matches("./").to_owned();
+            let mut runs = quoted(&name);
+            runs.push(path.clone());
+            runs.push(path.rsplit('/').next().unwrap_or(&path).to_owned());
+            out.push(Command { shown: name, runs });
+        }
+    }
+    out
+}
+
+/// Whether a story's *Independent Test* (its line in the story's text) is
+/// about a command line, by whole words: the interface is then the
+/// project's command, never an internal module. No such line: no.
+#[must_use]
+pub fn via_command(story: &str) -> bool {
+    let Some(line) = story
+        .lines()
+        .find(|l| l.contains("Independent Test"))
+        .map(str::to_ascii_lowercase)
+    else {
+        return false;
+    };
+    let words: Vec<&str> = line.split(|c: char| !c.is_alphanumeric()).collect();
+    let pair = |a: &str, b: &str| words.windows(2).any(|p| p[0] == a && p[1] == b);
+    ["command", "cli", "stdin", "stdout", "stderr", "terminal"]
+        .iter()
+        .any(|w| words.contains(w))
+        || pair("standard", "input")
+        || pair("standard", "output")
+        || pair("exit", "code")
+        || pair("exit", "status")
+}
+
+#[cfg(test)]
+mod command_tests {
+    use super::{commands, via_command};
+
+    /// The sample's project (2026-11-02): its oracle tests imported
+    /// `src.services…`, never the command its stories name.
+    #[test]
+    fn a_project_s_commands_and_what_runs_them() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let r = dir.path();
+        let write = |p: &str, t: &str| {
+            std::fs::create_dir_all(r.join(p).parent().unwrap_or(r))
+                .unwrap_or_else(|e| panic!("{e}"));
+            std::fs::write(r.join(p), t).unwrap_or_else(|e| panic!("{e}"));
+        };
+        write(
+            "pyproject.toml",
+            "[project]\nname = \"speccoder-poc\"\n\n[project.scripts]\nspeccoder-poc = \"speccoder_poc:main\"\n",
+        );
+        write(
+            "src/speccoder_poc/__main__.py",
+            "from . import main\nmain()\n",
+        );
+        let c = commands(r);
+        assert_eq!(
+            c.iter().map(|c| c.shown.as_str()).collect::<Vec<_>>(),
+            ["speccoder-poc"]
+        );
+        assert!(
+            c[0].run_by("subprocess.run([sys.executable, \"-m\", \"speccoder_poc\"], input=t)")
+        );
+        assert!(c[0].run_by("subprocess.run([\"speccoder-poc\", \"in.md\"])"));
+        assert!(c[0].run_by("from speccoder_poc import main\nmain([\"in.md\"])"));
+        assert!(!c[0].run_by("from src.services.table_parser import parse_markdown_table"));
+
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let r = dir.path();
+        std::fs::create_dir_all(r.join("src")).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(r.join("Cargo.toml"), "[package]\nname = \"md2csv\"\n")
+            .unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(r.join("src/main.rs"), "fn main() {}\n").unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(
+            r.join("package.json"),
+            "{\"name\": \"@x/tables\", \"bin\": {\"tables\": \"./bin/tables.js\"}}",
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        let c = commands(r);
+        assert_eq!(
+            c.iter().map(|c| c.shown.as_str()).collect::<Vec<_>>(),
+            ["md2csv", "tables"]
+        );
+        assert!(c[0].run_by("Command::new(env!(\"CARGO_BIN_EXE_md2csv\"))"));
+        assert!(c[1].run_by("execFileSync('node', ['bin/tables.js'])"));
+        assert!(!c[0].run_by("use md2csv::parse;"));
+
+        assert!(via_command(
+            "**Independent Test**: Can be tested by piping a valid Markdown table into the command"
+        ));
+        assert!(!via_command(
+            "**Independent Test**: Can be tested by calling parse() with a table"
+        ));
+        // Whole words of that line only: a client, a recommendation, the
+        // scenarios' words are no command line.
+        assert!(!via_command(
+            "**Independent Test**: the client follows the recommended flow"
+        ));
+        assert!(!via_command("1. **Given** the command, **Then** CSV"));
+    }
+}

@@ -111,6 +111,23 @@ pub(crate) fn record_inline_approvals(
     d.save(dir)
 }
 
+/// Every model call of a task's run: its attempts, and the judge-side
+/// calls that wrote and kept its tests (visible, held-out).
+pub(crate) fn all_usage(report: &speccoder_core::RunReport) -> Option<serde_json::Value> {
+    add_usage(
+        add_usage(
+            report.usage.as_ref(),
+            report.acceptance.as_ref().and_then(|a| a.get("usage")),
+        )
+        .as_ref(),
+        report
+            .acceptance
+            .as_ref()
+            .and_then(|a| a.get("held_out"))
+            .and_then(|h| h.get("usage")),
+    )
+}
+
 /// Sums two token usage objects key by key.
 pub(crate) fn add_usage(
     a: Option<&serde_json::Value>,
@@ -302,19 +319,7 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
         .as_ref()
         .map(super::outcome::verdict_word)
         .unwrap_or_default();
-    // Attempts and the judge-side acceptance calls together.
-    let usage = add_usage(
-        add_usage(
-            report.usage.as_ref(),
-            report.acceptance.as_ref().and_then(|a| a.get("usage")),
-        )
-        .as_ref(),
-        report
-            .acceptance
-            .as_ref()
-            .and_then(|a| a.get("held_out"))
-            .and_then(|h| h.get("usage")),
-    );
+    let usage = all_usage(report);
     let mut evidence = match (&report.regression, verdict_word.as_str()) {
         (Some(r), "regression_only") => format!(
             "{}: {}\n",

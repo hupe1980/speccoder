@@ -575,3 +575,102 @@ fn the_report_shows_an_open_tasks_last_attempt() {
     };
     assert_eq!(run.saved_attempt.as_deref(), Some(last.reference.as_str()));
 }
+
+/// Converge reads the oracles first (the sample's T032 restated T029): a
+/// red scenario of a finished story is appended without the model's word;
+/// a finding restating a done task, or citing a scenario that holds, is
+/// dropped and said why.
+#[test]
+fn converge_appends_red_scenarios_and_drops_what_holds() {
+    let r = repo(DONE, "[acceptance]\nheld_out = false\nstrength = false\n");
+    fs::write(
+        r.path().join("specs/001-graph/spec.md"),
+        "# Spec\n\n### User Story 1 - Login\n\nUsers log in.\n\n**Independent Test**: call login.\n\n**Acceptance Scenarios**:\n\n1. **Given** a user, **When** they log in, **Then** login holds.\n2. **Given** a user, **When** they log out, **Then** logout holds.\n\n- **FR-001**: Users can log in.\n- **FR-002**: Empty names are rejected.\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "scenarios"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let test = |path: &str, scenario: &str, pattern: &str| json!({ "path": path, "content": format!("checks {pattern}\n"), "scenarios": [scenario], "argv": ["./accept.sh", "--", path, pattern] });
+    f.will_structure(json!({
+        "files": [
+            test("tests/acceptance_us1_login.txt", "US1-1", "fn login"),
+            test("tests/acceptance_us1_logout.txt", "US1-2", "fn logout"),
+        ],
+        "argv": [],
+        "notes": [],
+        "expectations": [
+            { "scenario": "US1-1", "given": "a user", "expect": "login holds" },
+            { "scenario": "US1-2", "given": "a user", "expect": "logout holds" },
+        ],
+        "untestable": [],
+    }));
+    f.will_structure(answer(&[
+        finding(
+            "partial",
+            "HIGH",
+            "T002",
+            "Add login in src/lib.rs, as T002 meant",
+        ),
+        finding(
+            "missing",
+            "MEDIUM",
+            "FR-002",
+            "T002 added login but empty names pass",
+        ),
+        finding("partial", "MEDIUM", "US1/AC1", "Harden the login path"),
+        finding(
+            "missing",
+            "HIGH",
+            "FR-002",
+            "Reject empty names in src/lib.rs",
+        ),
+    ]));
+    let res = converge(r.path(), state.path(), d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.stories,
+        ["US1: 1 of 2 hold (oracle written now)"],
+        "{}",
+        res.message()
+    );
+    assert_eq!(
+        rep.appended.len(),
+        3,
+        "{} {:?} {:?}",
+        res.message(),
+        rep.appended,
+        rep.dropped
+    );
+    assert!(
+        rep.appended[0]
+            .contains("Make US1-2 hold through the story's interface per US1/AC2 (scenario)"),
+        "{:?}",
+        rep.appended
+    );
+    assert!(
+        rep.appended
+            .iter()
+            .any(|a| a.contains("Reject empty names")),
+        "{:?}",
+        rep.appended
+    );
+    // A real gap that names a done task stays.
+    assert!(
+        rep.appended.iter().any(|a| a.contains("empty names pass")),
+        "{:?}",
+        rep.appended
+    );
+    let whys: Vec<&str> = rep
+        .dropped
+        .iter()
+        .filter_map(|d| d["why"].as_str())
+        .collect();
+    assert_eq!(
+        whys,
+        [
+            "restates T002, which is done, with no red scenario",
+            "US1-1 already holds"
+        ]
+    );
+}

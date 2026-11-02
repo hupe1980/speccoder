@@ -163,8 +163,9 @@ pub struct StoryScenarios {
     /// The story's oracle, once written.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oracle: Option<OracleMark>,
-    /// Every task done and every scenario green: the spec shows it, the
-    /// report and the board leave it out.
+    /// Every task done and every scenario turned red→green by a tick: the
+    /// spec shows it, the report and the board leave it out. Green found by
+    /// an oracle written after the code is no proof.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub proven: bool,
     /// Every task of the story done.

@@ -289,6 +289,13 @@ pub enum Runnable {
         /// The scenario (`US3-2`); none: the task's own test.
         scenario: Option<String>,
     },
+    /// Accept a scenario its test author called untestable (the input is
+    /// the reason): its story's checkpoint no longer waits for it, and the
+    /// tick records who accepted it.
+    AcceptUntestable {
+        /// The scenario (`US2-2`).
+        scenario: String,
+    },
     /// Install the bundled `speccoder` Spec Kit preset through Spec Kit's
     /// own `specify preset add` (`update`: the installed one, replaced).
     PresetAdd {
@@ -612,6 +619,8 @@ pub enum ActionKind {
     RuleScenario,
     /// [`Runnable::CheckStory`].
     CheckStory,
+    /// [`Runnable::AcceptUntestable`].
+    AcceptUntestable,
     /// [`Runnable::PresetAdd`].
     PresetAdd,
     /// [`Runnable::PlanThrough`].
@@ -676,6 +685,7 @@ impl ActionKind {
         Self::AcceptanceAt,
         Self::RuleScenario,
         Self::CheckStory,
+        Self::AcceptUntestable,
         Self::PresetAdd,
         Self::PlanThrough,
         Self::NewProject,
@@ -730,6 +740,7 @@ impl ActionKind {
             Self::AcceptanceAt => "acceptance_at",
             Self::RuleScenario => "rule_scenario",
             Self::CheckStory => "check_story",
+            Self::AcceptUntestable => "accept_untestable",
             Self::PresetAdd => "preset_add",
             Self::PlanThrough => "plan_through",
             Self::NewProject => "new_project",
@@ -877,6 +888,9 @@ impl ActionKind {
             Self::CheckStory => Runnable::CheckStory {
                 story: "US3".to_owned(),
             },
+            Self::AcceptUntestable => Runnable::AcceptUntestable {
+                scenario: "US2-2".to_owned(),
+            },
             Self::RuleScenario => Runnable::RuleScenario {
                 task: "T021".to_owned(),
                 scenario: Some("US3-2".to_owned()),
@@ -974,6 +988,7 @@ impl Runnable {
             Self::AcceptanceAt { .. } => ActionKind::AcceptanceAt,
             Self::RuleScenario { .. } => ActionKind::RuleScenario,
             Self::CheckStory { .. } => ActionKind::CheckStory,
+            Self::AcceptUntestable { .. } => ActionKind::AcceptUntestable,
             Self::PresetAdd { .. } => ActionKind::PresetAdd,
             Self::PlanThrough { .. } => ActionKind::PlanThrough,
             Self::NewProject { .. } => ActionKind::NewProject,
@@ -1042,6 +1057,7 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         Runnable::ExploreChoose { session, .. } => Some(session.clone()),
         Runnable::OracleTests { req, .. } => Some(req.clone()),
         Runnable::CheckStory { story } => Some(story.clone()),
+        Runnable::AcceptUntestable { scenario } => Some(scenario.clone()),
         Runnable::ApproveAndRun { mode, .. } => Some(mode.as_str().to_owned()),
         Runnable::Comment { id, .. } => id.clone(),
         Runnable::RevisionUndo { turn } => turn.clone(),

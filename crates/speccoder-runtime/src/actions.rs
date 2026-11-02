@@ -589,6 +589,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::CodeNudge
             | K::AcceptanceAt
             | K::RuleScenario
+            | K::AcceptUntestable
             | K::PresetAdd
             | K::PlanThrough
             | K::NewProject
@@ -640,6 +641,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::CodeNudge
             | K::AcceptanceAt
             | K::RuleScenario
+            | K::AcceptUntestable
             | K::PresetAdd
             | K::NewProject
             | K::UndoNewProject
@@ -688,6 +690,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::CodeNudge
             | K::AcceptanceAt
             | K::RuleScenario
+            | K::AcceptUntestable
             | K::PresetAdd
             | K::NewProject
             | K::UndoNewProject
@@ -735,6 +738,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::CodeNudge
             | K::AcceptanceAt
             | K::RuleScenario
+            | K::AcceptUntestable
             | K::PresetAdd
             | K::PlanThrough
             | K::NewProject
@@ -785,6 +789,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::CodeNudge
             | K::AcceptanceAt
             | K::RuleScenario
+            | K::AcceptUntestable
             | K::PresetAdd
             | K::PlanThrough
             | K::NewProject
@@ -924,6 +929,13 @@ pub fn perform_in(
                 via,
                 s,
             ),
+            (None, _) => needs("a reason"),
+            (_, None) => no_state(),
+        },
+        Runnable::AcceptUntestable { scenario } => match (text, state) {
+            (Some(why), Some(s)) => {
+                crate::acceptance_at::accept_untestable(root, feature, scenario, why, via, s)
+            }
             (None, _) => needs("a reason"),
             (_, None) => no_state(),
         },

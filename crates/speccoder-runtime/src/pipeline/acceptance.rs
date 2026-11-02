@@ -30,6 +30,9 @@ pub(crate) struct AcceptanceSetup<'a> {
     /// The tasks on the same requirements (or named by this one's line):
     /// their tests are shown, never contradicted.
     pub(crate) related: &'a [String],
+    /// A story's oracle, written before its code: imports of what the
+    /// story adds are expected, never checked against the code.
+    pub(crate) oracle: bool,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -125,7 +128,9 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     // A refused answer is asked for once more, told exactly why: what
     // speccoder refuses is checked, never left to the author's reading.
     let mut refusals: Vec<String> = Vec::new();
-    let (answer, base, valid) = loop {
+    // Both calls' tokens, when it is asked again.
+    let mut spent: Option<serde_json::Value> = None;
+    let (answer, base, planned, argv, ran) = loop {
         let input = substrate::acceptance::input(
             a.bundle.clone(),
             a.scenarios,
@@ -151,7 +156,8 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
             .map(|o| o.peek().clone())
             .unwrap_or_default();
         let answer = output["answer"].clone();
-        let mut base = json!({ "run_id": outcome.run_id.to_string(), "usage": output["usage"], "notes": answer["notes"] });
+        spent = super::commit::add_usage(spent.as_ref(), output.get("usage"));
+        let mut base = json!({ "run_id": outcome.run_id.to_string(), "usage": spent, "notes": answer["notes"] });
         if !matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded) || answer.is_null()
         {
             let status = format!("{:?}", outcome.status);
@@ -167,73 +173,129 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
 
         // Validate: new test files only, a command the policy allows, and
         // calls to code that is there (or that the task adds).
-        let (valid, mut refused) = validate_answer(&answer, a.project, a.policy, a.scenarios);
-        refused.extend(valid.iter().filter_map(|f| {
-            imagined(a.worktree, &f.path, &f.content, title).map(|message| RefusedFile {
-                message,
-                path: f.path.clone(),
-                why: "imagined",
-            })
-        }));
-        match refused.first() {
-            None => break (answer, base, valid),
-            Some(r) if refusals.is_empty() => refusals.push(r.message.clone()),
-            Some(r) => {
-                return skipped_by(
-                    r.message.clone(),
-                    Some(SkipCause::Refused {
-                        path: r.path.clone(),
-                        why: refusal_words(r.why).to_owned(),
+        let (valid, refused) =
+            validate_answer(&answer, a.project, a.policy, a.scenarios, Some(title));
+        // Valid: written and run red here, so a test red only by its own
+        // error, or one that does not build or collect, is refused too.
+        let mut refused = refused;
+        let planned: Vec<(String, String)> = valid
+            .iter()
+            .map(|f| (f.path.clone(), f.content.clone()))
+            .collect();
+        let argv: Vec<String> = argv_of(&answer["argv"]);
+        let paths: Vec<&str> = planned.iter().map(|(p, _)| p.as_str()).collect();
+        let mut ran = None;
+        if refused.is_empty() && !planned.is_empty() {
+            if !test_command_allowed(a.policy, a.layout, &argv, &paths) {
+                if !refusals.is_empty() {
+                    return skipped_by(
+                        format!("`{}` is not an allowed command", argv.join(" ")),
+                        Some(SkipCause::CommandNotAllowed {
+                            argv: argv.join(" "),
+                        }),
+                        base,
+                    );
+                }
+                refused.push(RefusedFile {
+                    path: paths[0].to_owned(),
+                    why: "command_not_allowed",
+                    message: format!(
+                        "`{}` is not an allowed command: give the command that runs only your files",
+                        argv.join(" ")
+                    ),
+                });
+            } else {
+                for (rel, content) in &planned {
+                    let full = a.project.join(rel);
+                    if let Some(parent) = full.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    if let Err(e) = std::fs::write(&full, content) {
+                        return skipped_by(
+                            format!("`{rel}`: {e}"),
+                            Some(SkipCause::WriteFailed { path: rel.clone() }),
+                            base,
+                        );
+                    }
+                }
+                let (first, summary) = execute(a.project, &argv, a.runner);
+                let class = classify_red(&first, summary.as_ref());
+                // Red only on names the code does not have and the task does
+                // not add (a module, a class, an attribute of the wrong shape)
+                // is the test's own mistake, never the task's gap.
+                let named = named(title);
+                let theirs = |n: &str| {
+                    let last = n.rsplit(['.', '/']).next().unwrap_or(n);
+                    named.iter().any(|w| w == last) || title.contains(n)
+                };
+                let not_there = speccoder_core::verify::missing_names(&first)
+                    .filter(|names| !names.is_empty() && !names.iter().any(|n| theirs(n)));
+                let wrong = match class {
+                    RedClass::CollectionError | RedClass::BuildError => {
+                        Some("do not build or collect".to_owned())
+                    }
+                    _ => not_there.map(|names| {
+                        format!(
+                            "fail only on what the code does not have ({}), never on an assertion",
+                            names.join(", ")
+                        )
                     }),
-                    base,
-                );
+                };
+                match wrong {
+                    Some(how) if refusals.is_empty() => {
+                        for rel in &paths {
+                            let _ = std::fs::remove_file(a.project.join(rel));
+                        }
+                        refused.push(RefusedFile {
+                            path: paths[0].to_owned(),
+                            why: "errored",
+                            message: format!(
+                                "`{}` {how}: {}",
+                                paths.join("`, `"),
+                                first_failure(&first)
+                            ),
+                        });
+                    }
+                    _ => ran = Some((first, summary)),
+                }
             }
         }
+        if refused.is_empty() {
+            break (answer, base, planned, argv, ran);
+        }
+        if refusals.is_empty() {
+            refusals.extend(refused.iter().map(|r| r.message.clone()));
+            continue;
+        }
+        let r = &refused[0];
+        return skipped_by(
+            r.message.clone(),
+            Some(SkipCause::Refused {
+                path: r.path.clone(),
+                why: refusal_words(r.why).to_owned(),
+            }),
+            base,
+        );
     };
-    let mut written = Vec::new();
-    // Each test and the scenarios it cites, of those the spec has.
-    let tests: Vec<serde_json::Value> = valid
+    let tests: Vec<serde_json::Value> = planned
         .iter()
-        .map(|f| json!({ "path": f.path, "scenarios": f.cited }))
+        .map(|(p, _)| {
+            let cited = valid_cites(&answer, p, a.scenarios);
+            json!({ "path": p, "scenarios": cited })
+        })
         .collect();
-    let planned: Vec<(String, String)> = valid.into_iter().map(|f| (f.path, f.content)).collect();
-    if planned.is_empty() {
+    let Some((first, summary)) = ran else {
         return skipped_by(
             "no acceptance tests were generated".to_owned(),
             Some(SkipCause::NoFiles),
             base,
         );
-    }
-    let argv: Vec<String> = argv_of(&answer["argv"]);
-    let paths: Vec<&str> = planned.iter().map(|(p, _)| p.as_str()).collect();
-    if !test_command_allowed(a.policy, a.layout, &argv, &paths) {
-        return skipped_by(
-            format!("`{}` is not an allowed command", argv.join(" ")),
-            Some(SkipCause::CommandNotAllowed {
-                argv: argv.join(" "),
-            }),
-            base,
-        );
-    }
-    for (rel, content) in &planned {
-        let full = a.project.join(rel);
-        if let Some(parent) = full.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Err(e) = std::fs::write(&full, content) {
-            return skipped_by(
-                format!("`{rel}`: {e}"),
-                Some(SkipCause::WriteFailed { path: rel.clone() }),
-                base,
-            );
-        }
-        written.push(rel.clone());
-    }
+    };
+    let mut written: Vec<String> = planned.iter().map(|(p, _)| p.clone()).collect();
 
     // Red: they must fail before the task is done — on an assertion, or
     // because what the task introduces does not exist yet; confirmed by a
     // second run.
-    let (first, summary) = execute(a.project, &argv, a.runner);
     let red_tests = speccoder_core::verify::collected_count(&first, summary.as_ref());
     let mut class = classify_red(&first, summary.as_ref());
     if class.is_red() {
@@ -326,8 +388,26 @@ fn placement(a: &AcceptanceSetup<'_>) -> Result<Option<substrate::acceptance::Pl
                     p.trim_end_matches('/').to_owned()
                 }
             });
-    let path = layout
-        .acceptance_file(&task, package.as_deref())
+    // Named for the feature too (Spec Kit restarts at T001 in every
+    // feature), and free: an old file there is never the task's.
+    let number: String = a.feature.chars().take_while(char::is_ascii_digit).collect();
+    let scoped = if number.is_empty() {
+        task.clone()
+    } else {
+        format!("{number}_{task}")
+    };
+    let path = (1..)
+        .map(|n| {
+            let name = if n == 1 {
+                scoped.clone()
+            } else {
+                format!("{scoped}_{n}")
+            };
+            layout.acceptance_file(&name, package.as_deref())
+        })
+        .take(9)
+        .find(|p| p.as_ref().is_none_or(|p| !a.project.join(p).exists()))
+        .flatten()
         .ok_or(())?;
     let comment = if path.ends_with(".py") { "#" } else { "//" }.to_owned();
     Ok(Some(substrate::acceptance::Placement {
@@ -340,6 +420,46 @@ fn placement(a: &AcceptanceSetup<'_>) -> Result<Option<substrate::acceptance::Pl
     }))
 }
 
+/// The scenario ids a planned file of `answer` cites, of those given.
+fn valid_cites(
+    answer: &serde_json::Value,
+    path: &str,
+    scenarios: &[speccoder_core::spec::ScenarioRef],
+) -> Vec<String> {
+    answer["files"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|f| {
+            f["path"]
+                .as_str()
+                .and_then(|p| tools::paths::normalise(p).ok())
+                .is_some_and(|p| p == path)
+        })
+        .flat_map(|f| f["scenarios"].as_array().cloned().unwrap_or_default())
+        .filter_map(|v| v.as_str().map(str::to_owned))
+        .filter(|id| scenarios.iter().any(|s| s.id == *id))
+        .collect()
+}
+
+/// A failed run's first failure, as the runner wrote it (one line).
+pub(crate) fn first_failure(r: &speccoder_core::verify::CheckResult) -> String {
+    let text = format!("{}\n{}", r.stdout_tail, r.stderr_tail);
+    let line = text
+        .lines()
+        .map(str::trim)
+        .find(|l| {
+            l.starts_with("FAILED ")
+                || l.starts_with("ERROR ")
+                || l.starts_with("E ")
+                || l.starts_with("error")
+                || l.contains("Error:")
+        })
+        .or_else(|| text.lines().map(str::trim).find(|l| !l.is_empty()))
+        .unwrap_or("no output");
+    line.chars().take(240).collect()
+}
+
 /// speccoder's words for a refusal's kind (a regression-only reason's detail).
 pub(crate) fn refusal_words(why: &str) -> &'static str {
     match why {
@@ -348,6 +468,8 @@ pub(crate) fn refusal_words(why: &str) -> &'static str {
         "skip_marker" => "skips a test",
         "placeholder" => "is a placeholder that can never pass",
         "imagined" => "calls code that is not there",
+        "errored" => "fails only on an error of its own, or does not build",
+        "command_not_allowed" => "gives a command the policy does not allow",
         _ => "is not a new test file",
     }
 }
@@ -417,11 +539,15 @@ pub(crate) fn test_command_allowed(
 /// The acceptance author's files, checked (the one validation run time and
 /// review share): new test paths only, nothing protected, nothing that
 /// exists in `project`; each with the scenarios it cites of `scenarios`.
+/// `task`: the line of a task whose tests call code that is there (a gap,
+/// held-out, strengthening): their imports must resolve. `None` for a
+/// story's oracle, written before its code.
 pub(crate) fn validate_answer(
     answer: &serde_json::Value,
     project: &Path,
     policy: &tools::policy::Policy,
     scenarios: &[speccoder_core::spec::ScenarioRef],
+    task: Option<&str>,
 ) -> (Vec<ValidFile>, Vec<RefusedFile>) {
     let protected = policy.protected();
     let mut valid = Vec::new();
@@ -484,6 +610,15 @@ pub(crate) fn validate_answer(
                 message: format!("`{rel}` is not where the runner collects tests"),
                 path: rel,
                 why: "not_collected",
+            });
+            continue;
+        }
+        // A test of code that is there calls it as it is.
+        if let Some(message) = task.and_then(|t| imagined(project, &rel, content, t)) {
+            refused.push(RefusedFile {
+                message,
+                path: rel,
+                why: "imagined",
             });
             continue;
         }
@@ -652,6 +787,7 @@ pub(crate) fn prepare_held_out(
         })
         .map(|t| t.chars().take(8192).collect::<String>())
         .unwrap_or_default();
+    let title = a.bundle["task"]["title"].as_str().unwrap_or_default();
     let input = substrate::acceptance::held_out_input(
         a.bundle.clone(),
         &files,
@@ -661,6 +797,16 @@ pub(crate) fn prepare_held_out(
         composition,
         a.instructions,
         a.layout.map(crate::layout::TestLayout::text).as_deref(),
+        &substrate::acceptance::Known {
+            told: a.told,
+            refused: &[],
+            suite: &suite(a.worktree, title, a.related),
+            interface: &if a.oracle {
+                Vec::new()
+            } else {
+                interface(a.worktree, title)
+            },
+        },
     );
     let outcome = match a.rt.block_on(a.plane.acceptance(a.feature, a.task, input)) {
         Ok(o) => o,
@@ -723,6 +869,20 @@ pub(crate) fn prepare_held_out(
         // A held-out test the runner would never collect judges nothing.
         if crate::collection::statically_refused(a.project, &rel, content).is_some() {
             discard(&rel, "not_collected");
+            continue;
+        }
+        // Nor one that skips, raises "not implemented", or calls code that
+        // is not there: it fails whatever the code does.
+        if crate::integrity::has_skip_marker(content) {
+            discard(&rel, "skip_marker");
+            continue;
+        }
+        if crate::integrity::has_placeholder(content) {
+            discard(&rel, "placeholder");
+            continue;
+        }
+        if !a.oracle && imagined(a.project, &rel, content, title).is_some() {
+            discard(&rel, "imagined");
             continue;
         }
         if cited.is_empty() || cited.iter().any(|c| !known.contains(c.as_str())) {
@@ -977,21 +1137,19 @@ pub(crate) fn strengthen(
             substrate::why_not(&outcome.status)
         ));
     }
-    let protected = a.policy.protected();
-    let mut planned = Vec::new();
-    for f in answer["files"].as_array().into_iter().flatten() {
-        let (Some(path), Some(content)) = (f["path"].as_str(), f["content"].as_str()) else {
-            continue;
-        };
-        let rel = tools::paths::normalise(path).map_err(|e| format!("`{path}`: {}", e.0))?;
-        if !tools::paths::is_test_path(&rel)
-            || protected.write_class(&rel).is_some()
-            || a.project.join(&rel).exists()
-        {
-            return Err(format!("`{rel}` is not a new test file"));
-        }
-        planned.push((rel, content.to_owned()));
+    // The same checks as every author's files.
+    let title = a.bundle["task"]["title"].as_str().unwrap_or_default();
+    let (valid, refused) = validate_answer(
+        answer,
+        a.project,
+        a.policy,
+        a.scenarios,
+        (!a.oracle).then_some(title),
+    );
+    if let Some(r) = refused.first() {
+        return Err(r.message.clone());
     }
+    let planned: Vec<(String, String)> = valid.into_iter().map(|f| (f.path, f.content)).collect();
     if planned.is_empty() {
         return Err("the test author added no tests".to_owned());
     }
@@ -1127,9 +1285,17 @@ pub(crate) fn related(
             .split(|c: char| !c.is_alphanumeric())
             .any(|w| w == id)
     };
-    all.iter()
-        .filter(|t| t.id != this.id)
-        .filter(|t| named(&t.id) || cites(&t.title).iter().any(|c| mine.contains(c)))
+    // The tasks the line names first: three files are shown at most.
+    let others: Vec<&speccoder_core::snapshot::Task> =
+        all.iter().filter(|t| t.id != this.id).collect();
+    others
+        .iter()
+        .filter(|t| named(&t.id))
+        .chain(
+            others
+                .iter()
+                .filter(|t| !named(&t.id) && cites(&t.title).iter().any(|c| mine.contains(c))),
+        )
         .map(|t| t.id.clone())
         .collect()
 }
@@ -1155,12 +1321,17 @@ pub(crate) fn suite(
             .unwrap_or_default()
             .lines()
             .filter(|p| is_test(p))
-            .filter(|p| {
+            .filter_map(|p| {
                 let file = p.rsplit('/').next().unwrap_or(p).to_ascii_lowercase();
-                file.split(|c: char| !c.is_alphanumeric())
-                    .any(|w| ids.iter().any(|id| id == w))
+                let at = file
+                    .split(|c: char| !c.is_alphanumeric())
+                    .filter_map(|w| ids.iter().position(|id| id == w))
+                    .min()?;
+                Some((at, p.to_owned()))
             })
-            .map(str::to_owned)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .map(|(_, p)| p)
             .collect()
     };
     let names = named(title);
@@ -1222,15 +1393,35 @@ pub(crate) fn interface(worktree: &Path, title: &str) -> Vec<substrate::acceptan
         let f = p.rsplit('/').next().unwrap_or(p);
         f.split('.').next().unwrap_or(f).to_owned()
     };
+    // The product's code: never docs, a site, vendored or built files.
+    let elsewhere = |p: &str| {
+        p.split('/').any(|seg| {
+            matches!(
+                seg,
+                "docs"
+                    | "doc"
+                    | "site"
+                    | "examples"
+                    | "vendor"
+                    | "node_modules"
+                    | "dist"
+                    | "build"
+                    | "target"
+                    | "scripts"
+            ) || seg.starts_with('.')
+        })
+    };
     let mut files: Vec<&str> = out
         .lines()
         .filter(|p| {
             !is_test(p)
+                && !elsewhere(p)
                 && p.rsplit_once('.')
                     .is_some_and(|(_, ext)| SOURCE.contains(&ext))
         })
         .collect();
-    files.sort_by_key(|p| !names.contains(&stem(p)));
+    // The files the task names first, then the source tree's.
+    files.sort_by_key(|p| (!names.contains(&stem(p)), !p.starts_with("src/")));
     let mut left = BUDGET;
     let mut shown = Vec::new();
     for p in files {
@@ -1241,8 +1432,9 @@ pub(crate) fn interface(worktree: &Path, title: &str) -> Vec<substrate::acceptan
         if content.is_empty() {
             continue;
         }
+        // A file over what is left gives way to smaller ones.
         if content.len() > left {
-            break;
+            continue;
         }
         left -= content.len();
         shown.push(substrate::acceptance::SuiteTest {
@@ -1325,7 +1517,7 @@ fn declarations(text: &str, init: bool) -> String {
 /// would be red for its own mistake, never for the task's gap. Python
 /// imports and relative JavaScript/TypeScript imports; other languages'
 /// compilers say it.
-pub(crate) fn imagined(worktree: &Path, path: &str, content: &str, title: &str) -> Option<String> {
+pub(crate) fn imagined(project: &Path, path: &str, content: &str, title: &str) -> Option<String> {
     let named = named(title);
     let adds = |module_path: &str| {
         let stem = module_path
@@ -1343,39 +1535,53 @@ pub(crate) fn imagined(worktree: &Path, path: &str, content: &str, title: &str) 
             "`{path}` imports `{shown}`, which is not in the code and which this task does not add — call the code by the modules it has (under \"The code as it is\")"
         )
     };
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
     if path.ends_with(".py") {
         for (module, names) in python_imports(content) {
             let first = module.split('.').next().unwrap_or_default();
             // Only the project's own modules: at the root or under src/.
             let Some(base) = ["", "src/"].into_iter().find(|b| {
-                worktree.join(format!("{b}{first}")).exists()
-                    || worktree.join(format!("{b}{first}.py")).exists()
+                project.join(format!("{b}{first}")).exists()
+                    || project.join(format!("{b}{first}.py")).exists()
             }) else {
                 continue;
             };
             let rel = format!("{base}{}", module.replace('.', "/"));
-            let file = [format!("{rel}.py"), format!("{rel}/__init__.py")]
-                .into_iter()
-                .find(|f| worktree.join(f).is_file());
+            let file = [
+                format!("{rel}.py"),
+                format!("{rel}.pyi"),
+                format!("{rel}/__init__.py"),
+                format!("{rel}/__init__.pyi"),
+            ]
+            .into_iter()
+            .find(|f| project.join(f).is_file());
             let Some(file) = file else {
-                if adds(&format!("{rel}.py")) {
+                // A namespace package (a directory without `__init__.py`).
+                if project.join(&rel).is_dir() || adds(&format!("{rel}.py")) {
                     continue;
                 }
                 return Some(missing(&module));
             };
-            let text = std::fs::read_to_string(worktree.join(&file)).unwrap_or_default();
+            let text = std::fs::read_to_string(project.join(&file)).unwrap_or_default();
+            // Names it makes at run time are not read from its text.
+            if text.contains("import *") || text.contains("__getattr__") {
+                continue;
+            }
+            let declared: Vec<String> = declarations(&text, true)
+                .lines()
+                .flat_map(|l| {
+                    l.split(|c: char| !ident(c))
+                        .filter(|w| !w.is_empty())
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>()
+                })
+                .collect();
             for n in names {
-                let word = |w: &str| {
-                    text.split(|c: char| !(c.is_alphanumeric() || c == '_'))
-                        .any(|t| t == w)
-                };
-                if word(&n) || worktree.join(format!("{rel}/{n}.py")).is_file() {
+                let there = text.split(|c: char| !ident(c)).any(|t| t == n);
+                if there || named.contains(&n) || project.join(format!("{rel}/{n}.py")).is_file() {
                     continue;
                 }
-                if let Some(real) = text
-                    .split(|c: char| !(c.is_alphanumeric() || c == '_'))
-                    .find(|t| t.eq_ignore_ascii_case(&n))
-                {
+                if let Some(real) = declared.iter().find(|t| t.eq_ignore_ascii_case(&n)) {
                     return Some(format!(
                         "`{path}` imports `{n}` from `{module}`, which has `{real}` — call the code by the names it has"
                     ));
@@ -1384,7 +1590,7 @@ pub(crate) fn imagined(worktree: &Path, path: &str, content: &str, title: &str) 
         }
         return None;
     }
-    if [".ts", ".tsx", ".js", ".mjs", ".cjs"]
+    if [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]
         .iter()
         .any(|e| path.ends_with(e))
     {
@@ -1392,18 +1598,28 @@ pub(crate) fn imagined(worktree: &Path, path: &str, content: &str, title: &str) 
         for spec in relative_imports(content) {
             let joined = dir.join(&spec);
             let rel = crate::tools::paths::normalise(&joined.to_string_lossy()).unwrap_or_default();
-            let found = [
-                "",
-                ".ts",
-                ".tsx",
-                ".js",
-                ".mjs",
-                ".svelte",
-                "/index.ts",
-                "/index.js",
-            ]
-            .iter()
-            .any(|e| worktree.join(format!("{rel}{e}")).is_file());
+            // NodeNext writes `./x.js` for `x.ts`.
+            let bare = [".js", ".mjs", ".cjs", ".jsx"]
+                .iter()
+                .find_map(|e| rel.strip_suffix(e))
+                .unwrap_or(&rel);
+            let found = [rel.as_str(), bare].iter().any(|r| {
+                [
+                    "",
+                    ".ts",
+                    ".tsx",
+                    ".js",
+                    ".jsx",
+                    ".mjs",
+                    ".svelte",
+                    ".vue",
+                    "/index.ts",
+                    "/index.tsx",
+                    "/index.js",
+                ]
+                .iter()
+                .any(|e| project.join(format!("{r}{e}")).is_file())
+            });
             if !found && !adds(&rel) {
                 return Some(missing(&spec));
             }
@@ -1497,6 +1713,33 @@ pub(crate) fn outside_story(
         .cloned()
         .collect();
     (!links.is_empty()).then_some(speccoder_core::story::Judged::Linked { scenarios: links })
+}
+
+/// The story whose oracle judges a task outside any story: the one owning
+/// every scenario its line cites (a convergence gap), with those scenarios.
+/// `None` when it cites none, or scenarios of several stories.
+pub(crate) fn linked_story(
+    t: &speccoder_core::snapshot::Task,
+    scenarios: &[speccoder_core::spec::ScenarioRef],
+    unit_dir: &str,
+    judged: &dyn Fn(&str) -> bool,
+    reqs: &[crate::format::OracleRequirement],
+) -> Option<(crate::format::OracleRequirement, Vec<String>)> {
+    let Some(speccoder_core::story::Judged::Linked { scenarios: links }) =
+        outside_story(t, scenarios, unit_dir, judged)
+    else {
+        return None;
+    };
+    let owner = |id: &String| {
+        reqs.iter()
+            .position(|r| r.scenarios.iter().any(|s| &s.id == id))
+    };
+    let owners: std::collections::BTreeSet<usize> =
+        links.iter().map(owner).collect::<Option<_>>()?;
+    match owners.into_iter().collect::<Vec<_>>()[..] {
+        [one] => Some((reqs[one].clone(), links)),
+        _ => None,
+    }
 }
 
 /// Judged by the checks alone: planning work, or a step only a person
@@ -1611,6 +1854,33 @@ mod interface_tests {
             None
         );
         assert!(ts("import { toCsv } from './convert';\n").is_some());
+        assert_eq!(ts("import { toCsv } from './csv.js';\n"), None, "NodeNext");
+        // Names made at run time, and namespace packages, are never refused.
+        for (p, t) in [
+            ("pkg/__init__.py", "from .parser import *\n"),
+            ("pkg/parser.py", "class Parser:\n    pass\n"),
+            ("ns/inner.py", "def f():\n    pass\n"),
+        ] {
+            std::fs::create_dir_all(w.join(p).parent().unwrap_or(w))
+                .unwrap_or_else(|e| panic!("{e}"));
+            std::fs::write(w.join(p), t).unwrap_or_else(|e| panic!("{e}"));
+        }
+        assert_eq!(check("from pkg import Parser\nimport ns\n"), None);
+    }
+
+    /// Rust's `iter.skip(1)` is no skipped test; `it.skip(` and
+    /// `pytest.skip(` are.
+    #[test]
+    fn only_a_test_framework_s_skip_is_a_skip() {
+        assert!(!crate::integrity::has_skip_marker(
+            "let rows = lines.iter().skip(1);"
+        ));
+        assert!(crate::integrity::has_skip_marker(
+            "it.skip('later', () => {})"
+        ));
+        assert!(crate::integrity::has_skip_marker(
+            "    pytest.skip(\"later\")"
+        ));
     }
 
     /// The sample's code (2026-11-02): the test author imagined a module,

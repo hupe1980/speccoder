@@ -793,7 +793,7 @@
           ]
         },
         "proven": {
-          "description": "Every task done and every scenario green: the spec shows it, the\nreport and the board leave it out.",
+          "description": "Every task done and every scenario turned red→green by a tick: the\nspec shows it, the report and the board leave it out. Green found by\nan oracle written after the code is no proof.",
           "type": "boolean"
         },
         "finished": {

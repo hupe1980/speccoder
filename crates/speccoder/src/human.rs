@@ -948,6 +948,22 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
             .map(|(t, ids)| format!(" · {t} turned {}", ids.join(", ")))
             .collect();
         let rest = match (&st.checkpoint, green == n) {
+            // Green with no tick that turned it: it holds, never seen red.
+            (_, true) if st.finished => " · holds — never seen red".to_owned(),
+            // What is left was called untestable: a person accepts it.
+            (_, false) if st.finished && st.scenarios.iter().all(|m| m.state != S::Red) => {
+                let open: Vec<&str> = st
+                    .scenarios
+                    .iter()
+                    .filter(|m| m.state == S::Untested)
+                    .map(|m| m.id.as_str())
+                    .collect();
+                format!(
+                    " · {} untestable — `speccoder story accept {} --reason \"…\"`",
+                    open.join(", "),
+                    open.first().copied().unwrap_or_default()
+                )
+            }
             (_, true) => String::new(),
             // Every task done, scenarios still red: the code does not hold them.
             (None, false) if st.finished => {
@@ -1082,6 +1098,9 @@ pub fn converge(w: &mut impl Write, c: &ConvergeReport, message: &str) -> io::Re
         c.feature, c.round, c.outcome
     )?;
     let field = |f: &serde_json::Value, k: &str| f[k].as_str().unwrap_or_default().to_owned();
+    for s in &c.stories {
+        writeln!(w, "Story      {s}")?;
+    }
     for f in &c.findings {
         writeln!(
             w,
@@ -1104,6 +1123,14 @@ pub fn converge(w: &mut impl Write, c: &ConvergeReport, message: &str) -> io::Re
     }
     for f in &c.repeated {
         writeln!(w, "  = repeated: {}", shorten(&field(f, "task"), 70))?;
+    }
+    for f in &c.dropped {
+        writeln!(
+            w,
+            "  − dropped: {} — {}",
+            shorten(&field(f, "task"), 50),
+            field(f, "why")
+        )?;
     }
     if let Some(commit) = &c.commit {
         writeln!(w, "Commit     {commit}")?;

@@ -47,6 +47,18 @@
       "type": "array",
       "items": true
     },
+    "dropped": {
+      "description": "Findings dropped by the oracles' evidence, each with its `why`:\nevery scenario it cites already holds, or it restates a done task.",
+      "type": "array",
+      "items": true
+    },
+    "stories": {
+      "description": "Each finished story on its oracle this round: `US1: 2 of 3 hold`.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "commit": {
       "description": "The commit on `speccoder/<feature>` holding the appended section.",
       "type": [

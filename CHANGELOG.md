@@ -6,18 +6,45 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **One test per scenario.** A convergence task citing a story's scenario
+  is judged by that story's oracle (written first when missing), never by
+  a second test of its own; when what it cites already holds it stops
+  before any model call (`TASK-HOLDS`).
+- **Converge reads the oracles first.** Finished stories get their oracle
+  run (written when missing); each red scenario becomes a task without
+  the model's word, and findings that cite held scenarios or restate a
+  done task are dropped, said why.
+- **Proven means red→green.** A story whose scenarios no tick turned
+  green reads *holds — never seen red*; a red story
+  check offers the ruling beside `converge`.
+- **Untestable needs a person.** A scenario the test author calls
+  untestable stops its story's last task before any model call
+  (`STORY-UNTESTABLE`) until `speccoder story accept US2-2 --reason …`,
+  committed on the feature's branch.
+
 ### Fixed
 
+- A task's own test red only on what the code does not have and the
+  task does not add (a module, an attribute of the wrong shape) counted
+  as red; it is asked for again, told the runner's line.
+- An oracle test that never runs the product's declared command is
+  refused; the author is told the commands.
+- Held-out and strengthening authors skipped the placeholder, skip and
+  import checks; every author's files now pass the same ones.
+- A re-asked oracle sealed its held-out tests twice and could keep the
+  worse pass; refusals were told as the person's notes.
+- `report --cost` left out test-author calls; a tick and a saved attempt
+  now count every model call of the run.
+- One test file that stopped collecting read as one regression per test.
+- A check that cannot run stopped no task once any oracle had a red
+  scenario.
+- `iter().skip(1)` read as a skipped test; a task's own test file now
+  carries the feature's number.
 - A gap test's author never saw the tests of tasks on the same
-  requirement, so it could contradict them (or itself). It now sees the
-  tests of the tasks its line names or that cite the same requirement,
-  and is told that no two tests may demand different outcomes of one
-  call.
-- A story's oracle could be lost to an old test's path, or to an author
-  calling every scenario untestable because the story's code did not
-  exist yet. Nothing kept is asked for once more, told why in words; the
-  stop says why each test was not kept and names the story in its fix
-  (`speccoder review tests US1 --write`).
+  requirement; an oracle with nothing kept is asked again, its stop naming
+  the story.
 
 ## [0.8.4] - 2026-11-02
 

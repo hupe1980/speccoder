@@ -999,6 +999,8 @@ struct Author<'a> {
     instructions: Vec<crate::instructions::Instruction>,
     /// The test layout's text: where the review's files are placed.
     test_layout: String,
+    /// Every call's token usage, summed: what the oracle cost.
+    spent: std::cell::RefCell<Option<Value>>,
 }
 
 impl<'a> Author<'a> {
@@ -1076,6 +1078,7 @@ impl<'a> Author<'a> {
             bundle,
             instructions,
             test_layout: crate::layout::text_at(&ctx.root),
+            spent: std::cell::RefCell::new(None),
         }
     }
 
@@ -1142,12 +1145,21 @@ impl<'a> Author<'a> {
         files: &[String],
         manifest: &str,
         notes: &[String],
+        refused: &[String],
         again: Option<(&str, &str)>,
         sample: u8,
     ) -> Result<(Value, String, Vec<ContextEntry>), String> {
         let context = self.context(req, notes);
         let suite = crate::pipeline::acceptance::suite(&self.ctx.root, &req.text, &[]);
         let interface = crate::pipeline::acceptance::interface(&self.ctx.root, &req.text);
+        let commands: Vec<String> = if crate::layout::via_command(&req.text) {
+            crate::layout::commands(&self.ctx.root)
+                .into_iter()
+                .map(|c| c.shown)
+                .collect()
+        } else {
+            Vec::new()
+        };
         let input = substrate::acceptance::review_input(&substrate::acceptance::ReviewParts {
             bundle: self.bundle.clone(),
             requirement: json!({ "key": req.key, "title": req.title, "text": req.text }),
@@ -1162,6 +1174,8 @@ impl<'a> Author<'a> {
             test_layout: Some(&self.test_layout),
             suite: &suite,
             interface: &interface,
+            commands: &commands,
+            refused,
         });
         let task = format!("req-{}", req.key);
         let outcome = self
@@ -1187,6 +1201,9 @@ impl<'a> Author<'a> {
                 |r| format!("the model provider refused the request: {r}"),
             ));
         }
+        let total =
+            crate::pipeline::commit::add_usage(self.spent.borrow().as_ref(), output.get("usage"));
+        *self.spent.borrow_mut() = total;
         Ok((answer, outcome.run_id.to_string(), context.entries))
     }
 }
@@ -1392,7 +1409,7 @@ fn keep(
     taken: &[(String, Vec<String>)],
 ) -> (Vec<Kept>, Vec<OracleDiscarded>) {
     let (valid, refused) =
-        crate::pipeline::validate_answer(answer, &bench.project, &ctx.policy, &req.scenarios);
+        crate::pipeline::validate_answer(answer, &bench.project, &ctx.policy, &req.scenarios, None);
     let mut discarded: Vec<OracleDiscarded> = refused
         .into_iter()
         .map(|r| OracleDiscarded {
@@ -1402,6 +1419,9 @@ fn keep(
         .collect();
     let set_argv: Vec<String> = crate::pipeline::acceptance::argv_of(&answer["argv"]);
     let layout = crate::layout::detect(&bench.project, &crate::verify::check_argvs(&ctx.root));
+    // The story's interface is the product's command: a test of it runs it.
+    let commands = crate::layout::commands(&bench.project);
+    let via_command = !commands.is_empty() && crate::layout::via_command(&req.text);
     let mut kept = Vec::new();
     for f in valid {
         let mut discard = |why: &str| {
@@ -1412,6 +1432,10 @@ fn keep(
         };
         if f.cited.is_empty() {
             discard("cites_no_scenario");
+            continue;
+        }
+        if via_command && !commands.iter().any(|c| c.run_by(&f.content)) {
+            discard("no_command");
             continue;
         }
         if taken.iter().any(|(p, _)| *p == f.path)
@@ -1497,7 +1521,17 @@ fn write(
         .chain(notes.iter().cloned())
         .collect();
     let (draft, contents) = draft(
-        ctx, req, &author, &bench, samples, &told, rejected, notes, true, options,
+        ctx,
+        req,
+        &author,
+        &bench,
+        samples,
+        &told,
+        &[],
+        rejected,
+        notes,
+        true,
+        options,
     )?;
     store(&ctx.plane_dir, &ctx.feature, &draft, &contents).map_err(failed)?;
     let red = draft.red().count();
@@ -1532,6 +1566,7 @@ fn draft(
     bench: &Bench,
     samples: u8,
     told: &[String],
+    refused: &[String],
     rejected: Vec<OracleRejected>,
     notes: Vec<String>,
     with_held_out: bool,
@@ -1541,7 +1576,7 @@ fn draft(
     let of = u32::from(samples);
     stage(options, &req.key, "writing", 1, of);
     let (first, run1, mut context) = author
-        .call(req, &files, &manifest, told, None, 1)
+        .call(req, &files, &manifest, told, refused, None, 1)
         .map_err(failed)?;
     // The comparison needs both readings; with one sample they are kept
     // as stated, for the card.
@@ -1559,7 +1594,7 @@ fn draft(
     if samples >= 2 {
         stage(options, &req.key, "writing", 2, of);
         let (second, run2, more) = author
-            .call(req, &files, &manifest, told, None, 2)
+            .call(req, &files, &manifest, told, refused, None, 2)
             .map_err(failed)?;
         (e2, u2) = read(&second)?;
         runs.push(run2);
@@ -1703,12 +1738,17 @@ fn held_out(
             layout: None,
             told: &[],
             related: &[],
+            oracle: true,
         },
         &visible,
         &req.scenarios,
         &store,
         false,
     );
+    // The held-out author's call is the oracle's cost too.
+    let total =
+        crate::pipeline::commit::add_usage(author.spent.borrow().as_ref(), report.get("usage"));
+    *author.spent.borrow_mut() = total;
     match sha {
         Some(sha) => {
             let count = report["kept"]
@@ -1846,7 +1886,7 @@ fn rewrite(
     let told = d.all_notes();
     stage(options, &req.key, "writing", 1, 1);
     let (answer, run, context) = author
-        .call(req, &files, &manifest, &told, again, 1)
+        .call(req, &files, &manifest, &told, &[], again, 1)
         .map_err(failed)?;
     d.runs.push(run);
     for c in context {
@@ -2182,6 +2222,15 @@ fn freeze_tests(
 fn discard_words(why: &str) -> &'static str {
     match why {
         "cites_no_scenario" => "cites no scenario of the list",
+        "no_command" => {
+            "never runs the project's command — the story's interface is the command, not a module behind it"
+        }
+        "command_shared" => {
+            "shares its command with another test — each test needs the command that runs only it"
+        }
+        "command_not_allowed" => "gives a command the policy does not allow",
+        "limit" => "is beyond the number of tests one answer may hold",
+        "red_without_it" => "fails without its own file — its command runs other, failing tests",
         _ => crate::pipeline::acceptance::refusal_words(why),
     }
 }
@@ -2193,7 +2242,12 @@ fn not_kept(t: &DraftTest, many: bool) -> Option<String> {
             t.scenarios.join(", ")
         ));
     }
-    (!usable(t)).then(|| format!("it did not fail on an assertion ({:?})", t.red_class))
+    (!usable(t)).then(|| {
+        format!(
+            "it did not fail on an assertion ({})",
+            crate::pipeline::class_word(t.red_class)
+        )
+    })
 }
 
 fn usable(t: &DraftTest) -> bool {
@@ -2220,6 +2274,8 @@ pub(crate) struct RunOracle {
     pub contracts: Vec<Expectation>,
     /// The scenarios the author could not test, and why.
     pub untestable: Vec<Untestable>,
+    /// The token usage of its author calls.
+    pub usage: Option<Value>,
 }
 
 /// Writes `story`'s oracle for a run nobody reviewed: one author pass on
@@ -2286,29 +2342,27 @@ pub(crate) fn write_for_run(
         covered.dedup();
         covered
     };
-    let (mut draft, mut contents) = draft(
-        &ctx,
-        &req,
-        &author,
-        &bench,
-        1,
-        told,
-        Vec::new(),
-        told.to_vec(),
-        only.is_empty(),
-        options,
-    )?;
-    let missing = |d: &Draft| -> Vec<String> {
-        let covered = kept(d);
-        req.scenarios
-            .iter()
-            .map(|s| s.id.clone())
-            .filter(|id| !covered.contains(id))
-            .collect()
+    // Two passes at most, neither sealing a held-out set: the kept one is
+    // sealed once, after it is chosen.
+    let pass = |refused: &[String]| {
+        draft(
+            &ctx,
+            &req,
+            &author,
+            &bench,
+            1,
+            told,
+            refused,
+            Vec::new(),
+            told.to_vec(),
+            false,
+            options,
+        )
     };
-    // A scenario whose test broke (not kept: it did not build, collect or
-    // fail first) is asked for once more, told why; the better pass is kept.
-    // One the author found untestable, or wrote nothing for, is left so.
+    let (mut draft, mut contents) = pass(&[])?;
+    // Asked once more, told every reason in speccoder's words: a test that
+    // broke or took a path that exists, nothing kept at all, or every
+    // scenario called untestable with no test written.
     let untestable: Vec<String> = draft
         .untestable
         .sample1
@@ -2317,44 +2371,52 @@ pub(crate) fn write_for_run(
         .collect();
     let broke =
         !draft.discarded.is_empty() || draft.tests.iter().any(|t| not_kept(t, many).is_some());
-    let left: Vec<String> = missing(&draft)
-        .into_iter()
-        .filter(|id| !untestable.contains(id))
+    let left: Vec<String> = req
+        .scenarios
+        .iter()
+        .map(|s| s.id.clone())
+        .filter(|id| !kept(&draft).contains(id) && !untestable.contains(id))
         .collect();
-    // Nothing kept at all is asked again too: a path that exists, a test
-    // that broke, is the author's to fix — never the story's to lose.
-    if broke && (!left.is_empty() || kept(&draft).is_empty()) {
-        let left = if left.is_empty() {
+    let opted_out = draft.tests.is_empty() && draft.discarded.is_empty() && !untestable.is_empty();
+    if (broke && (!left.is_empty() || kept(&draft).is_empty())) || opted_out {
+        let again: Vec<String> = if left.is_empty() {
             req.scenarios.iter().map(|s| s.id.clone()).collect()
         } else {
             left
         };
-        let told: Vec<String> = draft
+        let refused: Vec<String> = draft
             .discarded
             .iter()
             .map(|d| format!("Not kept `{}`: it {}", d.path, discard_words(&d.why)))
             .chain(draft.tests.iter().filter_map(|t| {
                 not_kept(t, many).map(|why| format!("Not kept `{}`: {why}", t.path))
             }))
+            .chain(opted_out.then(|| {
+                format!(
+                    "Called untestable: {} — the story's code not existing yet never makes a scenario untestable; test it through the story's interface",
+                    untestable.join(", ")
+                )
+            }))
             .chain(std::iter::once(format!(
                 "Write tests again for {} — each must build and be collected without the code it tests existing yet: exercise the story through its interface, import the code under test inside each test",
-                left.join(", ")
+                again.join(", ")
             )))
             .collect();
-        let (second, more) = self::draft(
-            &ctx,
-            &req,
-            &author,
-            &bench,
-            1,
-            &told,
-            Vec::new(),
-            told.clone(),
-            only.is_empty(),
-            options,
-        )?;
-        if missing(&second).len() < left.len() {
+        let (second, more) = pass(&refused)?;
+        if kept(&second).len() > kept(&draft).len() {
             (draft, contents) = (second, more);
+        }
+    }
+    // The kept pass's held-out set (an amendment keeps the story's).
+    if only.is_empty() {
+        let keep: Vec<DraftTest> = draft
+            .tests
+            .iter()
+            .filter(|t| not_kept(t, many).is_none())
+            .cloned()
+            .collect();
+        if !keep.is_empty() {
+            (draft.held_out, draft.sealed) = held_out(&ctx, &author, &bench, &req, &keep, options);
         }
     }
     // An amendment's draft is a part: the story's own draft stays.
@@ -2374,6 +2436,7 @@ pub(crate) fn write_for_run(
             contents: Vec::new(),
             contracts: draft.expectations.sample1.clone(),
             untestable: draft.untestable.sample1.clone(),
+            usage: author.spent.borrow().clone(),
         });
     }
     if keep.is_empty() {
@@ -2450,6 +2513,7 @@ pub(crate) fn write_for_run(
         contents: kept_contents,
         contracts: draft.expectations.sample1.clone(),
         untestable: draft.untestable.sample1.clone(),
+        usage: author.spent.borrow().clone(),
     })
 }
 

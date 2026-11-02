@@ -83,6 +83,91 @@ fn rulings_file(plane: &Path) -> PathBuf {
     plane.join("decisions").join("oracle-rulings.json")
 }
 
+/// `speccoder story accept <scenario> --reason R`: a person accepts a
+/// scenario its test author called untestable.
+pub fn accept_untestable(
+    root: &Path,
+    feature: Option<&str>,
+    scenario: &str,
+    reason: &str,
+    via: Via,
+    state: &Path,
+) -> CommandResult {
+    let refuse = |status, m: String| CommandResult::new("story", status, &m);
+    if reason.trim().is_empty() {
+        return refuse(
+            CommandStatus::UsageError,
+            "accepting a scenario as untestable needs a reason".to_owned(),
+        );
+    }
+    let Ok(opened) = crate::format::open(root, feature) else {
+        return refuse(
+            CommandStatus::NotAProject,
+            "no spec project here".to_owned(),
+        );
+    };
+    let snap = &opened.snapshot;
+    let Some(f) = snap.feature.as_ref() else {
+        return refuse(
+            CommandStatus::SelectionNeeded,
+            "no feature selected".to_owned(),
+        );
+    };
+    let name = f.feature.name.clone();
+    let known: Vec<String> = opened
+        .adapter
+        .oracle_requirements(snap)
+        .into_iter()
+        .flat_map(|r| r.scenarios.into_iter().map(|s| s.id))
+        .collect();
+    if !known.iter().any(|k| k == scenario) {
+        return refuse(
+            CommandStatus::NotFound,
+            format!("{scenario} is no scenario of {name} ({})", known.join(", ")),
+        );
+    }
+    // Recorded on the feature's branch: the story's evidence, wherever it
+    // is cloned, whether or not a tick follows.
+    let wt = crate::pipeline::workspace(root, Some(&name), state, &crate::RunOptions::default());
+    let Some(CommandData::Worktree(w)) = wt.data() else {
+        return CommandResult::carried("story", &wt);
+    };
+    let Some(wt_path) = w.path.clone().filter(|_| wt.status() == CommandStatus::Ok) else {
+        return CommandResult::carried("story", &wt);
+    };
+    let by = crate::controls::person(root);
+    let message = format!(
+        "speccoder: {scenario} accepted as untestable\n\nUntestable-Accepted: {scenario} by {by} — {}\nVia: {}\n",
+        reason.trim().replace('\n', " "),
+        via.as_str()
+    );
+    let commit =
+        match crate::pipeline::commit::commit_paths(Path::new(&wt_path), &message, &[], true) {
+            Ok(c) => c,
+            Err(e) => {
+                return refuse(
+                    CommandStatus::GitPrecondition,
+                    format!("the acceptance cannot be committed: {e}"),
+                );
+            }
+        };
+    CommandResult::new(
+        "story",
+        CommandStatus::Ok,
+        &format!(
+            "{scenario} accepted as untestable: its story's checkpoint no longer waits for it — recorded on the feature's branch ({})",
+            commit.get(..7).unwrap_or(&commit)
+        ),
+    )
+    .with_data(CommandData::Control(Box::new(ControlReport {
+        feature: name,
+        task: String::new(),
+        action: "untestable_accepted".to_owned(),
+        text: Some(scenario.to_owned()),
+        record: Some(commit),
+    })))
+}
+
 /// Every ruling not yet acted on; an absent file is none, an unreadable
 /// one an error (never silently none).
 ///
@@ -90,8 +175,11 @@ fn rulings_file(plane: &Path) -> PathBuf {
 ///
 /// The file exists but cannot be read or parsed.
 pub fn rulings(plane: &Path) -> Result<Vec<Ruling>, String> {
-    let path = rulings_file(plane);
-    match std::fs::read_to_string(&path) {
+    read_list(&rulings_file(plane))
+}
+
+fn read_list<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Vec<T>, String> {
+    match std::fs::read_to_string(path) {
         Ok(t) => serde_json::from_str(&t).map_err(|e| format!("{}: {e}", path.display())),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(e) => Err(format!("{}: {e}", path.display())),
@@ -100,7 +188,14 @@ pub fn rulings(plane: &Path) -> Result<Vec<Ruling>, String> {
 
 /// Replaces the rulings whole, under a lock: a reader never sees half a list.
 fn write_rulings(plane: &Path, change: impl FnOnce(&mut Vec<Ruling>)) -> Result<PathBuf, String> {
-    let path = rulings_file(plane);
+    write_list(&rulings_file(plane), change)
+}
+
+fn write_list<T: serde::Serialize + serde::de::DeserializeOwned>(
+    path: &Path,
+    change: impl FnOnce(&mut Vec<T>),
+) -> Result<PathBuf, String> {
+    let path = path.to_path_buf();
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
@@ -108,7 +203,7 @@ fn write_rulings(plane: &Path, change: impl FnOnce(&mut Vec<Ruling>)) -> Result<
         .map_err(|e| format!("{}: {e}", path.display()))?;
     lock.lock()
         .map_err(|e| format!("{}: {e}", path.display()))?;
-    let mut list = rulings(plane)?;
+    let mut list = read_list(&path)?;
     change(&mut list);
     let tmp = path.with_extension("json.tmp");
     std::fs::write(
@@ -347,12 +442,32 @@ pub fn rule_tests_wrong(
     let plane = crate::worktree::project_state_dir(state, Path::new(&snap.root));
     // The story the run judges the task in: the one a person had its
     // acceptance written at, its label; OpenSpec: the change.
+    let rules = opened.adapter.rules().judged;
+    let unit_dir = f.feature.dir.clone();
+    let mut known = opened.adapter.scenarios(snap, task);
+    // A gap citing one story's scenarios is judged by that story's oracle:
+    // its tests are those scenarios', ruled as the story's.
+    let linked = if openspec || t.story.is_some() {
+        None
+    } else {
+        crate::pipeline::acceptance::linked_story(
+            t,
+            &known,
+            &unit_dir,
+            &rules,
+            &opened.adapter.oracle_requirements(snap),
+        )
+    };
+    if let Some((_, links)) = &linked {
+        known.retain(|s| links.contains(&s.id));
+    }
     let story = if openspec {
         Some(name.clone())
     } else {
-        story_at(&plane, &name, task).or_else(|| t.story.clone())
+        story_at(&plane, &name, task)
+            .or_else(|| t.story.clone())
+            .or_else(|| linked.map(|(r, _)| r.key))
     };
-    let known = opened.adapter.scenarios(snap, task);
     let ids = || {
         known
             .iter()
@@ -360,8 +475,6 @@ pub fn rule_tests_wrong(
             .collect::<Vec<_>>()
             .join(", ")
     };
-    let rules = opened.adapter.rules().judged;
-    let unit_dir = f.feature.dir.clone();
     let scenario = match (&story, scenario) {
         (Some(_), Some(id)) if known.iter().any(|s| s.id == id) => Some(id.to_owned()),
         (Some(_), Some(id)) => {

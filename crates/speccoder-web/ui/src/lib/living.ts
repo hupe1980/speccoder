@@ -29,7 +29,16 @@ function strip(st: StoryScenarios | undefined): string {
   if (!st) return "";
   const green = st.scenarios.filter((m) => m.state === "green").length;
   const dots = st.before_oracle ? "" : st.scenarios.map((m) => `<i class="d ${st.oracle ? m.state : "pending"}"></i>`).join("");
-  const words = st.before_oracle ? "ticked before its oracle" : st.proven ? "proven" : st.oracle ? `${green} of ${st.scenarios.length} green` : "oracle not yet written";
+  const all = green === st.scenarios.length;
+  const words = st.before_oracle
+    ? "ticked before its oracle"
+    : st.proven
+      ? "proven"
+      : st.finished && all
+        ? "holds — never seen red"
+        : st.oracle
+          ? `${green} of ${st.scenarios.length} green`
+          : "oracle not yet written";
   return `<span class="strip" title="${esc(words)}">${dots}<span class="n">${esc(words)}</span></span>`;
 }
 

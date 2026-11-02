@@ -45,6 +45,7 @@ export const KINDS: Record<ActionKind, { verb: string; icon?: string; holdsWorkt
   acceptance_at: { verb: "Write Acceptance Here", icon: "shield", holdsWorktree: false },
   rule_scenario: { verb: "Tests Are Wrong…", icon: "exclaim", holdsWorktree: false },
   check_story: { verb: "Check This Story", icon: "shield", holdsWorktree: true },
+  accept_untestable: { verb: "Accept as Untestable…", icon: "check", holdsWorktree: false },
   preset_add: { verb: "Add the Preset", icon: "doc", holdsWorktree: false },
   plan_through: { verb: "Start", icon: "sparkle", holdsWorktree: false },
   new_project: { verb: "Create", icon: "plus", holdsWorktree: false },

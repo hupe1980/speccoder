@@ -2586,6 +2586,13 @@ pub struct ConvergeReport {
     pub unrequested: Vec<serde_json::Value>,
     /// Findings that repeat an earlier convergence task: no progress.
     pub repeated: Vec<serde_json::Value>,
+    /// Findings dropped by the oracles' evidence, each with its `why`:
+    /// every scenario it cites already holds, or it restates a done task.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dropped: Vec<serde_json::Value>,
+    /// Each finished story on its oracle this round: `US1: 2 of 3 hold`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stories: Vec<String>,
     /// The commit on `speccoder/<feature>` holding the appended section.
     pub commit: Option<String>,
     /// Token usage of the assessment.

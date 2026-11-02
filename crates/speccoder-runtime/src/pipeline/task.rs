@@ -857,7 +857,7 @@ fn run_task_once(
     // task. Stop before any model call rather than spend attempts on it.
     // A story's red oracle may stop the build until its tasks land.
     if !options.allow_failing_baseline
-        && !super::story::open_oracle(&wt_root)
+        && !super::story::open_oracle(&wt_root, &snap, format)
         && let Some((c, why)) = baseline
             .checks
             .iter()
@@ -1126,6 +1126,29 @@ fn run_task_once(
     // reproductions judge a bug.
     let rules = format.rules().judged;
     let whole_unit = format.kind() == speccoder_core::spec::FormatKind::Openspec;
+    // A task outside any story citing scenarios of one story (a
+    // convergence gap): judged by that story's oracle — each scenario has
+    // one test, never a second the task's own author would write.
+    let linked_story: Option<(crate::format::OracleRequirement, Vec<String>)> = if bug_fix.is_some()
+        || acceptance_story.is_some()
+        || whole_unit
+        || parsed_task.as_ref().is_none_or(|t| t.story.is_some())
+    {
+        None
+    } else {
+        parsed_task.as_ref().and_then(|t| {
+            super::acceptance::linked_story(
+                t,
+                &story_scenarios,
+                &unit_dir,
+                &rules,
+                &format.oracle_requirements(&snap),
+            )
+        })
+    };
+    let story_scenarios = linked_story
+        .as_ref()
+        .map_or(story_scenarios, |(r, _)| r.scenarios.clone());
     // The story it is judged in: its label, the story a person had its
     // acceptance written at (`acceptance at`), or the whole unit (OpenSpec).
     let story_key: Option<String> = if bug_fix.is_some() || story_scenarios.is_empty() {
@@ -1135,6 +1158,7 @@ fn run_task_once(
             .clone()
             .or_else(|| parsed_task.as_ref().and_then(|t| t.story.clone()))
             .or_else(|| whole_unit.then(|| feature_name.clone()))
+            .or_else(|| linked_story.as_ref().map(|(r, _)| r.key.clone()))
     };
     let parsed_tasks = snap.feature.as_ref().and_then(|f| f.tasks.as_ref());
     let story_members: Vec<&speccoder_core::snapshot::Task> = match (&story_key, parsed_tasks) {
@@ -1147,6 +1171,10 @@ fn run_task_once(
     };
     let judged_by: Option<speccoder_core::story::Judged> = if bug_fix.is_some() {
         None
+    } else if let Some((_, links)) = &linked_story {
+        Some(speccoder_core::story::Judged::Linked {
+            scenarios: links.clone(),
+        })
     } else if story_key.is_some() {
         let ids: Vec<String> = story_scenarios.iter().map(|s| s.id.clone()).collect();
         let st = super::story::story_tasks(&story_members, &unit_dir, &rules);
@@ -1188,6 +1216,8 @@ fn run_task_once(
     // The author found nothing testable in the story: judged by its checks.
     let mut oracle_empty = false;
     let mut before_run = super::story::Run::default();
+    // What writing the story's oracle cost in this run: the task's too.
+    let mut oracle_spent: Option<serde_json::Value> = None;
     if in_story && let Some(key) = story_key.as_deref() {
         stage(&*live, task, Stage::Red, StageState::Started, None, None);
         match super::story::ensure(&super::story::Ensure {
@@ -1211,6 +1241,7 @@ fn run_task_once(
         }) {
             Ok((oracle, wrote, said)) => {
                 notices.extend(said);
+                oracle_spent.clone_from(&oracle.usage);
                 if wrote {
                     notices.push(format!(
                         "{key}'s oracle: {} test(s) for {} scenario(s), committed {}",
@@ -1271,6 +1302,86 @@ fn run_task_once(
                 if let Some((record, manifest)) = oracle.reviewed.clone() {
                     review_frozen = Some((record, manifest));
                 }
+                // A gap its story's oracle already holds: nothing to do, and
+                // no model call to learn it.
+                if let Some((_, links)) = &linked_story
+                    && !oracle.tests.is_empty()
+                    && links.iter().all(|l| {
+                        before_run.states.get(l)
+                            == Some(&speccoder_core::story::ScenarioState::Green)
+                    })
+                {
+                    stage(
+                        &*live,
+                        task,
+                        Stage::Red,
+                        StageState::Skipped,
+                        Some("already holds".to_owned()),
+                        None,
+                    );
+                    let reason = format!(
+                        "{} already hold{} — {key}'s oracle passes {}: nothing for {task} to do",
+                        links.join(", "),
+                        if links.len() == 1 { "s" } else { "" },
+                        if links.len() == 1 {
+                            "its test"
+                        } else {
+                            "their tests"
+                        },
+                    );
+                    let report = speccoder_core::RunReport {
+                        reason: Some(reason.clone()),
+                        notices: notices.clone(),
+                        usage: oracle.usage.clone(),
+                        ..bare_report(&feature_name, task, &wt_path, "holds")
+                    };
+                    return CommandResult::new("run", CommandStatus::NeedsHuman, &reason)
+                        .with_code("TASK-HOLDS")
+                        .with_data(CommandData::Run(Box::new(report)));
+                }
+                // The story's last task waits on a person for every scenario
+                // its author called untestable: no attempt can turn it.
+                if matches!(judged_by, Some(speccoder_core::story::Judged::Checkpoint))
+                    && !oracle.untestable.is_empty()
+                {
+                    let accepted = super::story::accepted_on_branch(&wt_root, "HEAD");
+                    let open: Vec<(&String, &String)> = oracle
+                        .untestable
+                        .iter()
+                        .filter(|(id, _)| !accepted.contains(id))
+                        .collect();
+                    if let Some((first, _)) = open.first() {
+                        stage(
+                            &*live,
+                            task,
+                            Stage::Red,
+                            StageState::Skipped,
+                            Some("untestable".to_owned()),
+                            None,
+                        );
+                        let said: Vec<String> = open
+                            .iter()
+                            .map(|(id, why)| format!("{id} (\"{why}\")"))
+                            .collect();
+                        let reason = format!(
+                            "{key} closes with {task}, but its test author called {} untestable — a person accepts each, or has its test written again",
+                            said.join(", ")
+                        );
+                        let report = speccoder_core::RunReport {
+                            reason: Some(reason.clone()),
+                            notices: notices.clone(),
+                            usage: oracle.usage.clone(),
+                            ..bare_report(&feature_name, task, &wt_path, "untestable")
+                        };
+                        return CommandResult::new("run", CommandStatus::NeedsHuman, &reason)
+                            .with_code("STORY-UNTESTABLE")
+                            .with_fix(vec![
+                                format!("speccoder story accept {first} --reason \"…\""),
+                                format!("speccoder task rule {task} --tests-wrong --scenario {first} --reason \"…\""),
+                            ])
+                            .with_data(CommandData::Run(Box::new(report)));
+                    }
+                }
                 if oracle.tests.is_empty() {
                     oracle_empty = true;
                 } else {
@@ -1320,9 +1431,17 @@ fn run_task_once(
     // every author of its tests is told why — the visible, held-out and
     // strengthening ones, a resumed attempt's too — and nothing frozen
     // earlier is reused; the tick records the rulings and clears them.
+    // An unreadable list stops the run: never read as "no ruling".
     let ruled: Vec<crate::acceptance_at::Ruling> = if bug_fix.is_none() && !in_story {
-        crate::acceptance_at::rulings_for_task(&s.plane_dir, &feature_name, task)
-            .unwrap_or_default()
+        match crate::acceptance_at::rulings_for_task(&s.plane_dir, &feature_name, task) {
+            Ok(r) => r,
+            Err(e) => {
+                return fail(
+                    CommandStatus::Error,
+                    format!("the person's rulings cannot be read: {e}"),
+                );
+            }
+        }
     } else {
         Vec::new()
     };
@@ -1497,6 +1616,7 @@ fn run_task_once(
             layout: Some(&test_layout),
             told: &told,
             related: &related,
+            oracle: false,
         }))
     } else {
         None
@@ -1552,6 +1672,7 @@ fn run_task_once(
                     layout: Some(&test_layout),
                     told: &told,
                     related: &related,
+                    oracle: false,
                 },
                 a,
                 &scenarios,
@@ -1634,7 +1755,8 @@ fn run_task_once(
             .with_data(CommandData::Run(Box::new(report)));
     }
 
-    if demand_red && !acceptance.as_ref().is_some_and(|a| a.red) {
+    // A gap judged by its story's oracle is shown by that oracle's red test.
+    if demand_red && story_oracle.is_none() && !acceptance.as_ref().is_some_and(|a| a.red) {
         let why = undemonstrated_why(acceptance.as_ref());
         let reason = format!(
             "convergence gap not demonstrated: {why}; a person decides whether {task} is real"
@@ -2845,7 +2967,7 @@ fn run_task_once(
             return fail(CommandStatus::GitPrecondition, e.0);
         }
     };
-    report.usage = usage;
+    report.usage = super::commit::add_usage(usage.as_ref(), oracle_spent.as_ref());
     // What reached the implementer, by digest: the bundle's parts and the
     // test layout (constitution VIII).
     {
@@ -3076,6 +3198,7 @@ fn run_task_once(
                 layout: Some(&test_layout),
                 told: &told,
                 related: &related,
+                oracle: false,
             };
             let weak = crate::strength::weak(a);
             match strengthen(&setup, &visible_tests, weak, &before, fin) {
@@ -3620,12 +3743,14 @@ fn run_task_once(
         let own_test = named
             .filter(|n| own_files.contains(n))
             .or_else(|| own_failed.then(|| own_files.first().cloned()).flatten());
+        // Everything the attempt cost, as a tick would count it.
+        let spent = super::commit::all_usage(&report);
         let record = attempts::Record {
             run,
             outcome: &outcome,
             reason: &reason,
             pending: report.pending.as_ref(),
-            usage: report.usage.as_ref(),
+            usage: spent.as_ref(),
             story_open: &story_open,
             own_test: own_test.as_deref(),
         };

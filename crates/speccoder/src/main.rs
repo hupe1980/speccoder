@@ -1218,6 +1218,19 @@ fn main() {
             story,
             &speccoder_runtime::RunOptions::default(),
         ),
+        Command::Story {
+            action: cli::StoryAction::Accept { scenario, reason },
+        } => match speccoder_runtime::worktree::state_dir() {
+            Some(state) => speccoder_runtime::acceptance_at::accept_untestable(
+                path,
+                feature,
+                scenario,
+                reason,
+                speccoder_core::actions::Via::Terminal,
+                &state,
+            ),
+            None => no_state("story accept"),
+        },
         Command::Task { action } => task_action(action, path, feature),
         Command::Ui {
             port,

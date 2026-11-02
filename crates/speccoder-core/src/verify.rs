@@ -372,6 +372,66 @@ pub fn collected_count(result: &CheckResult, summary: Option<&RunnerSummary>) ->
 /// then the check's status. Nothing recognised is [`RedClass::Unclassified`].
 #[must_use]
 pub fn classify_red(result: &CheckResult, summary: Option<&RunnerSummary>) -> RedClass {
+    classified(result, summary)
+}
+
+/// The names a red run's every failure says are not there — pytest's
+/// `FAILED t.py::a - ModuleNotFoundError: No module named 'x'`, an
+/// import, attribute or name error; vitest's `Cannot find module` — or
+/// `None` when any failure is something else. Red of code a task has yet
+/// to write looks the same: the caller decides whose names they are.
+#[must_use]
+pub fn missing_names(result: &CheckResult) -> Option<Vec<String>> {
+    const PYTHON: &[&str] = &[
+        "ModuleNotFoundError",
+        "ImportError",
+        "AttributeError",
+        "NameError",
+    ];
+    let text = format!("{}\n{}", result.stdout_tail, result.stderr_tail);
+    let quoted = |s: &str| -> Vec<String> {
+        s.split(['\'', '"'])
+            .skip(1)
+            .step_by(2)
+            .map(str::to_owned)
+            .collect()
+    };
+    let failed: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter_map(|l| {
+            l.strip_prefix("FAILED ")
+                .or_else(|| l.strip_prefix("ERROR "))
+        })
+        .collect();
+    if !failed.is_empty() {
+        let mut names = Vec::new();
+        for rest in failed {
+            let cause = rest.split_once(" - ").map_or("", |(_, c)| c);
+            let (kind, message) = cause.split_once(':').unwrap_or((cause, ""));
+            let kind = kind.trim();
+            if !PYTHON.contains(&kind.rsplit('.').next().unwrap_or(kind)) {
+                return None;
+            }
+            // `No module named 'a.b'`, `cannot import name 'X'`, `'T' object
+            // has no attribute 'f'`: the last quoted word is what is missing.
+            names.extend(quoted(message).pop());
+        }
+        return Some(names);
+    }
+    let js = text.lines().any(|l| l.trim_start().starts_with("FAIL "));
+    if js && !text.contains("AssertionError") && !text.contains("expected ") {
+        let names: Vec<String> = text
+            .lines()
+            .filter(|l| l.contains("Cannot find module") || l.contains("Failed to resolve import"))
+            .filter_map(|l| quoted(l).first().cloned())
+            .collect();
+        return (!names.is_empty()).then_some(names);
+    }
+    None
+}
+
+fn classified(result: &CheckResult, summary: Option<&RunnerSummary>) -> RedClass {
     if result.status == CheckStatus::TimedOut {
         return RedClass::Timeout;
     }
@@ -536,6 +596,62 @@ pub enum Verdict {
     },
 }
 
+/// One line per regressed test — but a check whose tests are all gone (its
+/// file no longer collects or builds) is one line, naming the runner's
+/// first error, never one per test it no longer runs.
+fn regression_reasons(checks: &[CheckResult], regressions: &[Regression]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for r in regressions {
+        let check = r.id.split('/').next().unwrap_or(&r.id);
+        if seen.contains(&check) {
+            continue;
+        }
+        seen.push(check);
+        let of: Vec<&Regression> = regressions
+            .iter()
+            .filter(|x| x.id.split('/').next() == Some(check))
+            .collect();
+        // Only when the runner says its tests could not even be collected
+        // or built; tests the attempt removed stay named one by one.
+        const BROKEN: &[&str] = &[
+            "ERROR collecting",
+            "ImportError while importing",
+            "SyntaxError",
+            "error: could not compile",
+            "error[E",
+            "Failed to load",
+            "no tests ran",
+        ];
+        let broken = checks
+            .iter()
+            .find(|c| c.name == check)
+            .map(|c| format!("{}\n{}", c.stdout_tail, c.stderr_tail))
+            .filter(|t| BROKEN.iter().any(|m| t.contains(m)));
+        if let Some(text) =
+            broken.filter(|_| of.len() >= 3 && of.iter().all(|x| x.now == "missing"))
+        {
+            // pytest's `E   …` line says what broke; else the marker's own.
+            let lines = || text.lines().map(str::trim);
+            let first = lines()
+                .find(|l| l.starts_with("E "))
+                .or_else(|| lines().find(|l| BROKEN.iter().any(|m| l.contains(m))))
+                .map(|l| format!(": {}", l.chars().take(200).collect::<String>()))
+                .unwrap_or_default();
+            out.push(format!(
+                "regression: check `{check}` no longer runs {} of its tests{first}",
+                of.len()
+            ));
+        } else {
+            out.extend(
+                of.iter()
+                    .map(|x| format!("regression: {} is {}", x.id, x.now)),
+            );
+        }
+    }
+    out
+}
+
 /// The verdict for a task whose task-specific checks are named in `task_checks`.
 #[must_use]
 pub fn verdict(task_checks: &[&str], checks: &[CheckResult], cmp: Option<&Comparison>) -> Verdict {
@@ -544,11 +660,7 @@ pub fn verdict(task_checks: &[&str], checks: &[CheckResult], cmp: Option<&Compar
         .map(|c| format!("check `{}` {:?}", c.name, c.status).to_lowercase())
         .collect();
     if let Some(cmp) = cmp {
-        reasons.extend(
-            cmp.regressions
-                .iter()
-                .map(|r| format!("regression: {} is {}", r.id, r.now)),
-        );
+        reasons.extend(regression_reasons(checks, &cmp.regressions));
     }
     if !reasons.is_empty() {
         return Verdict::Failed { reasons };
@@ -763,6 +875,57 @@ mod tests {
         );
     }
 
+    /// The sample's T032 test (2026-11-02) failed only on names that are
+    /// not there; whose they are is the caller's to say. A failing
+    /// assertion, or a domain error, is the behaviour.
+    #[test]
+    fn a_red_run_says_which_names_are_not_there() {
+        let ran = |out: &str| {
+            let mut c = check(
+                "acceptance",
+                CheckStatus::Failed,
+                Some(&[("t::a", TestOutcome::Failed)]),
+            );
+            c.stdout_tail = out.to_owned();
+            (classify_red(&c, None), missing_names(&c))
+        };
+        let names = |v: &[&str]| Some(v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>());
+        assert_eq!(
+            ran(
+                "FAILED tests/test_acceptance_t032.py::test_header - ModuleNotFoundError: No module named 'src.lib.convert_table_to_csv'\n1 failed"
+            ),
+            (
+                RedClass::Assertion,
+                names(&["src.lib.convert_table_to_csv"])
+            )
+        );
+        assert_eq!(
+            ran("FAILED tests/t.py::a - AttributeError: 'tuple' object has no attribute 'header'")
+                .1,
+            names(&["header"])
+        );
+        assert_eq!(ran("FAILED tests/t.py::a - NameError: x\nFAILED tests/t.py::b - AssertionError: assert 1 == 2").1, None);
+        assert_eq!(
+            ran("FAILED tests/t.py::a - src.models.ConversionError: header missing").1,
+            None
+        );
+        assert_eq!(
+            ran("FAILED tests/t.py::a - NotImplementedError: soon").1,
+            None,
+            "a stub the task fills"
+        );
+        assert_eq!(
+            ran(" FAIL  tests/csv.test.ts > converts\nError: Cannot find module '../src/convert'")
+                .1,
+            names(&["../src/convert"])
+        );
+        assert_eq!(
+            ran(" FAIL  tests/csv.test.ts > converts\nAssertionError: expected 'a' to be 'b'").1,
+            None
+        );
+        assert_eq!(ran("test result: FAILED. 0 passed; 1 failed").1, None);
+    }
+
     fn check(
         name: &str,
         status: CheckStatus,
@@ -880,6 +1043,31 @@ mod tests {
         assert_eq!(cmp.new_tests, ["test/d"]);
         assert_eq!((cmp.count_before, cmp.count_after), (3, 4));
         assert!(cmp.failing_as_before.is_empty(), "b is a new failure");
+    }
+
+    /// The sample's T009 (2026-11-01): one test file that no longer
+    /// collected read as 17 regressions; it is one reason, with its error.
+    #[test]
+    fn a_check_whose_tests_are_gone_is_one_reason() {
+        let mut now = check("test", CheckStatus::Failed, None);
+        now.stdout_tail = "ERROR collecting tests/test_acceptance_us1.py\nE   SyntaxError: from __future__ imports must occur at the beginning of the file".to_owned();
+        let gone: Vec<Regression> = (1..=17)
+            .map(|n| Regression {
+                id: format!("test/tests.unit::t{n}"),
+                now: "missing".to_owned(),
+            })
+            .collect();
+        assert_eq!(
+            regression_reasons(&[now], &gone),
+            [
+                "regression: check `test` no longer runs 17 of its tests: E   SyntaxError: from __future__ imports must occur at the beginning of the file"
+            ]
+        );
+        // A test or two gone stays named; so do tests an attempt removed
+        // while the rest still ran.
+        assert_eq!(regression_reasons(&[], &gone[..2]).len(), 2);
+        let ran = check("test", CheckStatus::Passed, None);
+        assert_eq!(regression_reasons(&[ran], &gone[..3]).len(), 3);
     }
 
     #[test]

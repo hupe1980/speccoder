@@ -3411,6 +3411,24 @@
           ]
         },
         {
+          "description": "Accept a scenario its test author called untestable (the input is\nthe reason): its story's checkpoint no longer waits for it, and the\ntick records who accepted it.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "accept_untestable"
+            },
+            "scenario": {
+              "description": "The scenario (`US2-2`).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "scenario"
+          ]
+        },
+        {
           "description": "Install the bundled `speccoder` Spec Kit preset through Spec Kit's\nown `specify preset add` (`update`: the installed one, replaced).",
           "type": "object",
           "properties": {
@@ -9252,6 +9270,18 @@
           "type": "array",
           "items": true
         },
+        "dropped": {
+          "description": "Findings dropped by the oracles' evidence, each with its `why`:\nevery scenario it cites already holds, or it restates a done task.",
+          "type": "array",
+          "items": true
+        },
+        "stories": {
+          "description": "Each finished story on its oracle this round: `US1: 2 of 3 hold`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "commit": {
           "description": "The commit on `speccoder/<feature>` holding the appended section.",
           "type": [
@@ -9846,7 +9876,7 @@
           ]
         },
         "proven": {
-          "description": "Every task done and every scenario green: the spec shows it, the\nreport and the board leave it out.",
+          "description": "Every task done and every scenario turned red→green by a tick: the\nspec shows it, the report and the board leave it out. Green found by\nan oracle written after the code is no proof.",
           "type": "boolean"
         },
         "finished": {
@@ -12939,6 +12969,11 @@
           "description": "[`Runnable::CheckStory`].",
           "type": "string",
           "const": "check_story"
+        },
+        {
+          "description": "[`Runnable::AcceptUntestable`].",
+          "type": "string",
+          "const": "accept_untestable"
         },
         {
           "description": "[`Runnable::PresetAdd`].",

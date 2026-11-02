@@ -3704,6 +3704,24 @@
           ]
         },
         {
+          "description": "Accept a scenario its test author called untestable (the input is\nthe reason): its story's checkpoint no longer waits for it, and the\ntick records who accepted it.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "accept_untestable"
+            },
+            "scenario": {
+              "description": "The scenario (`US2-2`).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "scenario"
+          ]
+        },
+        {
           "description": "Install the bundled `speccoder` Spec Kit preset through Spec Kit's\nown `specify preset add` (`update`: the installed one, replaced).",
           "type": "object",
           "properties": {
@@ -5458,6 +5476,18 @@
           "description": "Findings that repeat an earlier convergence task: no progress.",
           "type": "array",
           "items": true
+        },
+        "dropped": {
+          "description": "Findings dropped by the oracles' evidence, each with its `why`:\nevery scenario it cites already holds, or it restates a done task.",
+          "type": "array",
+          "items": true
+        },
+        "stories": {
+          "description": "Each finished story on its oracle this round: `US1: 2 of 3 hold`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "commit": {
           "description": "The commit on `speccoder/<feature>` holding the appended section.",

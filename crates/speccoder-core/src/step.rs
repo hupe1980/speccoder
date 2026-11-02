@@ -216,6 +216,7 @@ pub const SUBCOMMANDS: &[&str] = &[
     "schema",
     "spec",
     "status",
+    "story",
     "suggest",
     "task",
     "tui",
@@ -705,6 +706,16 @@ fn perform(run: Runnable, args: &[String]) -> How {
     }
 }
 
+/// `speccoder story accept US2-2 --reason R`: the reason is asked for.
+fn accept_untestable(scenario: String, args: &[String]) -> How {
+    asking(
+        Runnable::AcceptUntestable { scenario },
+        args,
+        flag(args, "--reason"),
+        "Why it cannot be tested",
+    )
+}
+
 fn asking(run: Runnable, args: &[String], given: Option<&str>, prompt: &str) -> How {
     let (input, text) = input(given, prompt);
     How::Perform {
@@ -772,6 +783,10 @@ fn speccoder(argv: &[String], constant: bool) -> How {
         (Some("converge"), _) => perform(Runnable::Converge, a),
         (Some("story"), Some("check")) => match task(2) {
             Some(story) => perform(Runnable::CheckStory { story }, a),
+            None => run_cmd(),
+        },
+        (Some("story"), Some("accept")) => match task(2) {
+            Some(scenario) => accept_untestable(scenario, a),
             None => run_cmd(),
         },
         (Some("run"), _) => {

@@ -1025,6 +1025,25 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "STORY-UNTESTABLE",
+        P,
+        S::NeedsHuman,
+        "the story's last task waits on scenarios called untestable",
+        "The test author called a scenario of the story untestable, so no test judges it and no attempt can turn it. The story's last task waits for a person before any model is called: accept it (`speccoder story accept US2-2 --reason \"…\"`, recorded on the feature's branch), or rule its test wrong so it is written again.",
+        ["speccoder task rule {task} --tests-wrong --scenario <scenario> --reason \"…\""]
+    ),
+    entry!(
+        "TASK-HOLDS",
+        P,
+        S::NeedsHuman,
+        "the scenarios the task cites already hold",
+        "A task outside a story that cites scenarios is judged by their story's oracle. Every one it cites already passes on the feature's branch, so there is nothing for it to do and no model was called. Tick it on your word, or skip it.",
+        [
+            "speccoder task accept {task} --reason \"…\"",
+            "speccoder task skip {task} --reason \"…\""
+        ]
+    ),
+    entry!(
         "ORACLE-UNWRITTEN",
         P,
         S::NeedsHuman,

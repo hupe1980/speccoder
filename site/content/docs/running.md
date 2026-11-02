@@ -148,7 +148,7 @@ Such a stop is never a dead end. At a terminal the run asks, one key each: **d**
 
 speccoder detects the project's test layout — each runner's collection rule, where tests live, the naming habit, files nothing runs — and gives it to the implementer and every test author.
 
-- A story's [oracle](@/docs/evidence.md#what-judges-each-task) is a set of test files where the runner collects them, each run by the command that runs only it (`cargo test --test acceptance_us1_parse`); a test that would stop the project's other tests from building or collecting is never committed. A convergence gap writes a file of its own.
+- A story's [oracle](@/docs/evidence.md#what-judges-each-task) is a set of test files where the runner collects them, each run by the command that runs only it (`cargo test --test acceptance_us1_parse`); a test that would stop the project's other tests from building or collecting is never committed. A convergence task citing only requirements writes a file of its own, named for the feature and the task (`tests/test_acceptance_001_t032.py`).
 - With no place the runner collects (Cargo's `autotests = false`, a missing `testpaths`), no acceptance test is written and `speccoder doctor` names the setting.
 
 ## Retries
@@ -189,7 +189,7 @@ With `[budget] best_of = 3` (default 1), each task gets three independent attemp
 speccoder converge
 ```
 
-Once every task is ticked, a read-only model call compares the code with `spec.md`, `plan.md`, `tasks.md` and the constitution and lists gaps: `missing`, `partial`, `contradicts`, `unrequested`. Actionable gaps are appended as a new `## Phase N: Convergence` in `tasks.md`, gravest first, and committed; `run --converge` works through them and assesses again. It stops for you when only unrequested findings remain, when findings repeat earlier convergence tasks, or after `[converge] max_rounds` (default 3).
+Once every task is ticked, converge reads the evidence first: each finished story's oracle (written now when it has none, one author call per story) runs on the branch, and each red scenario becomes a task — `Make US1-3 hold through the story's interface per US1/AC3 (scenario)` — without a model's word. Then a read-only model call compares the code with `spec.md`, `plan.md`, `tasks.md` and the constitution and lists the gaps no scenario shows: `missing`, `partial`, `contradicts`, `unrequested`. A finding citing only scenarios that hold, or restating a done task with nothing red, is dropped and listed with why. Actionable gaps are appended as a new `## Phase N: Convergence` in `tasks.md`, gravest first, and committed; `run --converge` works through them and assesses again. It stops for you when only unrequested findings remain, when findings repeat earlier convergence tasks, or after `[converge] max_rounds` (default 3).
 
 ## Repository instructions
 

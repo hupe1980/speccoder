@@ -637,6 +637,16 @@ pub enum StoryAction {
         /// The story, e.g. US3.
         story: String,
     },
+    /// Accept a scenario its test author called untestable: the story's
+    /// last task no longer waits for it; your reason is committed on the
+    /// feature's branch.
+    Accept {
+        /// The scenario, e.g. US2-2.
+        scenario: String,
+        /// Why it cannot be tested.
+        #[arg(long)]
+        reason: String,
+    },
 }
 
 /// `speccoder task` verbs; the task comes first after the verb.

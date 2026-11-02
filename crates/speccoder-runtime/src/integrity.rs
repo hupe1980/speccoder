@@ -140,7 +140,7 @@ fn class_of(policy: &Policy, rel: &str) -> Option<&'static str> {
 /// Markers that declare a test.
 const TEST_MARKERS: &str = r"#\[(tokio::)?test\b|^\s*def test_|^\s*(async\s+)?fn test_|\b(it|test)\s*\(\s*['\x22`]|@Test\b|^\s*func Test";
 /// Markers that skip a test.
-const SKIP_MARKERS: &str = r"#\[ignore\b|@pytest\.mark\.(skip|xfail)|\.skip\s*\(|\bx(it|describe|test)\s*\(|@Disabled\b|@Ignore\b|\bt\.Skip(Now)?\s*\(|@unittest\.skip|\.todo\s*\(";
+const SKIP_MARKERS: &str = r"#\[ignore\b|@pytest\.mark\.(skip|xfail)|\b(?:it|describe|test|suite|pytest)\.skip\s*\(|\bx(it|describe|test)\s*\(|@Disabled\b|@Ignore\b|\bt\.Skip(Now)?\s*\(|@unittest\.skip|\b(?:it|test)\.todo\s*\(";
 
 /// Test definitions with their names: Rust `#[test] fn`, Python `def
 /// test_`, Go `func Test`, JavaScript `it("…")` / `test("…")`.

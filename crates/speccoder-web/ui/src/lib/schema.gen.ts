@@ -100,7 +100,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "rule_scenario" | "check_story" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "rule_scenario" | "check_story" | "accept_untestable" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -1243,6 +1243,13 @@ export interface ConvergeReport {
   unrequested: unknown[];
   /** Findings that repeat an earlier convergence task: no progress. */
   repeated: unknown[];
+  /**
+   * Findings dropped by the oracles' evidence, each with its `why`:
+   * every scenario it cites already holds, or it restates a done task.
+   */
+  dropped?: unknown[];
+  /** Each finished story on its oracle this round: `US1: 2 of 3 hold`. */
+  stories?: string[];
   /** The commit on `speccoder/<feature>` holding the appended section. */
   commit: string | null;
   /** Token usage of the assessment. */
@@ -5023,6 +5030,16 @@ export type Runnable =
     scenario: string | null;
   }
   /**
+   * Accept a scenario its test author called untestable (the input is
+   * the reason): its story's checkpoint no longer waits for it, and the
+   * tick records who accepted it.
+   */
+  | {
+    kind: "accept_untestable";
+    /** The scenario (`US2-2`). */
+    scenario: string;
+  }
+  /**
    * Install the bundled `speccoder` Spec Kit preset through Spec Kit's
    * own `specify preset add` (`update`: the installed one, replaced).
    */
@@ -5815,8 +5832,9 @@ export interface StoryScenarios {
   /** The story's oracle, once written. */
   oracle?: OracleMark | null;
   /**
-   * Every task done and every scenario green: the spec shows it, the
-   * report and the board leave it out.
+   * Every task done and every scenario turned red→green by a tick: the
+   * spec shows it, the report and the board leave it out. Green found by
+   * an oracle written after the code is no proof.
    */
   proven?: boolean;
   /** Every task of the story done. */

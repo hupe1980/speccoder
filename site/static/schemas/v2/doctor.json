@@ -1238,6 +1238,24 @@
           ]
         },
         {
+          "description": "Accept a scenario its test author called untestable (the input is\nthe reason): its story's checkpoint no longer waits for it, and the\ntick records who accepted it.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "accept_untestable"
+            },
+            "scenario": {
+              "description": "The scenario (`US2-2`).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "scenario"
+          ]
+        },
+        {
           "description": "Install the bundled `speccoder` Spec Kit preset through Spec Kit's\nown `specify preset add` (`update`: the installed one, replaced).",
           "type": "object",
           "properties": {
