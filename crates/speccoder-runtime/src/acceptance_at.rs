@@ -417,12 +417,25 @@ pub fn rule_tests_wrong(
             "a ruling needs a reason".to_owned(),
         );
     }
-    let Ok(opened) = crate::format::open(root, feature) else {
+    let Ok(mut opened) = crate::format::open(root, feature) else {
         return refuse(
             CommandStatus::NotAProject,
             "no spec project here".to_owned(),
         );
     };
+    // A convergence task is appended on the feature's branch: the run's
+    // task list, when the checkout's lags behind it.
+    let at = std::path::PathBuf::from(&opened.snapshot.root);
+    if let Some(f) = opened.snapshot.feature.as_mut()
+        && !f
+            .tasks
+            .as_ref()
+            .is_some_and(|ts| ts.tasks.iter().any(|t| t.id == task))
+        && let Some(branch) =
+            crate::current::branch_task_list(opened.adapter, &at, &f.feature.name, &f.feature.dir)
+    {
+        f.tasks = Some(branch);
+    }
     let snap = &opened.snapshot;
     let Some(f) = snap.feature.as_ref() else {
         return refuse(

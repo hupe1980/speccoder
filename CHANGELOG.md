@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `speccoder task rule --tests-wrong` finds a convergence task that is
+  only on the feature's branch, as `task show` does.
+
 ## [0.9.0] - 2026-11-03
 
 ### Added

@@ -163,24 +163,34 @@ fn title(format: &dyn Adapter, dir: &Path) -> Option<String> {
     (!t.is_empty()).then(|| t.to_owned())
 }
 
-/// Ticked and all tasks on the feature's branch: speccoder ticks (and
-/// appends convergence tasks) there, so the checkout lags until the
-/// branch is merged. `None` without the branch.
+/// Ticked and all tasks on the feature's branch. `None` without the branch.
 fn branch_tasks(
     format: &dyn Adapter,
     root: &Path,
     name: &str,
     dir: &str,
 ) -> Option<(usize, usize)> {
-    let file = format!("{dir}/{}", format.messages().tasks_file);
-    let out = crate::git::Git::at(root)
-        .run(&["show", &format!("speccoder/{name}:{file}")])
-        .ok()?;
-    let (parsed, _) = format.parse_tasks(&file, &String::from_utf8_lossy(&out));
+    let parsed = branch_task_list(format, root, name, dir)?;
     Some((
         parsed.tasks.iter().filter(|t| t.done).count(),
         parsed.tasks.len(),
     ))
+}
+
+/// The task list as committed on the feature's branch: speccoder ticks
+/// (and appends convergence tasks) there, so the checkout lags until the
+/// branch is merged. `None` without the branch.
+pub(crate) fn branch_task_list(
+    format: &dyn Adapter,
+    root: &Path,
+    name: &str,
+    dir: &str,
+) -> Option<speccoder_core::snapshot::ParsedTasks> {
+    let file = format!("{dir}/{}", format.messages().tasks_file);
+    let out = crate::git::Git::at(root)
+        .run(&["show", &format!("speccoder/{name}:{file}")])
+        .ok()?;
+    Some(format.parse_tasks(&file, &String::from_utf8_lossy(&out)).0)
 }
 
 /// `speccoder feature`: every feature, the current one marked.

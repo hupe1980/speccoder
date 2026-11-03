@@ -657,6 +657,45 @@ fn a_task_outside_a_story_has_its_wrong_test_ruled_and_written_again() {
     );
 }
 
+/// A convergence task lives on the feature's branch until it is merged:
+/// its test is ruled from the checkout all the same.
+#[test]
+fn a_convergence_task_on_the_branch_alone_is_ruled_from_the_checkout() {
+    let r = repo_with(&TASKS.replace("- [ ]", "- [x]"));
+    let state = tempfile::tempdir().unwrap();
+    git(r.path(), &["checkout", "-q", "-b", "speccoder/001-graph"]);
+    fs::write(
+        r.path().join("specs/001-graph/tasks.md"),
+        format!(
+            "{}\n## Phase 7: Convergence\n\n- [ ] T026 Route both tables in `src/lib.rs` per FR-003 (partial)\n",
+            TASKS.replace("- [ ]", "- [x]")
+        ),
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-q", "-am", "converge"]);
+    git(r.path(), &["checkout", "-q", "-"]);
+    let rule = |task: &str| {
+        speccoder_runtime::acceptance_at::rule_tests_wrong(
+            r.path(),
+            None,
+            task,
+            None,
+            "US1/AC3 says gamma",
+            speccoder_core::actions::Via::Terminal,
+            state.path(),
+        )
+    };
+    let ruled = rule("T026");
+    assert_eq!(ruled.status(), CommandStatus::Ok, "{}", ruled.message());
+    let missing = rule("T099");
+    assert_eq!(
+        missing.status(),
+        CommandStatus::NotFound,
+        "{}",
+        missing.message()
+    );
+}
+
 /// A story ticked before it had an oracle: nothing ran its scenarios, and
 /// nothing is left to turn them — said as such, never as red.
 #[test]
