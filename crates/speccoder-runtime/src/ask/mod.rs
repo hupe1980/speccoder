@@ -460,10 +460,14 @@ pub fn new_id() -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos());
+    // Counted too: two conversations of one process in one millisecond
+    // (two tabs of the interface) are two.
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     format!(
-        "c-{:x}{:04x}",
+        "c-{:x}{:04x}{:x}",
         nanos / 1_000_000,
-        std::process::id() & 0xffff
+        std::process::id() & 0xffff,
+        N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     )
 }
 

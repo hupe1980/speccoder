@@ -399,7 +399,10 @@ fn a_stopped_turn_keeps_its_words_and_the_conversation_goes_on() {
             && told.contains("Q: what is in notes.txt?\nA: notes.txt has four lines."),
         "the new run did not carry the earlier turns: {told}"
     );
-    assert!(!ask::stop(None), "a turn is still listed in flight");
+    assert!(
+        !ask::stop(Some(&first.conversation)),
+        "a turn is still listed in flight"
+    );
 }
 
 /// Each kind is checked against the project now; a blocked one says why
@@ -742,5 +745,9 @@ fn stop_ends_the_model_call_where_its_words_are() {
         t.usage.output,
         whole.usage.output
     );
-    assert!(!ask::stop(None), "a turn is still listed in flight");
+    // Its own conversation: `None` would stop the tests beside it.
+    assert!(
+        !ask::stop(Some(&t.conversation)),
+        "the stopped turn is still listed in flight"
+    );
 }

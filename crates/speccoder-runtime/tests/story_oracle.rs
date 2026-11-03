@@ -499,6 +499,29 @@ fn a_convergence_task_is_judged_by_its_scenario_s_oracle_test() {
             "speccoder task skip T026 --reason \"…\""
         ]
     );
+
+    // The feature's run stops there too, naming the task in its fixes.
+    let f = FakeProvider::new();
+    let d: Arc<dyn ModelProvider> = f.clone();
+    let res = speccoder_runtime::run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d,
+        None,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("TASK-HOLDS"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        res.fix().iter().all(|l| l.contains("T026")),
+        "{:?}",
+        res.fix()
+    );
 }
 
 /// A link to no scenario of its story, and a story with no code task, are

@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A task's stop in a feature's run names the task in its `fix:` lines,
+  never `<task>`.
+- Two Ask conversations started in the same millisecond (two tabs of
+  the interface) are two, never one.
+
 ## [0.9.2] - 2026-11-03
 
 ### Fixed

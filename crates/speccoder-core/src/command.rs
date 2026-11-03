@@ -2820,7 +2820,9 @@ impl CommandResult {
     pub fn caused_by(mut self, from: &Self) -> Self {
         if self.status == from.status {
             self.code = from.code;
-            self.fix.clone_from(&from.fix);
+            // Resolved where the stop names its task: the result carried
+            // on has no run of it to fill the catalog's `{task}` from.
+            self.fix = from.fix();
             self.commands.clone_from(&from.commands);
             self.remedy.clone_from(&from.remedy);
         }
