@@ -46,7 +46,7 @@ speccoder config commit                            # commits speccoder.toml, and
 
 ## `[checks.<name>]`
 
-The commands that decide whether nothing regressed. A check's command up to its first option is also a prefix the model may run (`cargo nextest run …` allows `cargo nextest run` with any arguments); when that leaves only the program (`python3 -m pytest …`), the check allows exactly itself.
+The commands that decide whether nothing regressed. A check's command up to its first option is also a prefix the model may run (`cargo nextest run …` allows `cargo nextest run` with any arguments); when that leaves only the program (`python3 -m pytest …`), the check allows itself, keeping its options, with test paths or names added but no other option (`python3 -m pytest -q tests/test_x.py`).
 
 | Key | Default | Meaning |
 |---|---|---|

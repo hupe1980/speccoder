@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 use speccoder_core::scope::ScopeFinding;
-use speccoder_core::verify::Verdict;
+use speccoder_core::verify::{RedClass, Verdict};
 use speccoder_core::{CommandStatus, RunReport};
 
 use crate::progress;
@@ -334,7 +334,11 @@ pub(crate) fn undemonstrated_why(acceptance: Option<&super::PreparedAcceptance>)
         None => "the spec has no acceptance examples to test it against".to_owned(),
         Some(a) => match (a.report["skipped"].as_str(), a.report["note"].as_str()) {
             (Some(s), _) => format!("no acceptance tests ({s})"),
-            (None, Some(note)) => match a.report["excerpt"].as_str().and_then(|e| e.lines().next())
+            // Passing output says nothing more; a runner's header is no reason.
+            (None, Some(note)) => match a.report["excerpt"]
+                .as_str()
+                .filter(|_| a.red_class != Some(RedClass::Passed))
+                .and_then(|e| e.lines().map(str::trim).find(|l| !header(l)))
             {
                 Some(first) => format!("{note}: {first}"),
                 None => note.to_owned(),
@@ -344,10 +348,50 @@ pub(crate) fn undemonstrated_why(acceptance: Option<&super::PreparedAcceptance>)
     }
 }
 
+/// A line of a test runner's preamble: a `===` banner, pytest's
+/// platform, root and plugins, an empty line.
+fn header(line: &str) -> bool {
+    line.is_empty()
+        || line.starts_with("===")
+        || [
+            "platform ",
+            "rootdir:",
+            "configfile:",
+            "plugins:",
+            "cachedir:",
+            "collected ",
+        ]
+        .iter()
+        .any(|p| line.starts_with(p))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_runner_s_header_is_never_the_reason() {
+        let mut a: super::super::PreparedAcceptance =
+            serde_json::from_value(json!({ "report": {}, "argv": null, "red": false })).unwrap();
+        a.report = json!({
+            "note": "the acceptance tests did not fail on an assertion (a collection error): not demonstrated",
+            "excerpt": "============================= test session starts ==============================\nplatform darwin -- Python 3.15\nrootdir: /w\ncollected 1 item\n\nE   ModuleNotFoundError: No module named 'src'",
+        });
+        a.red_class = Some(RedClass::CollectionError);
+        assert_eq!(
+            undemonstrated_why(Some(&a)),
+            "the acceptance tests did not fail on an assertion (a collection error): not demonstrated: E   ModuleNotFoundError: No module named 'src'"
+        );
+        a.red_class = Some(RedClass::Passed);
+        a.report["note"] = json!(
+            "the acceptance tests already pass before the attempt, so they are no evidence for it"
+        );
+        assert_eq!(
+            undemonstrated_why(Some(&a)),
+            "the acceptance tests already pass before the attempt, so they are no evidence for it"
+        );
+    }
 
     #[test]
     fn a_failed_check_says_what_it_said_first() {

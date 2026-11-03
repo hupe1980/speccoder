@@ -648,11 +648,22 @@ impl Plane {
         reason: &str,
     ) -> Result<(), PlaneError> {
         let err = |e: String| PlaneError(e);
-        let _ = self
-            .runtime
-            .request_cancel(task.run, by, reason)
-            .await
-            .map_err(|e| err(e.to_string()))?;
+        match self.runtime.request_cancel(task.run, by, reason).await {
+            Ok(_) => {}
+            // A run holding an unknown outcome is never unwound: speccoder
+            // set its attempt aside already, so it is closed where it stands.
+            Err(agentplane::core::RuntimeError::CannotUnwind { .. }) => self
+                .runtime
+                .record_quarantine_decision(
+                    task.run,
+                    by,
+                    reason,
+                    agentplane::core::QuarantineDecision::Abandon,
+                )
+                .await
+                .map_err(|e| err(e.to_string()))?,
+            Err(e) => return Err(err(e.to_string())),
+        }
         if let Some(tasks) = self.runtime.tasks() {
             tasks
                 .withdraw_run(task.run, &[task.id])

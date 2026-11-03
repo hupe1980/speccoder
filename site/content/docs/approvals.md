@@ -97,7 +97,7 @@ speccoder run --task T003                        # the attempt continues from th
 
 - `task approve` and `task reject` need no model or key. The next `run` continues the **same** attempt from the journal: nothing finished is repeated, and the call that runs is exactly the one you were shown.
 - `--call <id>` (or a prefix) picks one of several waiting calls; `--all` decides every waiting call of the task, or of the feature, each recorded on its own.
-- While one task's attempt waits, the feature's other tasks do not start: they share its worktree.
+- While one task's attempt waits, the feature's other tasks do not start: they share its worktree. A waiting call of a task ticked since is withdrawn.
 - A waiting call expires after `[approvals] wait` (default `7d`): it is denied as expired, recorded as an expiry rather than anybody's decision, and the attempt continues with the refusal.
 - Parallel lanes stop instead of waiting; deciding the stopped call lets the next run that attempts the task make it.
 

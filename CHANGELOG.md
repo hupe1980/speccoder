@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A story is tested through the project's command when a scenario's
+  *When* runs it, even if its Independent Test names only the input.
+- A check also allows itself narrowed to test paths or names
+  (`uv run --locked python -m pytest -q tests/x.py --junitxml=…`):
+  its own options kept, no other added.
+- A waiting call of a task ticked since no longer holds the feature's
+  other tasks: it is withdrawn.
+- Withdrawing a call of a run that cannot be unwound closes the run
+  instead of failing.
+- NOT-DEMONSTRATED never quotes a test runner's banner as its reason.
+
 ## [0.9.3] - 2026-11-03
 
 ### Fixed

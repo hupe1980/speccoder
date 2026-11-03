@@ -482,6 +482,28 @@ pub fn prefix_matches(prefix: &[String], argv: &[String]) -> bool {
     prefix.len() >= 2 && argv.starts_with(prefix)
 }
 
+/// Whether `argv` is `check` given tests to run: its elements in order,
+/// with positional arguments — never an option — after its last positional
+/// one, among its trailing options (`pytest -q tests/x.py --junitxml=…`).
+fn narrows(check: &[String], argv: &[String]) -> bool {
+    let head = check
+        .iter()
+        .rposition(|a| !a.starts_with('-'))
+        .map_or(0, |i| i + 1);
+    if argv.len() <= check.len() || !argv.starts_with(&check[..head]) {
+        return false;
+    }
+    let mut rest = check[head..].iter().peekable();
+    for a in &argv[head..] {
+        if rest.peek() == Some(&a) {
+            rest.next();
+        } else if a.starts_with('-') {
+            return false;
+        }
+    }
+    rest.peek().is_none()
+}
+
 /// Why a prefix entry is refused, if it is: a bare program allows any
 /// argument.
 #[must_use]
@@ -1113,13 +1135,14 @@ impl Policy {
         if argv.len() == 2 && matches!(argv[1].as_str(), "--version" | "-V" | "version") {
             return Decision::Allow;
         }
-        // `[commands] allow` is exact; a check allows its prefix; a
-        // prefix entry (two elements or more) what extends it.
+        // `[commands] allow` is exact; a check allows its prefix, and
+        // itself narrowed to tests; a prefix entry (two elements or more)
+        // what extends it.
         if self.exact.contains(&argv)
-            || self
-                .checks
-                .iter()
-                .any(|prefix| argv.len() >= prefix.len() && argv[..prefix.len()] == prefix[..])
+            || self.checks.iter().any(|prefix| {
+                (argv.len() >= prefix.len() && argv[..prefix.len()] == prefix[..])
+                    || narrows(prefix, &argv)
+            })
             || self.prefix.iter().any(|p| prefix_matches(p, &argv))
         {
             return Decision::Allow;
@@ -1486,6 +1509,32 @@ mod tests {
             p.classify("run_command", &cmd("python3 -m pytest tests/x.py"), None),
             Decision::Approval(_)
         ));
+        // Narrowed to a test, its options kept: the check, on less.
+        let uv = Policy::new(
+            &[argv("uv run --locked python -m pytest -q --junitxml=j.xml")],
+            &[],
+        );
+        assert_eq!(
+            uv.classify(
+                "run_command",
+                &cmd("uv run --locked python -m pytest -q tests/x.py --junitxml=j.xml"),
+                None
+            ),
+            Decision::Allow
+        );
+        for other in [
+            "uv run --locked python -m pytest -q tests/x.py",
+            "uv run --locked python -m pytest -q -p evil tests/x.py --junitxml=j.xml",
+            "uv run --locked python -c tests/x.py -m pytest -q --junitxml=j.xml",
+        ] {
+            assert!(
+                matches!(
+                    uv.classify("run_command", &cmd(other), None),
+                    Decision::Approval(_)
+                ),
+                "{other}"
+            );
+        }
         // `[commands] allow` is exact: the entry allows itself only.
         let q = Policy::new(&[], &[argv("python3 -m pytest")]);
         assert!(matches!(

@@ -1338,12 +1338,33 @@ pub fn waiting_elsewhere(
     let Some(deciding) = Deciding::open(dir)? else {
         return Ok(Elsewhere::default());
     };
-    let waiting = deciding
-        .waiting(root, feature)?
-        .into_iter()
-        .map(|(c, _)| c)
-        .find(|c| c.task != task && c.source == "task")
-        .map(|c| (c.task, c.covers));
+    // A ticked task's call is an earlier attempt's: nothing resumes it.
+    let format = crate::format::at(root);
+    let ticked: Vec<String> = format
+        .inspect(root, Some(feature))
+        .and_then(|s| s.feature)
+        .and_then(|f| f.tasks)
+        .map(|ts| {
+            ts.tasks
+                .into_iter()
+                .filter(|t| t.done)
+                .map(|t| t.id)
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut waiting = None;
+    for (c, key) in deciding.waiting(root, feature)? {
+        if ticked.contains(&c.task) {
+            let by = agentplane::core::Operator::from_parts(who_in(root), "asserted")
+                .map_err(|_| "no name to record the withdrawal under".to_owned())?;
+            deciding
+                .rt
+                .block_on(deciding.plane.withdraw(&key, &by, "its task is ticked"))
+                .map_err(|e| e.0)?;
+        } else if waiting.is_none() && c.task != task && c.source == "task" {
+            waiting = Some((c.task, c.covers));
+        }
+    }
     Ok(Elsewhere {
         waiting,
         replaced_journal: deciding.plane.replaced_journal.clone(),

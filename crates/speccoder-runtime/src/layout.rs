@@ -783,18 +783,26 @@ pub fn commands(root: &Path) -> Vec<Command> {
     out
 }
 
-/// Whether a story's *Independent Test* (its line in the story's text) is
-/// about a command line, by whole words: the interface is then the
-/// project's command, never an internal module. No such line: no.
+/// Whether a story's *Independent Test* (its line in the story's text) or
+/// a scenario's *When* (what the person does) is about a command line, by
+/// whole words: the interface is then the project's command, never an
+/// internal module.
 #[must_use]
 pub fn via_command(story: &str) -> bool {
-    let Some(line) = story
-        .lines()
-        .find(|l| l.contains("Independent Test"))
-        .map(str::to_ascii_lowercase)
-    else {
-        return false;
-    };
+    story.lines().any(|l| {
+        if l.contains("Independent Test") {
+            command_words(l)
+        } else {
+            // The action alone: what is given, or follows, is no interface.
+            l.split_once("**When**").is_some_and(|(_, when)| {
+                command_words(when.split("**Then**").next().unwrap_or(when))
+            })
+        }
+    })
+}
+
+fn command_words(text: &str) -> bool {
+    let line = text.to_ascii_lowercase();
     let words: Vec<&str> = line.split(|c: char| !c.is_alphanumeric()).collect();
     let pair = |a: &str, b: &str| words.windows(2).any(|p| p[0] == a && p[1] == b);
     ["command", "cli", "stdin", "stdout", "stderr", "terminal"]
@@ -873,5 +881,13 @@ mod command_tests {
             "**Independent Test**: the client follows the recommended flow"
         ));
         assert!(!via_command("1. **Given** the command, **Then** CSV"));
+        // What the person does: the sample's US3, whose Independent Test
+        // names only the input.
+        assert!(via_command(
+            "**Independent Test**: providing invalid Markdown table input\n1. **Given** malformed input, **When** the user runs the command, **Then** the tool reports it"
+        ));
+        assert!(!via_command(
+            "1. **Given** a table, **When** parse() is called, **Then** the command prints CSV"
+        ));
     }
 }

@@ -385,6 +385,46 @@ fn a_waiting_task_holds_the_worktree_until_it_is_decided() {
     assert_eq!(next.status(), CommandStatus::Ok, "{}", next.message());
 }
 
+/// A task ticked another way (a fresh attempt, `task accept`) leaves its
+/// earlier attempt's call behind: it holds nothing, and is withdrawn.
+#[test]
+fn a_ticked_task_s_old_call_holds_nothing() {
+    let r = repo("");
+    fs::write(
+        r.path().join("specs/001-graph/tasks.md"),
+        "# Tasks\n\n## Phase 1: Setup\n\n- [ ] T005 [P] Add the manifest\n- [ ] T006 [P] Add another manifest\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "two tasks"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1");
+    let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+    let wt = PathBuf::from(&report(&first).worktree);
+    let tasks = wt.join("specs/001-graph/tasks.md");
+    let ticked = fs::read_to_string(&tasks)
+        .unwrap()
+        .replace("- [ ] T005", "- [x] T005");
+    fs::write(&tasks, ticked).unwrap();
+    git(&wt, &["commit", "-qam", "T005 ticked"]);
+
+    let (f, d) = fake();
+    f.will_structure(done());
+    let other = speccoder_runtime::run_with(r.path(), None, "T006", state.path(), d, None);
+    assert!(
+        !other.message().contains("T005 waits for a person"),
+        "{}",
+        other.message()
+    );
+    assert!(pending(r.path(), state.path()).is_empty());
+}
+
 #[test]
 fn calls_decided_without_a_person_name_the_rule() {
     let r = repo("\n[commands]\nallow = [[\"grep\", \"-q\", \"ok\", \"src/lib.rs\"]]\n");
