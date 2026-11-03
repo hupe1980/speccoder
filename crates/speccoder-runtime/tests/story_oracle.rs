@@ -1193,6 +1193,61 @@ fn a_test_of_imagined_code_is_written_again_before_any_attempt() {
     assert!(!r.path().join("tests/test_acceptance_t032.py").exists());
 }
 
+/// A gap test of the command line runs the project's command (the
+/// sample's T038 called the CLI in-process, its stdin stubbed): its author
+/// is given the command, and a test that never runs it is written again.
+#[test]
+fn a_gap_test_of_the_command_line_runs_the_command() {
+    let tasks = format!(
+        "{}\n## Phase 7: Convergence\n\n- [ ] T034 Thread the parser through the CLI per FR-004 (partial)\n",
+        TASKS.replace("- [ ]", "- [x]")
+    );
+    let r = repo_with(&tasks);
+    fs::write(
+        r.path().join("package.json"),
+        "{\"name\": \"graph\", \"bin\": {\"graph\": \"./bin/graph.js\"}}",
+    )
+    .unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-qm", "the command"]);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(json!({
+        "files": [{ "path": "tests/acceptance_t034.txt", "content": "require('../src/cli').run({ stdin: '| a |' }) uses fn gamma\n", "scenarios": ["US1-3"] }],
+        "argv": ["./accept.sh", "--", "tests/acceptance_t034.txt", "fn gamma"],
+        "notes": [],
+    }));
+    f.will_structure(json!({
+        "files": [{ "path": "tests/acceptance_t034.txt", "content": "execFileSync('graph', [], { input: '| a |' }) uses fn gamma\n", "scenarios": ["US1-3"] }],
+        "argv": ["./accept.sh", "--", "tests/acceptance_t034.txt", "fn gamma"],
+        "notes": [],
+    }));
+    implements(&f, "pub fn gamma() {}");
+    let res = run(r.path(), state.path(), "T034", &f);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let asked = f.asked();
+    let first = serde_json::to_string(&asked[0].prompt).unwrap();
+    assert!(
+        first.contains("# The project's commands") && first.contains("`graph`"),
+        "{first}"
+    );
+    let again = serde_json::to_string(&asked[1].prompt).unwrap();
+    assert!(
+        again.contains("never runs the project's command: run `graph`"),
+        "{again}"
+    );
+    // A gap outside the command line is given none.
+    let other = format!(
+        "{}\n## Phase 7: Convergence\n\n- [ ] T035 Trim cells in the parser per FR-004 (partial)\n",
+        TASKS.replace("- [ ]", "- [x]")
+    );
+    let o = repo_with(&other);
+    fs::copy(r.path().join("package.json"), o.path().join("package.json")).unwrap();
+    git(o.path(), &["add", "-A"]);
+    git(o.path(), &["commit", "-qm", "the command"]);
+    assert!(!given(o.path(), "T035").contains("# The project's commands"));
+}
+
 /// A feature's done and total come from one list: the speccoder branch's,
 /// ahead with its ticks and appended convergence tasks — never the
 /// branch's ticks over the checkout's tasks (*26 of 25*).

@@ -649,7 +649,8 @@ mod tests {
 }
 
 /// A command the project declares: what a person runs, and the words a
-/// test that runs it names (the command, its entry module, its binary).
+/// test that runs it names (the command, `-m` its module, its binary): an
+/// import of the module behind it runs no command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Command {
     /// As a person types it: `md2csv`, `python -m pkg`.
@@ -686,12 +687,7 @@ pub fn commands(root: &Path) -> Vec<Command> {
             let top = module.split('.').next().unwrap_or_default();
             let mut runs = quoted(name);
             if !top.is_empty() {
-                runs.extend([
-                    format!("import {top}"),
-                    format!("from {top}"),
-                    format!("\"{top}\""),
-                    format!("'{top}'"),
-                ]);
+                runs.extend([format!("-m {top}"), format!("\"{top}\""), format!("'{top}'")]);
             }
             out.push(Command {
                 shown: name.clone(),
@@ -709,11 +705,7 @@ pub fn commands(root: &Path) -> Vec<Command> {
                 && !out.iter().any(|c| c.runs.contains(&format!("\"{pkg}\"")))
             {
                 let mut runs = quoted(&pkg);
-                runs.extend([
-                    format!("-m {pkg}"),
-                    format!("import {pkg}"),
-                    format!("from {pkg}"),
-                ]);
+                runs.push(format!("-m {pkg}"));
                 out.push(Command {
                     shown: format!("python -m {pkg}"),
                     runs,
@@ -801,6 +793,13 @@ pub fn via_command(story: &str) -> bool {
     })
 }
 
+/// Whether a task's tests run the project's command: its title, or a
+/// scenario it cites, is about a command line.
+#[must_use]
+pub fn task_via_command<'a>(title: &str, mut scenarios: impl Iterator<Item = &'a str>) -> bool {
+    command_words(title) || scenarios.any(via_command)
+}
+
 fn command_words(text: &str) -> bool {
     let line = text.to_ascii_lowercase();
     let words: Vec<&str> = line.split(|c: char| !c.is_alphanumeric()).collect();
@@ -816,7 +815,7 @@ fn command_words(text: &str) -> bool {
 
 #[cfg(test)]
 mod command_tests {
-    use super::{commands, via_command};
+    use super::{commands, task_via_command, via_command};
 
     /// The sample's project (2026-11-02): its oracle tests imported
     /// `src.services…`, never the command its stories name.
@@ -846,7 +845,9 @@ mod command_tests {
             c[0].run_by("subprocess.run([sys.executable, \"-m\", \"speccoder_poc\"], input=t)")
         );
         assert!(c[0].run_by("subprocess.run([\"speccoder-poc\", \"in.md\"])"));
-        assert!(c[0].run_by("from speccoder_poc import main\nmain([\"in.md\"])"));
+        // In-process, the installed command's own errors never show.
+        assert!(!c[0].run_by("from speccoder_poc import main\nmain([\"in.md\"])"));
+        assert!(!c[0].run_by("from speccoder_poc.cli import CLI\nCLI.run(content=t)"));
         assert!(!c[0].run_by("from src.services.table_parser import parse_markdown_table"));
 
         let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
@@ -888,6 +889,19 @@ mod command_tests {
         ));
         assert!(!via_command(
             "1. **Given** a table, **When** parse() is called, **Then** the command prints CSV"
+        ));
+        // The sample's T038 and T037: a gap in the CLI path, one in the parser.
+        assert!(task_via_command(
+            "Thread the parser through the CLI execution path",
+            std::iter::empty()
+        ));
+        assert!(!task_via_command(
+            "Update Markdown cell splitting so it preserves in-cell whitespace",
+            std::iter::empty()
+        ));
+        assert!(task_via_command(
+            "Escape pipes in cells",
+            ["**Given** `a \\| b`, **When** the user runs the command, **Then** `a | b`"].into_iter()
         ));
     }
 }

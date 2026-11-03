@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- A convergence task about the command line (its title, or a scenario
+  it cites) has its own tests run the project's command, as a story's
+  oracle does: its author is given the command, and a test that never
+  runs it is asked for again.
+- A test runs a Python command only through it (the script, `-m pkg`):
+  importing its module and calling `main()` in-process no longer counts.
+
 ## [0.9.4] - 2026-11-03
 
 ### Fixed

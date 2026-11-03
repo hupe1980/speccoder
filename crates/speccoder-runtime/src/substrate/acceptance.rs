@@ -337,6 +337,15 @@ pub fn held_out_input(
             ));
         }
     }
+    if !known.commands.is_empty() {
+        parts.push((
+            "commands",
+            Tainted::with_label(
+                json!(known.commands),
+                super::provenance::from(super::provenance::WORKTREE),
+            ),
+        ));
+    }
     Tainted::object(parts)
 }
 
@@ -568,6 +577,7 @@ pub fn input(
         refused,
         suite,
         interface,
+        commands,
     } = *known;
     // The bundle and its scenarios are the person's; the file list,
     // manifest and instructions are the worktree's.
@@ -604,6 +614,15 @@ pub fn input(
             ));
         }
     }
+    if !commands.is_empty() {
+        parts.push((
+            "commands",
+            Tainted::with_label(
+                json!(commands),
+                super::provenance::from(super::provenance::WORKTREE),
+            ),
+        ));
+    }
     // Where the tests go: speccoder's facts from the checkout.
     if let Some(p) = placement {
         parts.push(("test_layout", layout_part(Some(&p.layout))));
@@ -619,8 +638,8 @@ pub fn input(
 }
 
 /// What the author is told beyond the task: a person's rulings, speccoder's
-/// refusal of its earlier answer, the suite's tests on the same code, and
-/// the code's declarations.
+/// refusal of its earlier answer, the suite's tests on the same code, the
+/// code's declarations and the commands its tests run.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Known<'a> {
     /// A person's rulings that the earlier tests were wrong.
@@ -631,6 +650,9 @@ pub struct Known<'a> {
     pub suite: &'a [SuiteTest],
     /// The code's declarations, as it is.
     pub interface: &'a [SuiteTest],
+    /// The commands each test runs (the task is about a command line): as
+    /// a person types them.
+    pub commands: &'a [String],
 }
 
 /// An existing project test on the code a task's test will exercise: the
@@ -891,7 +913,7 @@ impl Skill for Acceptance {
                     .filter_map(Value::as_str)
                     .collect();
                 if !commands.is_empty() {
-                    text.push_str("\n\n# The project's commands\n\nThe story's interface: each test runs one of these as a person would (a subprocess, the binary) — never only a module behind it; a test that does not is discarded.\n");
+                    text.push_str("\n\n# The project's commands\n\nThe interface: each test runs one of these as a person would (a subprocess, the binary) — never a module behind it, in-process; a test that does not is refused.\n");
                     for c in commands {
                         text.push_str(&format!("\n- `{c}`"));
                     }

@@ -125,6 +125,8 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     let title = a.bundle["task"]["title"].as_str().unwrap_or_default();
     let suite = suite(a.worktree, title, a.related);
     let interface = interface(a.worktree, title);
+    let commands = task_commands(a);
+    let shown: Vec<String> = commands.iter().map(|c| c.shown.clone()).collect();
     // A refused answer is asked for once more, told exactly why: what
     // speccoder refuses is checked, never left to the author's reading.
     let mut refusals: Vec<String> = Vec::new();
@@ -143,6 +145,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
                 refused: &refusals,
                 suite: &suite,
                 interface: &interface,
+                commands: &shown,
             },
         );
         let outcome = a.rt.block_on(a.plane.acceptance(a.feature, a.task, input));
@@ -173,11 +176,23 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
 
         // Validate: new test files only, a command the policy allows, and
         // calls to code that is there (or that the task adds).
-        let (valid, refused) =
+        let (valid, mut refused) =
             validate_answer(&answer, a.project, a.policy, a.scenarios, Some(title));
+        // The task is about the command line: each test runs the command.
+        for f in valid.iter().filter(|f| !commands.iter().any(|c| c.run_by(&f.content))) {
+            if let Some(c) = commands.first() {
+                refused.push(RefusedFile {
+                    path: f.path.clone(),
+                    why: "no_command",
+                    message: format!(
+                        "`{}` never runs the project's command: run `{}` as a person would, in a subprocess",
+                        f.path, c.shown
+                    ),
+                });
+            }
+        }
         // Valid: written and run red here, so a test red only by its own
         // error, or one that does not build or collect, is refused too.
-        let mut refused = refused;
         let planned: Vec<(String, String)> = valid
             .iter()
             .map(|f| (f.path.clone(), f.content.clone()))
@@ -470,6 +485,7 @@ pub(crate) fn refusal_words(why: &str) -> &'static str {
         "imagined" => "calls code that is not there",
         "errored" => "fails only on an error of its own, or does not build",
         "command_not_allowed" => "gives a command the policy does not allow",
+        "no_command" => "never runs the project's command",
         _ => "is not a new test file",
     }
 }
@@ -801,6 +817,10 @@ pub(crate) fn prepare_held_out(
         &substrate::acceptance::Known {
             told: a.told,
             refused: &[],
+            commands: &task_commands(a)
+                .into_iter()
+                .map(|c| c.shown)
+                .collect::<Vec<_>>(),
             suite: &suite(a.worktree, title, a.related),
             interface: &if a.oracle {
                 Vec::new()
@@ -1376,6 +1396,17 @@ pub(crate) fn suite(
 /// (a function, type, method, field or re-export line, as written), the
 /// files the task names first, 8 KiB in all — so the author calls the code
 /// by the modules, names and shapes it has, never ones it imagines.
+/// The commands a task's tests run: the project's, when its title or a
+/// scenario it cites is about a command line.
+fn task_commands(a: &AcceptanceSetup<'_>) -> Vec<crate::layout::Command> {
+    let title = a.bundle["task"]["title"].as_str().unwrap_or_default();
+    if crate::layout::task_via_command(title, a.scenarios.iter().map(|s| s.text.as_str())) {
+        crate::layout::commands(a.project)
+    } else {
+        Vec::new()
+    }
+}
+
 pub(crate) fn interface(worktree: &Path, title: &str) -> Vec<substrate::acceptance::SuiteTest> {
     const BUDGET: usize = 8 * 1024;
     const SOURCE: &[&str] = &[
