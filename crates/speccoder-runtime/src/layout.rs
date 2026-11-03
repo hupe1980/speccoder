@@ -793,21 +793,63 @@ pub const STACKS: &[(&str, &str)] = &[
 /// manifest: `None`, the plan chooses.
 #[must_use]
 pub fn stack_text(root: &Path) -> Option<String> {
+    let read = |p: &str| std::fs::read_to_string(root.join(p)).ok();
     let found: Vec<String> = STACKS
         .iter()
         .filter(|(m, _)| root.join(m).is_file())
-        .map(|(m, lang)| format!("- {lang}: `{m}`"))
+        .map(|(m, lang)| {
+            // The language version the manifest requires, as written.
+            let python = (*m == "pyproject.toml")
+                .then(|| read(m)?.parse::<toml::Table>().ok())
+                .flatten()
+                .and_then(|t| {
+                    t.get("project")?
+                        .get("requires-python")?
+                        .as_str()
+                        .map(str::to_owned)
+                });
+            match python {
+                Some(v) => format!("- {lang}: `{m}` (requires-python `{v}`)"),
+                None => format!("- {lang}: `{m}`"),
+            }
+        })
         .collect();
     if found.is_empty() {
         return None;
     }
-    let checks: Vec<String> = crate::verify::check_argvs(root)
-        .iter()
-        .map(|a| format!("- check: `{}`", a.join(" ")))
+    let commands = commands(root)
+        .into_iter()
+        .map(|c| format!("- command: `{}`", c.shown));
+    // Where the code is: each source file's folder, the shallowest first.
+    let mut code: Vec<String> = crate::git::Git::at(root)
+        .line(&["ls-files"])
+        .unwrap_or_default()
+        .lines()
+        .filter(|f| {
+            f.rsplit_once('.')
+                .is_some_and(|(_, e)| matches!(e, "py" | "rs" | "ts" | "js" | "go" | "java"))
+                && !crate::tools::paths::is_test_path(f)
+        })
+        .map(|f| f.rsplit_once('/').map_or(".", |(d, _)| d).to_owned())
+        .collect();
+    code.sort_by_key(|d| (d.matches('/').count(), d.clone()));
+    code.dedup();
+    let code = code
+        .into_iter()
+        .take(6)
+        .map(|d| format!("- code: `{d}/` — extend it; the command runs only what it imports"));
+    let checks = crate::verify::check_argvs(root)
+        .into_iter()
+        .map(|a| format!("- check: `{}`", a.join(" ")));
+    let lines: Vec<String> = found
+        .into_iter()
+        .chain(commands)
+        .chain(code)
+        .chain(checks)
         .collect();
     Some(format!(
-        "# The project as it is (read by speccoder from this checkout)\n\nPlan in this stack — its language, its manifest, its test runner — never another:\n\n{}\n",
-        [found, checks].concat().join("\n")
+        "# The project as it is (read by speccoder from this checkout)\n\nPlan in this stack — its language and version, its manifest, its code's place, its test runner — never another:\n\n{}\n",
+        lines.join("\n")
     ))
 }
 
@@ -859,16 +901,34 @@ mod command_tests {
     fn planning_is_told_the_checkout_s_stack() {
         let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(stack_text(dir.path()), None);
-        std::fs::write(
-            dir.path().join("pyproject.toml"),
-            "[project]\nname = \"m\"\n",
-        )
-        .unwrap_or_else(|e| panic!("{e}"));
-        let t = stack_text(dir.path()).unwrap_or_default();
-        assert!(
-            t.contains("- Python: `pyproject.toml`") && t.contains("never another"),
-            "{t}"
+        let r = dir.path();
+        let write = |p: &str, t: &str| {
+            std::fs::create_dir_all(r.join(p).parent().unwrap_or(r))
+                .unwrap_or_else(|e| panic!("{e}"));
+            std::fs::write(r.join(p), t).unwrap_or_else(|e| panic!("{e}"));
+        };
+        write(
+            "pyproject.toml",
+            "[project]\nname = \"md2csv\"\nrequires-python = \">=3.15\"\n\n[project.scripts]\nmd2csv = \"md2csv:main\"\n",
         );
+        write("src/md2csv/__init__.py", "def main(): ...\n");
+        write("tests/test_x.py", "def test_x(): ...\n");
+        for args in [&["init", "-q"][..], &["add", "-A"]] {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(r)
+                .output()
+                .unwrap_or_else(|e| panic!("{e}"));
+        }
+        let t = stack_text(r).unwrap_or_default();
+        for line in [
+            "- Python: `pyproject.toml` (requires-python `>=3.15`)",
+            "- command: `md2csv`",
+            "- code: `src/md2csv/` — extend it",
+        ] {
+            assert!(t.contains(line), "{line}\n{t}");
+        }
+        assert!(!t.contains("`tests/`"), "{t}");
     }
 
     /// The sample's project (2026-11-02): its oracle tests imported

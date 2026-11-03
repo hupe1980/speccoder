@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Planning is also told the project's commands, where its code is and
+  the language version its manifest requires: a plan extends the
+  command's package instead of new top-level ones the command never
+  imports.
+
 ## [0.9.6] - 2026-11-03
 
 ### Changed

@@ -175,7 +175,7 @@ speccoder feature 2            # or: speccoder feature farewell, speccoder featu
 ```
 
 - Order: `--feature NAME`, then `SPECIFY_FEATURE_DIRECTORY`, then `.specify/feature.json`, then the only feature. The first two choose for one command without changing the current one.
-- `speccoder spec specify` makes the feature it creates current. Other planning skills are told the feature (`SPECIFY_FEATURE_DIRECTORY`); `plan` and `tasks` also the checkout's stack, its manifests and checks.
+- `speccoder spec specify` makes the feature it creates current. Other planning skills are told the feature (`SPECIFY_FEATURE_DIRECTORY`); `plan` and `tasks` also the checkout's stack: its manifests and language version, its commands, where its code is and its checks.
 - With several features and none current, `run` and `spec` ask at a terminal and remember the answer; elsewhere they stop with the list. `speccoder doctor` reports a pointer to a missing feature.
 - `report` and `doctor` say which feature and why. In the [dashboard](@/docs/running.md#the-dashboard), `f` opens a picker. `speccoder feature --clear` forgets the current feature.
 - A feature with a spec but no `tasks.md` is **being planned**: `report` and the dashboard show the planning skills that come next.
