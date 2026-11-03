@@ -687,7 +687,11 @@ pub fn commands(root: &Path) -> Vec<Command> {
             let top = module.split('.').next().unwrap_or_default();
             let mut runs = quoted(name);
             if !top.is_empty() {
-                runs.extend([format!("-m {top}"), format!("\"{top}\""), format!("'{top}'")]);
+                runs.extend([
+                    format!("-m {top}"),
+                    format!("\"{top}\""),
+                    format!("'{top}'"),
+                ]);
             }
             out.push(Command {
                 shown: name.clone(),
@@ -901,7 +905,8 @@ mod command_tests {
         ));
         assert!(task_via_command(
             "Escape pipes in cells",
-            ["**Given** `a \\| b`, **When** the user runs the command, **Then** `a | b`"].into_iter()
+            ["**Given** `a \\| b`, **When** the user runs the command, **Then** `a | b`"]
+                .into_iter()
         ));
     }
 }

@@ -179,7 +179,10 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         let (valid, mut refused) =
             validate_answer(&answer, a.project, a.policy, a.scenarios, Some(title));
         // The task is about the command line: each test runs the command.
-        for f in valid.iter().filter(|f| !commands.iter().any(|c| c.run_by(&f.content))) {
+        for f in valid
+            .iter()
+            .filter(|f| !commands.iter().any(|c| c.run_by(&f.content)))
+        {
             if let Some(c) = commands.first() {
                 refused.push(RefusedFile {
                     path: f.path.clone(),
