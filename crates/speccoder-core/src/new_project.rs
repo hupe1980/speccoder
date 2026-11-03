@@ -525,60 +525,31 @@ const CUES: &[(Stack, &[&str])] = &[
     ),
 ];
 
+/// The stack an idea names outright — a language or its tool (`Rust`,
+/// `uv`, `TypeScript`), installed — never a kind of software (`CLI`).
+#[must_use]
+pub fn named_stack(idea: &str, installed: &[(Stack, String)]) -> Option<StackPick> {
+    cued(idea, installed, true)
+}
+
 /// The stack an idea suggests among the `installed` ones, with its reason.
 /// A named language wins over a kind of software (`CLI`, `web`, `API`);
 /// a stack whose tool is not installed is never suggested; with none
 /// installed: [`Stack::None`].
 #[must_use]
 pub fn suggest_stack(idea: &str, installed: &[(Stack, String)]) -> StackPick {
-    let lower = ascii_fold(idea).to_ascii_lowercase();
-    let words: Vec<&str> = lower
-        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
-        .filter(|w| !w.is_empty())
-        .collect();
-    let version = |s: Stack| {
-        installed
-            .iter()
-            .find(|(k, _)| *k == s)
-            .map(|(_, v)| v.as_str())
-    };
-    let tool_line = |s: Stack| {
-        let tool = s.tool().unwrap_or("");
-        match version(s) {
-            Some(v) if !v.is_empty() => format!("{tool} {v} is installed"),
-            _ => format!("{tool} is installed"),
-        }
-    };
-    // A language named outright first (the first three words of each cue list).
-    for pass in [true, false] {
-        for (stack, cues) in CUES {
-            if version(*stack).is_none() {
-                continue;
-            }
-            let pool: &[&str] = if pass {
-                &cues[..cues.len().min(3)]
-            } else {
-                cues
-            };
-            if let Some(w) = words.iter().find(|w| pool.contains(w)) {
-                let shown = if w.len() <= 4 {
-                    w.to_ascii_uppercase()
-                } else {
-                    (*w).to_owned()
-                };
-                return StackPick {
-                    id: *stack,
-                    detected: false,
-                    reason: format!("\"{shown}\" and {}", tool_line(*stack)),
-                };
-            }
-        }
+    if let Some(p) = cued(idea, installed, true).or_else(|| cued(idea, installed, false)) {
+        return p;
     }
+    let version = |s: Stack| installed.iter().find(|(k, _)| *k == s);
     match Stack::ALL.into_iter().find(|s| version(*s).is_some()) {
         Some(s) => StackPick {
             id: s,
             detected: false,
-            reason: format!("{} — nothing in the idea names a stack", tool_line(s)),
+            reason: format!(
+                "{} — nothing in the idea names a stack",
+                tool_line(installed, s)
+            ),
         },
         None => StackPick {
             id: Stack::None,
@@ -586,6 +557,51 @@ pub fn suggest_stack(idea: &str, installed: &[(Stack, String)]) -> StackPick {
             reason: "no stack tool is installed: add code yourself".to_owned(),
         },
     }
+}
+
+fn tool_line(installed: &[(Stack, String)], s: Stack) -> String {
+    let tool = s.tool().unwrap_or("");
+    match installed
+        .iter()
+        .find(|(k, _)| *k == s)
+        .map(|(_, v)| v.as_str())
+    {
+        Some(v) if !v.is_empty() => format!("{tool} {v} is installed"),
+        _ => format!("{tool} is installed"),
+    }
+}
+
+/// The first installed stack a word of `idea` cues: by a language's own
+/// names (the first three of its cues) when `named`, else by any cue.
+fn cued(idea: &str, installed: &[(Stack, String)], named: bool) -> Option<StackPick> {
+    let lower = ascii_fold(idea).to_ascii_lowercase();
+    let words: Vec<&str> = lower
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
+        .filter(|w| !w.is_empty())
+        .collect();
+    for (stack, cues) in CUES {
+        if !installed.iter().any(|(k, _)| k == stack) {
+            continue;
+        }
+        let pool: &[&str] = if named {
+            &cues[..cues.len().min(3)]
+        } else {
+            cues
+        };
+        if let Some(w) = words.iter().find(|w| pool.contains(w)) {
+            let shown = if w.len() <= 4 {
+                w.to_ascii_uppercase()
+            } else {
+                (*w).to_owned()
+            };
+            return Some(StackPick {
+                id: *stack,
+                detected: false,
+                reason: format!("\"{shown}\" and {}", tool_line(installed, *stack)),
+            });
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -614,6 +630,15 @@ mod tests {
             (Stack::Node, "11.0.0".to_owned()),
             (Stack::Go, "1.25".to_owned()),
         ];
+        // A kind of software names no stack: the person chooses one.
+        assert_eq!(
+            named_stack("a CLI that turns Markdown tables into CSV", &all),
+            None
+        );
+        assert_eq!(
+            named_stack("a Python CLI for tables", &all).map(|p| p.id),
+            Some(Stack::Python)
+        );
         let s = suggest_stack("a CLI that turns Markdown tables into CSV", &all);
         assert_eq!(s.id, Stack::Rust);
         assert_eq!(s.reason, "\"CLI\" and cargo 1.91.0 is installed");

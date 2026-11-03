@@ -705,6 +705,14 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "PLAN-OTHER-STACK",
+        W,
+        S::Ok,
+        "tasks build in another stack than the checkout's",
+        "A task names another stack's manifest or language (a `Cargo.toml` in a Python project): the plan was made without the checkout's stack, and its code would never run under the project's checks. Re-plan: planning is told the checkout's manifests and checks.",
+        ["speccoder spec plan --through tasks"]
+    ),
+    entry!(
         "PLAN-STORY-UNJUDGED",
         W,
         S::Ok,
@@ -891,6 +899,14 @@ pub const CATALOG: &[Entry] = &[
         "the plan needs your confirmation; nothing ran",
         "`speccoder new` runs commands in a folder; it runs them only after you saw them. Without a terminal to ask at, it printed the plan and stopped.",
         ["→ run the same command again with --yes"]
+    ),
+    entry!(
+        "NEW-STACK",
+        P,
+        S::NeedsHuman,
+        "the idea names no stack; nothing ran",
+        "`speccoder new` was given no `--stack`, and the idea names no language or tool (a CLI, a web app name none). In a terminal it asks; without one, or with `--yes`, it stops: choose one of the installed stacks.",
+        ["speccoder new … --stack python"]
     ),
     entry!(
         "THROUGH-QUESTIONS",

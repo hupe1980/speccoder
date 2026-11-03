@@ -235,6 +235,7 @@ fn spec_only_runs_the_creating_skill_once_with_the_description_and_commits_nothi
 #[test]
 fn through_tasks_stops_for_the_review_and_continues_only_after_the_approval() {
     let r = repo();
+    fs::write(r.path().join("pyproject.toml"), "[project]\nname = \"r\"\n").unwrap();
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     will_specify(&f, false);
@@ -278,6 +279,9 @@ fn through_tasks_stops_for_the_review_and_continues_only_after_the_approval() {
         early.message()
     );
     assert_eq!(f.asked().len(), calls);
+    // The specify skill is told no stack: a spec is free of one.
+    let specified = serde_json::to_string(&f.asked()[0].prompt).unwrap();
+    assert!(!specified.contains("# The project as it is"), "{specified}");
     // The person approves; the chain goes on with plan, then tasks.
     let approved =
         speccoder_runtime::review::decide(r.path(), unit, &[], "approve", None, Via::Terminal);
@@ -286,6 +290,15 @@ fn through_tasks_stops_for_the_review_and_continues_only_after_the_approval() {
         CommandStatus::Ok,
         "{}",
         approved.message()
+    );
+    // The approval says what waited for it.
+    assert_eq!(
+        approved
+            .next()
+            .iter()
+            .map(|n| n.command.as_str())
+            .collect::<Vec<_>>(),
+        ["speccoder spec plan --through tasks --feature 004-csv-export"]
     );
     will_plan_and_tasks(&f);
     let next = resume_with(
@@ -314,6 +327,12 @@ fn through_tasks_stops_for_the_review_and_continues_only_after_the_approval() {
             canonical.join("specs/004-csv-export").display()
         )),
         "the plan skill did not see its unit"
+    );
+    // Both were told the checkout's stack (the example's plan built a Rust
+    // crate in a uv project).
+    assert!(
+        seen.contains("- Python: `pyproject.toml`"),
+        "plan and tasks are told the stack"
     );
     // Still nothing committed.
     assert_eq!(git(r.path(), &["log", "-1", "--format=%s"]).trim(), "init");

@@ -81,6 +81,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`ATTESTATION-FAILED`](#attestation-failed) | error | 26 | an attestation is missing, unsigned where required, or does not hold |
 | [`TESTS-NOT-COLLECTED`](#tests-not-collected) | error | 20 | a test file the attempt wrote never ran |
 | [`PLAN-TESTS-UNCOLLECTED`](#plan-tests-uncollected) | warning | 0 | the plan puts tests where the runner won't collect them |
+| [`PLAN-OTHER-STACK`](#plan-other-stack) | warning | 0 | tasks build in another stack than the checkout's |
 | [`PLAN-STORY-UNJUDGED`](#plan-story-unjudged) | warning | 0 | no task of a story is judged by its scenarios |
 | [`PLAN-SCENARIO-UNKNOWN`](#plan-scenario-unknown) | warning | 0 | a task names a scenario its story does not have |
 | [`PLAN-BEHAVIOUR-EARLY`](#plan-behaviour-early) | warning | 0 | a story's behaviour is planned before the story |
@@ -102,6 +103,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`SAMPLE-MISSING`](#sample-missing) | error | 15 | this build has no sample |
 | [`SIMILAR-FEATURE`](#similar-feature) | warning | 0 | an existing requirement is close to this description |
 | [`NEW-CONFIRM`](#new-confirm) | stop | 23 | the plan needs your confirmation; nothing ran |
+| [`NEW-STACK`](#new-stack) | stop | 23 | the idea names no stack; nothing ran |
 | [`THROUGH-QUESTIONS`](#through-questions) | stop | 23 | the spec has open questions; planning waits for your answers |
 | [`THROUGH-REVIEW`](#through-review) | stop | 23 | review the spec; planning waits for your approval |
 | [`NEEDS-HUMAN`](#needs-human) | stop | 23 | the run stopped for a person |
@@ -748,6 +750,14 @@ A task names a test path the project's runner would not collect (Cargo builds on
 - `speccoder doctor`
 - `speccoder spec tasks`
 
+### PLAN-OTHER-STACK
+
+Tasks build in another stack than the checkout's.
+
+A task names another stack's manifest or language (a `Cargo.toml` in a Python project): the plan was made without the checkout's stack, and its code would never run under the project's checks. Re-plan: planning is told the checkout's manifests and checks.
+
+- `speccoder spec plan --through tasks`
+
 ### PLAN-STORY-UNJUDGED
 
 No task of a story is judged by its scenarios.
@@ -923,6 +933,14 @@ The plan needs your confirmation; nothing ran.
 `speccoder new` runs commands in a folder; it runs them only after you saw them. Without a terminal to ask at, it printed the plan and stopped.
 
 - Run the same command again with --yes
+
+### NEW-STACK
+
+The idea names no stack; nothing ran.
+
+`speccoder new` was given no `--stack`, and the idea names no language or tool (a CLI, a web app name none). In a terminal it asks; without one, or with `--yes`, it stops: choose one of the installed stacks.
+
+- `speccoder new … --stack python`
 
 ### THROUGH-QUESTIONS
 

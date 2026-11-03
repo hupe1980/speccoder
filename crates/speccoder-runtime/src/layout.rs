@@ -779,6 +779,38 @@ pub fn commands(root: &Path) -> Vec<Command> {
     out
 }
 
+/// The manifests a stack is planned in, by the language each says.
+pub const STACKS: &[(&str, &str)] = &[
+    ("Cargo.toml", "Rust"),
+    ("pyproject.toml", "Python"),
+    ("package.json", "JavaScript/TypeScript"),
+    ("go.mod", "Go"),
+    ("pom.xml", "Java"),
+];
+
+/// The checkout's stack, as planning is told it: its manifests and the
+/// checks that test it — so a plan is made in it, never invented. No
+/// manifest: `None`, the plan chooses.
+#[must_use]
+pub fn stack_text(root: &Path) -> Option<String> {
+    let found: Vec<String> = STACKS
+        .iter()
+        .filter(|(m, _)| root.join(m).is_file())
+        .map(|(m, lang)| format!("- {lang}: `{m}`"))
+        .collect();
+    if found.is_empty() {
+        return None;
+    }
+    let checks: Vec<String> = crate::verify::check_argvs(root)
+        .iter()
+        .map(|a| format!("- check: `{}`", a.join(" ")))
+        .collect();
+    Some(format!(
+        "# The project as it is (read by speccoder from this checkout)\n\nPlan in this stack — its language, its manifest, its test runner — never another:\n\n{}\n",
+        [found, checks].concat().join("\n")
+    ))
+}
+
 /// Whether a story's *Independent Test* (its line in the story's text) or
 /// a scenario's *When* (what the person does) is about a command line, by
 /// whole words: the interface is then the project's command, never an
@@ -819,7 +851,25 @@ fn command_words(text: &str) -> bool {
 
 #[cfg(test)]
 mod command_tests {
-    use super::{commands, task_via_command, via_command};
+    use super::{commands, stack_text, task_via_command, via_command};
+
+    /// The example's plan (2026-11-03) left its language open in a uv
+    /// project and its tasks then built a Rust crate.
+    #[test]
+    fn planning_is_told_the_checkout_s_stack() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(stack_text(dir.path()), None);
+        std::fs::write(
+            dir.path().join("pyproject.toml"),
+            "[project]\nname = \"m\"\n",
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        let t = stack_text(dir.path()).unwrap_or_default();
+        assert!(
+            t.contains("- Python: `pyproject.toml`") && t.contains("never another"),
+            "{t}"
+        );
+    }
 
     /// The sample's project (2026-11-02): its oracle tests imported
     /// `src.services…`, never the command its stories name.

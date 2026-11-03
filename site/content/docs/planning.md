@@ -69,6 +69,7 @@ Before the creating skill runs, the description is compared with every feature's
 | Code | Finds |
 |---|---|
 | `PLAN-TESTS-UNCOLLECTED` | Test paths a task names that the runner won't collect (and no task creates the file that would declare them); test files in the tree nothing runs |
+| `PLAN-OTHER-STACK` | Tasks that name another stack's manifest or language than the checkout's (a `Cargo.toml` in a Python project) |
 | `PLAN-BEHAVIOUR-EARLY` | A Setup or Foundational task that names, in code, a symbol a story is about: if it implements it, the story's tasks tick regression-only |
 | `PLAN-TEST-ONLY-TASKS` | Story tasks that only write tests, beside the task that implements the story |
 | `PLAN-SCENARIO-UNKNOWN` | A task that names a scenario its story does not have, `(scenarios US9-4)`: the link is ignored ([what judges each task](@/docs/evidence.md#what-judges-each-task)) |
@@ -76,7 +77,7 @@ Before the creating skill runs, the description is compared with every feature's
 
 For `PLAN-BEHAVIOUR-EARLY`, `speccoder task acceptance-at <TASK> --story <US>` records that the story's oracle is written before that task: its tick can then be verified on the story's scenarios it turns green. It is a decision in the state directory, not an edit of the spec, and `--revoke` takes it back. Re-planning is offered only while no task of the feature is ticked.
 
-The phase-based checks need Spec Kit's phases and story labels; OpenSpec gets only the first. Beside them, information rather than a warning, a line says which tasks are planning work or yours ([who does a task](@/docs/running.md#who-does-a-task)).
+The phase-based checks need Spec Kit's phases and story labels; OpenSpec gets the path and stack checks. Beside them, information rather than a warning, a line says which tasks are planning work or yours ([who does a task](@/docs/running.md#who-does-a-task)).
 
 ## The speccoder preset
 
@@ -174,7 +175,7 @@ speccoder feature 2            # or: speccoder feature farewell, speccoder featu
 ```
 
 - Order: `--feature NAME`, then `SPECIFY_FEATURE_DIRECTORY`, then `.specify/feature.json`, then the only feature. The first two choose for one command without changing the current one.
-- `speccoder spec specify` makes the feature it creates current. Other planning skills are told the feature (`SPECIFY_FEATURE_DIRECTORY`).
+- `speccoder spec specify` makes the feature it creates current. Other planning skills are told the feature (`SPECIFY_FEATURE_DIRECTORY`); `plan` and `tasks` also the checkout's stack, its manifests and checks.
 - With several features and none current, `run` and `spec` ask at a terminal and remember the answer; elsewhere they stop with the list. `speccoder doctor` reports a pointer to a missing feature.
 - `report` and `doctor` say which feature and why. In the [dashboard](@/docs/running.md#the-dashboard), `f` opens a picker. `speccoder feature --clear` forgets the current feature.
 - A feature with a spec but no `tasks.md` is **being planned**: `report` and the dashboard show the planning skills that come next.

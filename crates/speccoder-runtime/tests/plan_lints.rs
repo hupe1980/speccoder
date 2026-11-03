@@ -205,6 +205,36 @@ fn a_plan_without_these_causes_raises_nothing() {
     assert!(checks.is_empty(), "{checks:?}");
 }
 
+/// The example's plan (2026-11-03) built a Rust crate in a uv project:
+/// a task in another stack than the checkout's is named before it runs.
+#[test]
+fn a_task_in_another_stack_is_named() {
+    let r = poc();
+    fs::write(
+        r.path().join("specs/001-greet-function/tasks.md"),
+        "# Tasks: greet\n\n## Phase 1: Setup\n\n- [ ] T001 Initialize `pyproject.toml` for the package\n- [ ] T002 Create the Python CLI tree in `src/`\n- [ ] T003 Create the library crate in `src/lib.rs`\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "re-planned"]);
+    let checks = speccoder_runtime::doctor::checks(r.path(), Some("001-greet-function"), &|_| None);
+    let other = checks
+        .iter()
+        .find(|c| c.code.as_deref() == Some("PLAN-OTHER-STACK"))
+        .unwrap_or_else(|| panic!("{checks:?}"));
+    assert_eq!(
+        other.detail,
+        "T001, T002 build in another stack than this Rust project's — re-plan in it"
+    );
+    assert!(
+        other
+            .fix
+            .iter()
+            .any(|f| f.contains("spec plan --through tasks")),
+        "{:?}",
+        other.fix
+    );
+}
+
 #[derive(Debug, Default)]
 struct Recorder(Mutex<Vec<Event>>);
 

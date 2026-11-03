@@ -217,9 +217,37 @@ fn a_rust_spec_kit_project_is_made_by_its_own_tools_and_committed_once_as_the_pe
     let (again, _) = m.json(&["new", "md2csv", "--idea", IDEA, "--dry-run"]);
     assert_eq!(again["data"]["plan"]["digest"], digest.as_str());
 
-    let (made, code) = m.json(&["new", "md2csv", "--idea", IDEA, "--yes"]);
+    // A CLI names no language: `--yes` confirms the plan, never the stack.
+    let (asked, code) = m.json(&["new", "md2csv", "--idea", IDEA, "--yes"]);
+    assert_eq!(
+        (code, asked["code"].as_str()),
+        (23, Some("NEW-STACK")),
+        "{asked}"
+    );
+    assert!(
+        asked["fix"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f.as_str().unwrap().ends_with("--stack rust")),
+        "{asked}"
+    );
+    assert!(!m.target("md2csv").exists(), "nothing ran");
+    let (chosen, _) = m.json(&[
+        "new",
+        "md2csv",
+        "--idea",
+        IDEA,
+        "--stack",
+        "rust",
+        "--dry-run",
+    ]);
+    let (made, code) = m.json(&["new", "md2csv", "--idea", IDEA, "--yes", "--stack", "rust"]);
     assert_eq!(code, 0, "{made}");
-    assert_eq!(made["data"]["plan"]["digest"], digest.as_str());
+    assert_eq!(
+        made["data"]["plan"]["digest"],
+        chosen["data"]["plan"]["digest"]
+    );
     assert_eq!(
         states(&made),
         [

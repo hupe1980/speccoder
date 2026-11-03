@@ -990,8 +990,38 @@ pub fn decide_in(
             r.file
         )
     };
+    // Every requirement approved: what waited for it goes on.
+    let artifacts = crate::format::open(&u.root, Some(&u.feature))
+        .ok()
+        .and_then(|o| {
+            o.snapshot
+                .feature
+                .map(|f| (f.artifacts.plan, f.artifacts.tasks))
+        });
+    let next = match artifacts {
+        Some((_, true)) if verdict == "approve" && r.totals.complete() => {
+            vec![speccoder_core::next::NextStep {
+                command: format!("speccoder run --feature {}", u.feature),
+                why: "work through the tasks".to_owned(),
+            }]
+        }
+        Some((plan, false)) if verdict == "approve" && r.totals.complete() => {
+            let skills = (u.format.planning().toward_tasks)(plan);
+            vec![speccoder_core::next::NextStep {
+                command: format!(
+                    "speccoder spec {} --through {} --feature {}",
+                    skills.first().copied().unwrap_or("plan"),
+                    skills.last().copied().unwrap_or("tasks"),
+                    u.feature
+                ),
+                why: "planning waited for this approval".to_owned(),
+            }]
+        }
+        _ => Vec::new(),
+    };
     CommandResult::new("review", CommandStatus::Ok, &message)
         .with_data(CommandData::Review(Box::new(r)))
+        .with_next(next)
 }
 
 /// The approval digest *Approve and Run* records when it runs now: every

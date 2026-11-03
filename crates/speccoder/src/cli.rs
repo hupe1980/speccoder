@@ -197,7 +197,7 @@ pub enum Command {
         /// What you are building, in a line (also the first feature's description).
         #[arg(long)]
         idea: Option<String>,
-        /// The stack's scaffold (default: suggested from the idea and the installed tools).
+        /// The stack's scaffold (default: the one the idea names, else asked).
         #[arg(long, value_enum)]
         stack: Option<StackArg>,
         /// A Spec Kit extension: a bundled name, a local path or a URL (repeatable).

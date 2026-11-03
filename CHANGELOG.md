@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `speccoder new` without `--stack` uses the stack the idea names
+  (`a Python CLI`), else asks among the installed ones; without a
+  terminal, or with `--yes`, it stops (`NEW-STACK`). A CLI no longer
+  defaults to Rust.
+
+### Fixed
+
+- Planning is told the checkout's stack (its manifests and checks): a
+  plan no longer leaves the language open and its tasks build in
+  another one. Tasks that do are named (`PLAN-OTHER-STACK`).
+- Approving the last requirement says what waited for it: the planning
+  command, or `speccoder run`.
+
 ## [0.9.5] - 2026-11-03
 
 ### Changed

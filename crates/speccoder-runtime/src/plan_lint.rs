@@ -205,6 +205,9 @@ pub fn lints(adapter: &dyn Adapter, snapshot: &ProjectSnapshot, root: &Path) -> 
         out.push(l);
     }
     out.extend(story_links(adapter, snapshot, tasks));
+    if let Some(l) = other_stack(adapter, tasks, root, any_ticked) {
+        out.push(l);
+    }
     if let Some(structure) = adapter.plan_structure(snapshot) {
         out.extend(behaviour_early(adapter, &structure, any_ticked));
         if let Some(l) = test_only(adapter, &structure, any_ticked) {
@@ -487,6 +490,53 @@ fn behaviour_early(adapter: &dyn Adapter, s: &PlanStructure, any_ticked: bool) -
 
 /// `PLAN-TEST-ONLY-TASKS`: story tasks whose only named outputs are test
 /// paths, beside an implementing task of the same story.
+/// `PLAN-OTHER-STACK`: tasks that build in a stack the checkout is not
+/// (a Rust crate's `Cargo.toml` in a uv project): its manifest, or its
+/// language by name.
+fn other_stack(
+    adapter: &dyn Adapter,
+    tasks: &speccoder_core::snapshot::ParsedTasks,
+    root: &Path,
+    any_ticked: bool,
+) -> Option<PlanLint> {
+    let (here, elsewhere): (Vec<&(&str, &str)>, Vec<_>) = crate::layout::STACKS
+        .iter()
+        .partition(|(m, _)| root.join(m).is_file());
+    let lang = here.first()?.1;
+    let ids: Vec<String> = tasks
+        .tasks
+        .iter()
+        .filter(|t| !t.done)
+        .filter(|t| {
+            let words: Vec<&str> = t.title.split(|c: char| !c.is_alphanumeric()).collect();
+            elsewhere.iter().any(|(m, l)| {
+                t.title.contains(m) || l.split('/').any(|l| l.len() > 2 && words.contains(&l))
+            })
+        })
+        .map(|t| t.id.clone())
+        .collect();
+    // The plan itself was made without the stack: planned again from it.
+    let skills = (adapter.planning().toward_tasks)(false);
+    (!ids.is_empty()).then(|| PlanLint {
+        code: "PLAN-OTHER-STACK",
+        detail: format!(
+            "{} build in another stack than this {lang} project's — re-plan in it",
+            listed(&ids)
+        ),
+        tasks: ids,
+        fix: vec![if any_ticked {
+            replan(adapter, true)
+        } else {
+            format!(
+                "speccoder spec {} --through {}  (re-plan in the checkout's stack)",
+                skills.first().copied().unwrap_or("plan"),
+                skills.last().copied().unwrap_or("tasks")
+            )
+        }],
+        acceptance_at: None,
+    })
+}
+
 fn test_only(adapter: &dyn Adapter, s: &PlanStructure, any_ticked: bool) -> Option<PlanLint> {
     let is_test_only = |t: &crate::format::PlannedTask| {
         let paths = speccoder_core::scope::named_paths(&t.title);

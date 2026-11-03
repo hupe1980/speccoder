@@ -285,6 +285,18 @@ fn run_unguarded(
         Ok(i) => i,
         Err(e) => return refuse(CommandStatus::Error, e),
     };
+    // A plan and its tasks are made in the checkout's stack (a spec stays
+    // free of one).
+    let instruction = match crate::layout::stack_text(&root).filter(|_| {
+        let short = skill
+            .name
+            .strip_prefix(planning.prefix)
+            .unwrap_or(&skill.name);
+        !exploring && matches!(short, "plan" | "tasks" | "propose")
+    }) {
+        Some(stack) => format!("{instruction}\n\n{stack}"),
+        None => instruction,
+    };
     let config_text = verify::find_config(&root)
         .and_then(|d| std::fs::read_to_string(d.join(verify::config::FILE)).ok())
         .unwrap_or_default();

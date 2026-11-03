@@ -7,7 +7,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use speccoder_core::new_project::{
-    NewChoices, NewProjectReport, PlanStepState, ProjectMode, StepAccess,
+    NewChoices, NewProjectReport, PlanStepState, ProjectMode, Stack, StepAccess,
 };
 use speccoder_core::{CommandResult, CommandStatus};
 
@@ -59,6 +59,28 @@ fn confirm(question: &str) -> bool {
     matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes")
 }
 
+/// Which stack, asked: the installed ones, numbered; none is assumed.
+fn pick_stack(options: &[&speccoder_core::new_project::StackOption]) -> Option<Stack> {
+    eprintln!("Which stack?");
+    for (i, o) in options.iter().enumerate() {
+        eprintln!(
+            "  {}  {}{}",
+            i + 1,
+            o.label,
+            o.version
+                .as_deref()
+                .map(|v| format!("  {v}"))
+                .unwrap_or_default()
+        );
+    }
+    eprint!("Stack [1-{}]: ", options.len());
+    let _ = std::io::stderr().flush();
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line).ok()?;
+    let n: usize = line.trim().parse().ok()?;
+    options.get(n.checked_sub(1)?).map(|o| o.id)
+}
+
 /// The command as run, with `--yes` added: the stop's fix.
 fn again_with_yes() -> String {
     let words: Vec<String> = std::env::args().skip(1).collect();
@@ -99,7 +121,7 @@ pub fn run(
     if a.undo {
         return undo(a, &target, &state, &options);
     }
-    let choices = NewChoices {
+    let mut choices = NewChoices {
         idea: a.idea.unwrap_or_default().to_owned(),
         stack: a.stack,
         format: a.format.map(str::to_owned),
@@ -109,9 +131,50 @@ pub fn run(
     if a.dry_run {
         return speccoder_runtime::new_project::dry_run(&target, &choices, &state);
     }
-    let plan = speccoder_runtime::new_project::plan(&target, &choices, &state);
+    let mut plan = speccoder_runtime::new_project::plan(&target, &choices, &state);
     if plan.refusal.is_some() {
         return speccoder_runtime::new_project::dry_run(&target, &choices, &state);
+    }
+    // No stack given and none named in the idea: the person chooses one —
+    // a kind of software (`a CLI`) names no language.
+    let installed: Vec<&speccoder_core::new_project::StackOption> = plan
+        .stacks
+        .iter()
+        .filter(|o| o.disabled.is_none() && o.id != Stack::None)
+        .collect();
+    let pairs: Vec<(Stack, String)> = installed
+        .iter()
+        .map(|o| (o.id, o.version.clone().unwrap_or_default()))
+        .collect();
+    if choices.stack.is_none()
+        && plan.mode == ProjectMode::NewFolder
+        && !installed.is_empty()
+        && speccoder_core::new_project::named_stack(&choices.idea, &pairs).is_none()
+    {
+        if a.yes || !a.interactive {
+            // The command as run, from `new` on, with the stack added.
+            let words: Vec<String> = std::env::args()
+                .skip_while(|w| w != "new")
+                .skip(1)
+                .collect();
+            return CommandResult::new(
+                "new",
+                CommandStatus::NeedsHuman,
+                "the idea names no stack; nothing ran",
+            )
+            .with_code("NEW-STACK")
+            .with_fix(
+                installed
+                    .iter()
+                    .map(|o| format!("speccoder new {} --stack {}", shell(&words), o.id.as_str()))
+                    .collect(),
+            );
+        }
+        let Some(id) = pick_stack(&installed) else {
+            return CommandResult::new("new", CommandStatus::Ok, "nothing ran");
+        };
+        choices.stack = Some(id);
+        plan = speccoder_runtime::new_project::plan(&target, &choices, &state);
     }
     if !a.yes {
         let commands = plan.steps.len();

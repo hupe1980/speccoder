@@ -5,6 +5,21 @@
     "status": "ok",
     "exit_code": 0,
     "message": "approved FR-001, FR-002; 2/2 requirements approved — commit specs/001-graph/review.json to share it",
+    "next": [
+      {
+        "command": "speccoder run --feature 001-graph",
+        "why": "work through the tasks",
+        "how": "perform",
+        "run": {
+          "kind": "run",
+          "task": null
+        },
+        "input": null,
+        "text": null,
+        "confirm": null,
+        "feature": "001-graph"
+      }
+    ],
     "payload": "review",
     "data": {
       "feature": "001-graph",
