@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-11-03
+
 ### Changed
 
 - `speccoder new` without `--stack` uses the stack the idea names
@@ -806,7 +808,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.9.5...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.9.6...HEAD
+[0.9.6]: https://github.com/hupe1980/speccoder/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/hupe1980/speccoder/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/hupe1980/speccoder/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/hupe1980/speccoder/compare/v0.9.2...v0.9.3
