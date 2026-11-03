@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-11-03
+
 ### Changed
 
 - A convergence task about the command line (its title, or a scenario
@@ -789,7 +791,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.9.5...HEAD
+[0.9.5]: https://github.com/hupe1980/speccoder/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/hupe1980/speccoder/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/hupe1980/speccoder/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/hupe1980/speccoder/compare/v0.9.1...v0.9.2
