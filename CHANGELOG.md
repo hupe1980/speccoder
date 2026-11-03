@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-11-03
+
 ### Fixed
 
 - A story is tested through the project's command when a scenario's
@@ -778,7 +780,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/hupe1980/speccoder/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/hupe1980/speccoder/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/hupe1980/speccoder/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/hupe1980/speccoder/compare/v0.9.0...v0.9.1
