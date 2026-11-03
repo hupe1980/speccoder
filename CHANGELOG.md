@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-11-03
+
 ### Fixed
 
 - Planning is also told the project's commands, where its code is and
@@ -815,7 +817,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.9.6...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.9.7...HEAD
+[0.9.7]: https://github.com/hupe1980/speccoder/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/hupe1980/speccoder/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/hupe1980/speccoder/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/hupe1980/speccoder/compare/v0.9.3...v0.9.4
