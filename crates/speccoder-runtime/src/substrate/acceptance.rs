@@ -458,6 +458,20 @@ pub struct ReviewParts<'a> {
     pub commands: &'a [String],
     /// Why speccoder refused the earlier answer.
     pub refused: &'a [String],
+    /// Where each scenario's test goes, when the layout says.
+    pub places: &'a [ScenarioPlace],
+}
+
+/// Where one scenario's oracle test goes: a free path the runner collects
+/// and the command that runs only it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ScenarioPlace {
+    /// The scenario, `US2-1`.
+    pub scenario: String,
+    /// The file, project-relative.
+    pub path: String,
+    /// The command that runs only it.
+    pub command: String,
 }
 
 /// The review-time author's input: `{ mode: "review", … }`.
@@ -498,6 +512,9 @@ pub fn review_input(p: &ReviewParts<'_>) -> Tainted<Value> {
     }
     if !p.refused.is_empty() {
         parts.push(("refused", Tainted::trusted(json!(p.refused))));
+    }
+    if !p.places.is_empty() {
+        parts.push(("places", Tainted::trusted(json!(p.places))));
     }
     if let Some((path, content)) = p.again {
         parts.push((
@@ -745,12 +762,23 @@ impl Skill for Acceptance {
                 if let Some(l) = input["test_layout"].as_str() {
                     text.push_str("\n\n");
                     text.push_str(l);
-                    if input.get("placement").is_none() {
+                    if input.get("placement").is_none() && input.get("places").is_none() {
                         text.push_str("\nPlace each file where the runner collects it (rule above); a file it would not collect is discarded.\n");
                     }
                 }
                 if let Some(p) = input.get("placement") {
                     text.push_str(&placement_text(p));
+                } else if let Some(places) = input["places"].as_array() {
+                    text.push_str("\n\n# Where the tests go\n\nOne NEW file per scenario, at its path (free in the checkout), with the command that runs only it:\n");
+                    for p in places {
+                        text.push_str(&format!(
+                            "\n- {}: `{}` — `{}`",
+                            p["scenario"].as_str().unwrap_or_default(),
+                            p["path"].as_str().unwrap_or_default(),
+                            p["command"].as_str().unwrap_or_default()
+                        ));
+                    }
+                    text.push('\n');
                 } else if !(review || reproduce || reproduce_held_out || held_out || strengthen) {
                     // No layout detected: the author names the files.
                     text.push_str("\n\n# Where the tests go\n\nNEW files under the project's test directory — paths not in the project's file list — named after the task ID (for Rust: tests/acceptance_<task id>.rs), with the command that runs only them (for Rust: cargo test --test <name>).\n");

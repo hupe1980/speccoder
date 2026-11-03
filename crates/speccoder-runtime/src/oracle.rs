@@ -1148,6 +1148,7 @@ impl<'a> Author<'a> {
         refused: &[String],
         again: Option<(&str, &str)>,
         sample: u8,
+        places: &[substrate::acceptance::ScenarioPlace],
     ) -> Result<(Value, String, Vec<ContextEntry>), String> {
         let context = self.context(req, notes);
         let suite = crate::pipeline::acceptance::suite(&self.ctx.root, &req.text, &[]);
@@ -1176,6 +1177,7 @@ impl<'a> Author<'a> {
             interface: &interface,
             commands: &commands,
             refused,
+            places,
         });
         let task = format!("req-{}", req.key);
         let outcome = self
@@ -1556,6 +1558,38 @@ fn write(
     ))
 }
 
+/// Each scenario's file, named after it where the runner collects tests
+/// (`US2-1` → `tests/test_acceptance_us2_1.py`) and free in `project`: a
+/// file there already (an older task's test) is never the oracle's.
+fn places(
+    project: &Path,
+    root: &Path,
+    req: &OracleRequirement,
+) -> Vec<substrate::acceptance::ScenarioPlace> {
+    let layout = crate::layout::detect(project, &crate::verify::check_argvs(root));
+    req.scenarios
+        .iter()
+        .filter_map(|s| {
+            let name = s.id.replace('-', "_");
+            let path = (1..10)
+                .filter_map(|n| {
+                    let name = if n == 1 {
+                        name.clone()
+                    } else {
+                        format!("{name}_{n}")
+                    };
+                    layout.acceptance_file(&name, None)
+                })
+                .find(|p| !project.join(p).exists())?;
+            Some(substrate::acceptance::ScenarioPlace {
+                scenario: s.id.clone(),
+                command: layout.command_for(&path).unwrap_or_default(),
+                path,
+            })
+        })
+        .collect()
+}
+
 /// One author pass over `req` (`samples` calls), its tests red-checked on
 /// `bench`, the held-out set sealed: the draft and its tests' contents.
 #[allow(clippy::too_many_arguments)]
@@ -1573,10 +1607,11 @@ fn draft(
     options: &crate::RunOptions,
 ) -> Result<Loaded, Box<CommandResult>> {
     let (files, manifest) = bench.files();
+    let places = places(&bench.project, &ctx.root, req);
     let of = u32::from(samples);
     stage(options, &req.key, "writing", 1, of);
     let (first, run1, mut context) = author
-        .call(req, &files, &manifest, told, refused, None, 1)
+        .call(req, &files, &manifest, told, refused, None, 1, &places)
         .map_err(failed)?;
     // The comparison needs both readings; with one sample they are kept
     // as stated, for the card.
@@ -1594,7 +1629,7 @@ fn draft(
     if samples >= 2 {
         stage(options, &req.key, "writing", 2, of);
         let (second, run2, more) = author
-            .call(req, &files, &manifest, told, refused, None, 2)
+            .call(req, &files, &manifest, told, refused, None, 2, &places)
             .map_err(failed)?;
         (e2, u2) = read(&second)?;
         runs.push(run2);
@@ -1886,7 +1921,7 @@ fn rewrite(
     let told = d.all_notes();
     stage(options, &req.key, "writing", 1, 1);
     let (answer, run, context) = author
-        .call(req, &files, &manifest, &told, &[], again, 1)
+        .call(req, &files, &manifest, &told, &[], again, 1, &[])
         .map_err(failed)?;
     d.runs.push(run);
     for c in context {
@@ -2825,6 +2860,54 @@ pub(crate) fn record_denials(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each scenario gets a file named after it, never one a task wrote
+    /// before the story had an oracle.
+    #[test]
+    fn each_scenario_is_placed_in_a_free_file_of_its_own() {
+        let d = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        for (path, text) in [
+            ("pytest.ini", "[pytest]\n"),
+            (
+                "tests/test_acceptance_us2.py",
+                "def test_t014():\n    pass\n",
+            ),
+            (
+                "tests/test_acceptance_us2_1.py",
+                "def test_t017():\n    pass\n",
+            ),
+        ] {
+            std::fs::create_dir_all(d.path().join(path).parent().unwrap()).unwrap();
+            std::fs::write(d.path().join(path), text).unwrap();
+        }
+        let scenario = |id: &str| speccoder_core::spec::ScenarioRef {
+            id: id.to_owned(),
+            text: String::new(),
+        };
+        let req = OracleRequirement {
+            key: "US2".to_owned(),
+            title: "File input".to_owned(),
+            text: String::new(),
+            scenarios: vec![scenario("US2-1"), scenario("US2-2")],
+        };
+        let got: Vec<(String, String)> = places(d.path(), d.path(), &req)
+            .into_iter()
+            .map(|p| (p.scenario, p.path))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (
+                    "US2-1".to_owned(),
+                    "tests/test_acceptance_us2_1_2.py".to_owned()
+                ),
+                (
+                    "US2-2".to_owned(),
+                    "tests/test_acceptance_us2_2.py".to_owned()
+                ),
+            ]
+        );
+    }
 
     fn draft(content: &str) -> Draft {
         Draft {

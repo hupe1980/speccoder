@@ -820,6 +820,14 @@ fn an_oracle_test_runs_the_product_s_command() {
         first.contains("# The project's commands") && first.contains("`graph`"),
         "{first}"
     );
+    // Each scenario's file is named, free in the checkout.
+    assert!(
+        first.contains("# Where the tests go")
+            && first.contains(
+                "US1-1: `tests/acceptance_us1_1.rs` — `cargo test --test acceptance_us1_1`"
+            ),
+        "{first}"
+    );
     let again = serde_json::to_string(&f.asked()[1].prompt).unwrap();
     assert!(
         again.contains("speccoder refused your earlier answer"),

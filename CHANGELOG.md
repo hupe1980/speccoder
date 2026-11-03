@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A story's acceptance tests are written even when a task wrote a test
+  file of that name before the story had them: the test author is given
+  a free file per scenario.
+
 ## [0.9.1] - 2026-11-03
 
 ### Fixed
