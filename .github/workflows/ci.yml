@@ -27,6 +27,8 @@ jobs:
   ci:
     name: just ci (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # A green run takes about 30 minutes on macOS; a hang fails, never waits 6 hours.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:

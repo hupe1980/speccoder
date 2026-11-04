@@ -9,9 +9,15 @@ fail-fast = false
 [profile.speccoder.junit]
 path = "junit.xml"
 
+# A test that hangs is ended after 10 minutes and named (the slowest takes
+# about 3).
+[profile.default]
+slow-timeout = { period = "60s", terminate-after = 10 }
+
 # CI reports every failing test of a run, not only the first.
 [profile.ci]
 fail-fast = false
+slow-timeout = { period = "60s", terminate-after = 10 }
 
 # Every test process runs inside scripts/test-state.sh: a throwaway state
 # directory of its own, removed after it, so a test — or a binary it spawns
