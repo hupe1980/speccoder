@@ -1193,6 +1193,42 @@ fn a_test_of_imagined_code_is_written_again_before_any_attempt() {
     assert!(!r.path().join("tests/test_acceptance_t032.py").exists());
 }
 
+/// A task whose named scenarios stay red can rule their tests wrong (the
+/// example's T006: `text=True` reads `\r\n` as `\n`, so its frozen
+/// tests could never pass), beside a nudge.
+#[test]
+fn a_task_s_named_scenarios_left_red_can_be_ruled_wrong() {
+    let r = repo_with(TASKS);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(oracle_answer());
+    implements(&f, "pub fn alpha() {}");
+    assert_eq!(
+        run(r.path(), state.path(), "T001", &f).status(),
+        CommandStatus::Ok
+    );
+    let f = FakeProvider::new();
+    let now = "pub fn ok() {}";
+    f.will_call_tool(
+        "c1",
+        "edit_file",
+        json!({ "path": "src/lib.rs", "old_string": now, "new_string": format!("{now}\npub fn gamma() {{}}") }),
+    );
+    f.will_structure(json!({ "summary": "the frozen tests cannot pass", "status": "incomplete", "files_changed": ["src/lib.rs"], "checks_run": [], "notes": [] }));
+    let res = run(r.path(), state.path(), "T002", &f);
+    assert_ne!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let fix = res.fix();
+    assert!(
+        fix.first().is_some_and(|l| l.contains("task nudge T002")),
+        "{fix:?}"
+    );
+    assert!(
+        fix.iter()
+            .any(|l| l.contains("task rule T002 --tests-wrong --scenario US1-2")),
+        "{fix:?}"
+    );
+}
+
 /// A gap test of the command line runs the project's command (the
 /// sample's T038 called the CLI in-process, its stdin stubbed): its author
 /// is given the command, and a test that never runs it is written again.

@@ -485,6 +485,7 @@ pub(crate) fn refusal_words(why: &str) -> &'static str {
         "not_collected" => "is not where the runner collects tests",
         "skip_marker" => "skips a test",
         "placeholder" => "is a placeholder that can never pass",
+        "crlf_as_text" => "asserts `\\r\\n` in output it reads as text, which can never pass",
         "imagined" => "calls code that is not there",
         "errored" => "fails only on an error of its own, or does not build",
         "command_not_allowed" => "gives a command the policy does not allow",
@@ -609,6 +610,16 @@ pub(crate) fn validate_answer(
                 message: format!("`{rel}` skips a test"),
                 path: rel,
                 why: "skip_marker",
+            });
+            continue;
+        }
+        if crate::integrity::asserts_crlf_as_text(&rel, content) {
+            refused.push(RefusedFile {
+                message: format!(
+                    "`{rel}` asserts `\\r\\n` in output read with `text=True`, which turns it into `\\n`: it can never pass — compare `.splitlines()`, or read bytes"
+                ),
+                path: rel,
+                why: "crlf_as_text",
             });
             continue;
         }
@@ -899,6 +910,10 @@ pub(crate) fn prepare_held_out(
         // is not there: it fails whatever the code does.
         if crate::integrity::has_skip_marker(content) {
             discard(&rel, "skip_marker");
+            continue;
+        }
+        if crate::integrity::asserts_crlf_as_text(&rel, content) {
+            discard(&rel, "crlf_as_text");
             continue;
         }
         if crate::integrity::has_placeholder(content) {

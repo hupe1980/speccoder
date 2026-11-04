@@ -182,6 +182,31 @@ pub fn has_placeholder(text: &str) -> bool {
     Regex::new(PLACEHOLDER_MARKERS).is_ok_and(|r| r.is_match(text))
 }
 
+/// Whether a Python test asserts `\r\n` in output it reads as text
+/// (`text=True`, `universal_newlines=True`): text mode turns `\r\n` into
+/// `\n`, so it fails whatever the code writes (the example's US1, 2026-11-03).
+#[must_use]
+pub fn asserts_crlf_as_text(path: &str, text: &str) -> bool {
+    path.ends_with(".py")
+        && (text.contains("text=True") || text.contains("universal_newlines=True"))
+        && text
+            .lines()
+            .any(|l| l.contains("assert") && l.contains("\\r\\n"))
+}
+
+/// Why a test can never pass, whatever the code, when speccoder can tell:
+/// the words a ruling on it gives.
+#[must_use]
+pub fn never_passes(path: &str, text: &str) -> Option<&'static str> {
+    if asserts_crlf_as_text(path, text) {
+        Some("it asserts \\r\\n in output read with text=True, which turns it into \\n")
+    } else if has_placeholder(text) {
+        Some("it raises \"not implemented\" instead of checking the behaviour")
+    } else {
+        None
+    }
+}
+
 /// Whether `text` holds a marker that skips a test.
 #[must_use]
 pub fn has_skip_marker(text: &str) -> bool {
@@ -557,5 +582,41 @@ mod tests {
         ] {
             assert!(!has_placeholder(text), "{text}");
         }
+    }
+
+    /// The example's US1 oracle (2026-11-03): CSV's `\r\n` asserted on
+    /// output read as text, which can never hold it.
+    #[test]
+    fn crlf_asserted_on_text_output_never_passes() {
+        let run = "r = subprocess.run(cmd, input=t, text=True, capture_output=True)\n";
+        assert!(asserts_crlf_as_text(
+            "tests/test_us1.py",
+            &format!("{run}assert r.stdout == \"a,b\\r\\n\"\n")
+        ));
+        // Its lines, or bytes, or CRLF only in the input: fine.
+        assert!(!asserts_crlf_as_text(
+            "tests/test_us1.py",
+            &format!("{run}assert r.stdout.splitlines() == [\"a,b\"]\n")
+        ));
+        assert!(!asserts_crlf_as_text(
+            "tests/test_us1.py",
+            "r = subprocess.run(cmd, input=b\"x\", capture_output=True)\nassert r.stdout == b\"a,b\\r\\n\"\n"
+        ));
+        assert!(!asserts_crlf_as_text(
+            "tests/test_us1.py",
+            &format!("t = \"| a |\\r\\n\"\n{run}assert r.stdout == \"a\\n\"\n")
+        ));
+        // At the stop, the ruling's reason.
+        assert_eq!(
+            never_passes(
+                "tests/test_us1.py",
+                &format!("{run}assert r.stdout == \"a,b\\r\\n\"\n")
+            ),
+            Some("it asserts \\r\\n in output read with text=True, which turns it into \\n")
+        );
+        assert_eq!(
+            never_passes("tests/test_us1.py", &format!("{run}assert r.stdout\n")),
+            None
+        );
     }
 }

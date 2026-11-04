@@ -3843,21 +3843,55 @@ fn run_task_once(
         )
         .then_some("STORY-OPEN")
     });
+    // A red scenario whose frozen test can never pass, and why.
+    let never: Vec<(String, &str)> = match &report.progress {
+        Some(
+            speccoder_core::story::Progress::StoryOpen { scenarios }
+            | speccoder_core::story::Progress::LinksOpen { scenarios },
+        ) => scenarios
+            .iter()
+            .filter_map(|id| {
+                let t = story_oracle
+                    .as_ref()?
+                    .tests
+                    .iter()
+                    .find(|t| t.scenarios.contains(id))?;
+                let text = std::fs::read_to_string(project.join(&t.path)).ok()?;
+                crate::integrity::never_passes(&t.path, &text).map(|why| (id.clone(), why))
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    for (id, why) in &never {
+        message.push_str(&format!(" — {id}'s test can never pass: {why}"));
+    }
+    let rule = |id: &str| {
+        let f = feature.map_or_else(String::new, |f| format!(" --feature {f}"));
+        let why = never.iter().find(|(s, _)| s == id).map_or("…", |(_, w)| *w);
+        format!("speccoder task rule {task}{f} --tests-wrong --scenario {id} --reason \"{why}\"")
+    };
+    let nudge = || {
+        let f = feature.map_or_else(String::new, |f| format!(" --feature {f}"));
+        format!("speccoder task nudge {task}{f} --note \"…\"")
+    };
     let story_open_fix: Vec<String> = match &report.progress {
+        // The rulings first: a toast shows the first line.
         Some(speccoder_core::story::Progress::StoryOpen { scenarios }) if !report.ticked => {
-            let f = feature.map_or_else(String::new, |f| format!(" --feature {f}"));
-            // The rulings first: a toast shows the first line.
             scenarios
                 .iter()
-                .map(|id| {
-                    format!(
-                        "speccoder task rule {task}{f} --tests-wrong --scenario {id} --reason \"…\""
-                    )
-                })
-                .chain(std::iter::once(format!(
-                    "speccoder task nudge {task}{f} --note \"…\""
-                )))
+                .map(|id| rule(id))
+                .chain(std::iter::once(nudge()))
                 .collect()
+        }
+        // The scenarios the task names are still red: a nudge first, or
+        // each one's test ruled wrong — first when it can never pass.
+        Some(speccoder_core::story::Progress::LinksOpen { scenarios }) if !report.ticked => {
+            let rules = scenarios.iter().map(|id| rule(id));
+            if never.is_empty() {
+                std::iter::once(nudge()).chain(rules).collect()
+            } else {
+                rules.chain(std::iter::once(nudge())).collect()
+            }
         }
         // The task's own test failed, or was called wrong: rule it.
         _ => match &conflict {

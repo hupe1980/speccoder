@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A task whose named scenarios stay red offers ruling each one's test
+  wrong, beside a nudge; a test that can never pass is named, its
+  ruling first with the reason filled in.
+- A Python test asserting `\r\n` in output it reads with `text=True`
+  is refused and asked for again: text mode turns it into `\n`.
+
 ## [0.9.7] - 2026-11-03
 
 ### Fixed
