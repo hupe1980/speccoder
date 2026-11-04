@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-04
+
 ### Changed
 
 - Commands the OS sandbox confines run without asking (`[approvals]
@@ -851,7 +853,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.9.8...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/hupe1980/speccoder/compare/v0.9.8...v0.10.0
 [0.9.8]: https://github.com/hupe1980/speccoder/compare/v0.9.7...v0.9.8
 [0.9.7]: https://github.com/hupe1980/speccoder/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/hupe1980/speccoder/compare/v0.9.5...v0.9.6
