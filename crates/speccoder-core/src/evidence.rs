@@ -12,4 +12,8 @@ pub struct Row {
     pub mark: String,
     /// What it says.
     pub text: String,
+    /// What it lists, one each (a contained command), for an interface to
+    /// show apart; `text` says them too.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<String>,
 }

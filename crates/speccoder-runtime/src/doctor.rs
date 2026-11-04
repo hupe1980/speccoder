@@ -436,6 +436,17 @@ pub fn checks(
             &["→ prefer a container or VM without your credentials"],
         ),
     });
+    // What runs without asking.
+    let (fine, said) = crate::sandbox::contained_at(path);
+    out.push(check(
+        "contained",
+        if fine {
+            DoctorLevel::Pass
+        } else {
+            DoctorLevel::Warn
+        },
+        said,
+    ));
     // `[worktree] include` and `.worktreeinclude`: what a run's worktree
     // gets copied — names only, nothing copied.
     let worktree = text

@@ -257,6 +257,41 @@ pub struct Attempt {
     pub format: &'static dyn crate::format::Adapter,
     /// The sandbox, as a person asked about a command is told; live only.
     pub present: PresentContext,
+    /// Progress events already delivered, per run: a resumed run says each
+    /// event once.
+    pub delivered: std::sync::Arc<Delivered>,
+}
+
+/// How many progress events each run has delivered.
+#[derive(Debug, Default)]
+pub struct Delivered(std::sync::Mutex<std::collections::HashMap<String, usize>>);
+
+/// A run's progress, each event once: after a person's answer the run is
+/// invoked again and says every journaled turn again, in the same order,
+/// so the events a run already delivered are dropped (agentplane tells a
+/// skill nothing of replaying: AP-replaying).
+#[derive(Debug)]
+struct Once {
+    run: String,
+    seen: std::sync::atomic::AtomicUsize,
+    delivered: std::sync::Arc<Delivered>,
+    next: std::sync::Arc<dyn crate::progress::Progress>,
+}
+
+impl crate::progress::Progress for Once {
+    fn event(&self, event: &crate::progress::Event) {
+        let i = self.seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let Ok(mut delivered) = self.delivered.0.lock() else {
+            return;
+        };
+        let n = delivered.entry(self.run.clone()).or_default();
+        if i < *n {
+            return;
+        }
+        *n = i + 1;
+        drop(delivered);
+        self.next.event(event);
+    }
 }
 
 /// The run input: `{ bundle, settings: { checks, allow, max_turns,
@@ -289,6 +324,7 @@ pub fn input(
     let trusted = |v: Value| Tainted::trusted(v);
     let autopilot = settings.autopilot;
     let planning = settings.planning;
+    let contained = settings.contained;
     let settings = vec![
         ("checks", trusted(json!(settings.checks))),
         ("allow", trusted(json!(settings.allow))),
@@ -331,6 +367,10 @@ pub fn input(
     // Likewise only a planning task's.
     if let Some(dir) = planning {
         settings.push(("planning", trusted(json!(dir))));
+    }
+    // And only a run whose sandbox confines what it runs.
+    if let Some(m) = contained {
+        settings.push(("contained", trusted(json!(m))));
     }
     let settings = Tainted::object(settings);
     Tainted::object([
@@ -446,6 +486,9 @@ pub struct Settings<'a> {
     /// A planning task: its unit's directory (worktree-relative), whose
     /// design documents it writes ([`Policy::planning`]).
     pub planning: Option<&'a str>,
+    /// The enforced sandbox's mechanism when contained calls run without
+    /// asking ([`Policy::contained`]).
+    pub contained: Option<&'a str>,
 }
 
 /// The calls consecutive denials of which end an attempt.
@@ -580,6 +623,10 @@ pub(crate) fn policy_of(
         policy.autopilot()
     } else {
         policy
+    };
+    let policy = match settings["contained"].as_str() {
+        Some(m) => policy.contained(m),
+        None => policy,
     };
     Ok(match settings["planning"].as_str() {
         Some(dir) => policy.planning(dir),
@@ -851,10 +898,17 @@ impl Skill for Attempt {
                     .map(|t| (t.name.clone(), t.digest.clone()))
                     .collect(),
                 stop,
-                observer: self.progress.clone().map(|p| {
+                observer: self.progress.clone().map(|next| {
+                    let once: std::sync::Arc<dyn crate::progress::Progress> =
+                        std::sync::Arc::new(Once {
+                            run: cx.run_id().to_string(),
+                            seen: std::sync::atomic::AtomicUsize::new(0),
+                            delivered: std::sync::Arc::clone(&self.delivered),
+                            next,
+                        });
                     (
                         task_name.rsplit('/').next().unwrap_or_default().to_owned(),
-                        p,
+                        once,
                     )
                 }),
                 finish: |report| {
@@ -918,6 +972,7 @@ fn emit_with_tail(
             decision: entry["decision"].as_str().unwrap_or_default().to_owned(),
             ok: entry["ok"].as_bool(),
             tail,
+            contained: entry["contained"] == true,
         });
     }
 }
@@ -1569,8 +1624,12 @@ pub(crate) async fn tool_turn(
             }
             let mut person: Option<Value> = None;
             // Allowed by a person's grant for the task (of this run): the
-            // person's decision, not a rule's.
-            if decision == Decision::Allow && object.is_some() {
+            // person's decision, not a rule's (a contained call is a rule's).
+            if decision == Decision::Allow
+                && object
+                    .as_ref()
+                    .is_some_and(|o| policy.approved().contains(o))
+            {
                 person = Some(json!({
                     "approved_by": "person",
                     "scope": "task-grant",
@@ -1749,6 +1808,10 @@ pub(crate) async fn tool_turn(
                         (None, Some(r)) => {
                             o.insert("by".to_owned(), json!("rule"));
                             o.insert("rule".to_owned(), json!(r));
+                            // Ran without asking: the sandbox confined it.
+                            if r.starts_with("contained (") {
+                                o.insert("contained".to_owned(), json!(true));
+                            }
                         }
                         (None, None) => {}
                     }
@@ -2080,5 +2143,51 @@ mod tests {
             judge_stop(&gate, &q, false, false, 0),
             Stop::Stopped(_)
         ));
+    }
+
+    /// The md2csv example (2026-11-04): after each answer the attempt's
+    /// whole turn log was printed again. A run says each event once.
+    #[test]
+    fn a_resumed_run_says_each_event_once() {
+        #[derive(Debug, Default)]
+        struct Seen(std::sync::Mutex<Vec<u32>>);
+        impl crate::progress::Progress for Seen {
+            fn event(&self, e: &crate::progress::Event) {
+                if let crate::progress::Event::ToolCall { turn, .. } = e {
+                    self.0.lock().unwrap().push(*turn);
+                }
+            }
+        }
+        let seen = std::sync::Arc::new(Seen::default());
+        let delivered = std::sync::Arc::new(Delivered::default());
+        let pass = |run: &str, turns: &[u32]| {
+            let once = Once {
+                run: run.to_owned(),
+                seen: std::sync::atomic::AtomicUsize::new(0),
+                delivered: std::sync::Arc::clone(&delivered),
+                next: seen.clone(),
+            };
+            for t in turns {
+                crate::progress::Progress::event(
+                    &once,
+                    &crate::progress::Event::ToolCall {
+                        task: "T012".to_owned(),
+                        turn: *t,
+                        tool: "run_command".to_owned(),
+                        target: String::new(),
+                        decision: "allow".to_owned(),
+                        ok: Some(true),
+                        tail: Vec::new(),
+                        contained: false,
+                    },
+                );
+            }
+        };
+        pass("r1", &[1, 2]);
+        // The answer: invoked again, turns 1 and 2 said again, then 3.
+        pass("r1", &[1, 2, 3]);
+        // Another run's events are its own.
+        pass("r2", &[1]);
+        assert_eq!(*seen.0.lock().unwrap(), [1, 2, 3, 1]);
     }
 }

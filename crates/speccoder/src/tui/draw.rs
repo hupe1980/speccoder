@@ -455,18 +455,27 @@ fn pipeline(f: &mut Frame<'_>, app: &App, area: Rect) {
 }
 
 fn calls(f: &mut Frame<'_>, app: &App, area: Rect) {
-    let (recent, usage): (&[String], (u64, u64, Option<f64>)) = match (&app.hosted, &app.snap.live)
-    {
-        (Some(h), _) => (&h.recent, h.usage),
-        (None, Some((l, _))) => (&l.recent, (l.input_tokens, l.output_tokens, l.usd)),
-        _ => (&[], (0, 0, None)),
-    };
+    let (recent, usage, contained): (&[String], (u64, u64, Option<f64>), u32) =
+        match (&app.hosted, &app.snap.live) {
+            (Some(h), _) => (&h.recent, h.usage, h.contained),
+            (None, Some((l, _))) => (
+                &l.recent,
+                (l.input_tokens, l.output_tokens, l.usd),
+                l.contained,
+            ),
+            _ => (&[], (0, 0, None), 0),
+        };
     let mut lines: Vec<Line<'_>> = vec![Line::styled(
         a(&format!(
-            "{} in · {} out{}",
+            "{} in · {} out{}{}",
             usage.0,
             usage.1,
-            usage.2.map(|u| format!(" · ${u:.4}")).unwrap_or_default()
+            usage.2.map(|u| format!(" · ${u:.4}")).unwrap_or_default(),
+            if contained > 0 {
+                format!(" · {contained} contained")
+            } else {
+                String::new()
+            }
         )),
         st(Token::Muted),
     )];

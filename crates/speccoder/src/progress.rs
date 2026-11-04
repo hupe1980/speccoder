@@ -129,8 +129,11 @@ pub fn lines(event: &Event, seconds: Option<u64>, verbosity: Verbosity) -> Vec<S
             decision,
             ok,
             tail,
+            contained,
             ..
         } if !quiet => {
+            // Allowed because the sandbox confines it: said as such.
+            let decision = if *contained { "contained" } else { decision };
             let mut out = vec![format!(
                 "    turn {turn:<3} {tool:<12} {target:<60} {decision}"
             )];
@@ -780,6 +783,7 @@ mod tests {
             decision: "allow".to_owned(),
             ok: Some(false),
             tail: tail.clone(),
+            contained: false,
         };
         assert_eq!(lines(&call, None, Verbosity::Normal).len(), 1);
         let verbose = lines(&call, None, Verbosity::Verbose);

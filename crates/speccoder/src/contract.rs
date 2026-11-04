@@ -315,6 +315,7 @@ fn every_event_type_validates() {
             decision: "allow".to_owned(),
             ok: Some(true),
             tail: Vec::new(),
+            contained: false,
         },
         Event::ApprovalRequested {
             task: "T001".to_owned(),

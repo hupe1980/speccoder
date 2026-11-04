@@ -288,6 +288,15 @@ fn decisions(tool_calls: &[Value]) -> Vec<Value> {
         .collect()
 }
 
+/// The commands the sandbox confined, run without asking.
+fn contained(tool_calls: &[Value]) -> Vec<Value> {
+    tool_calls
+        .iter()
+        .filter(|c| c["contained"] == true)
+        .map(|c| json!({ "argv": c["arguments"]["argv"] }))
+        .collect()
+}
+
 /// The acceptance set's strength as evidence: shares, counts,
 /// what got through, the permitted alternatives and the rulings — never the
 /// local patch paths or the variants' code.
@@ -499,6 +508,7 @@ fn predicate(
         model: None,
         run: None,
         decisions: None,
+        contained: None,
         strength: None,
         instructions: None,
         decider: None,
@@ -551,6 +561,7 @@ pub fn record_tick(t: &Tick<'_>, report: &RunReport) -> Value {
         model: Some(t.model.clone()),
         run: Some(json!(report.run_id)),
         decisions: Some(json!(decisions(&report.tool_calls))),
+        contained: Some(json!(contained(&report.tool_calls))),
         strength: Some(strength(report)),
         instructions: Some(json!(report.instructions)),
         red: red(report),

@@ -34,14 +34,12 @@ pub fn render_into(
     // every renderer in one place.
     let (mut body, mut block) = (Vec::new(), Vec::new());
     human_body(result, &mut body, &mut block)?;
+    // A stop's fix lines are its ways out, in order: a second list could
+    // only repeat or contradict them (the md2csv example, 2026-11-04).
     let shown = code_block(result, &mut block)?;
-    let next: Vec<_> = result
-        .next()
-        .iter()
-        .filter(|s| !shown.contains(&s.command))
-        .cloned()
-        .collect();
-    human::next(&mut body, &next)?;
+    if shown.is_empty() {
+        human::next(&mut body, result.next())?;
+    }
     let write = |w: &mut dyn Write, bytes: Vec<u8>, ascii: bool| -> std::io::Result<()> {
         let text = String::from_utf8_lossy(&bytes);
         if ascii {
@@ -55,7 +53,7 @@ pub fn render_into(
 }
 
 /// `error[CODE]: …` (or `stopped`, `warning`), why, `fix:` lines and
-/// `docs:` — on stderr; the fixes shown, so `Next:` does not repeat them.
+/// `docs:` — on stderr; the fixes shown, which then stand for `Next:`.
 /// With a payload the report already said what happened, so the headline
 /// is the code's title; without one it is the message.
 fn code_block(result: &CommandResult, err: &mut dyn Write) -> std::io::Result<Vec<String>> {
@@ -901,6 +899,7 @@ mod look_tests {
                 decision: "allow".into(),
                 ok: Some(true),
                 tail: Vec::new(),
+                contained: false,
             },
             Event::ApprovalRequested {
                 task: "T1".into(),

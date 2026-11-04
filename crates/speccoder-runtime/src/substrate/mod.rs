@@ -488,6 +488,7 @@ fn builder(
             progress: hooks.progress.clone(),
             format,
             present: hooks.present.clone(),
+            delivered: std::sync::Arc::default(),
         })
         .skill(host::Host {
             style: model.prompt_style(),

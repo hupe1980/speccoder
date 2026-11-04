@@ -18,6 +18,7 @@ const host = vi.hoisted(() => ({
     selectTask: vi.fn(async (_t: string | null) => {}),
     toast: vi.fn(),
   },
+  rows: [] as unknown[],
 }));
 vi.mock("../lib/app.svelte", () => ({ app: host.app }));
 vi.mock("../lib/api", async (importOriginal) => {
@@ -29,7 +30,7 @@ vi.mock("../lib/api", async (importOriginal) => {
         return {
           task: { id: "T026", title: "Route both tables", phase: "Phase 7: Convergence", state: "ready", attestation: null, blocked_by: [], commit: null, run_id: null, last_attempt: null, note: null },
           banner: { mark: "ready", words: "Ready" },
-          rows: [],
+          rows: host.rows,
         };
       }
       return {};
@@ -75,5 +76,24 @@ describe("Drawer", () => {
     expect(buttons.map((b) => b.textContent?.trim())).toEqual(["These Tests Are Wrong…"]);
     buttons[0]?.click();
     expect(host.app.perform).toHaveBeenCalledWith(expect.objectContaining({ run: expect.objectContaining({ task: "T026", scenario: null }) }));
+  });
+
+  it("shows what ran in the sandbox without asking, four at first", async () => {
+    host.app.report = { data: { tasks: [{ id: "T026", judged: null }] } };
+    host.app.inbox = { data: { items: [] } };
+    const items = ["python -c 1", "python -c 2", "uv run python -m md2csv", "sh -c x", "rm -r build", "python -m pytest -q t.py"];
+    host.rows = [{ label: "Ran without asking", mark: "ready", text: "6 commands the sandbox confined", items }];
+    shown = mount(Drawer, { target: document.body });
+    await tick();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(document.body.textContent).toContain("6 ran in the sandbox — nobody had to be asked");
+    const chips = () => [...document.querySelectorAll(".cmds li.mono")].map((l) => l.textContent);
+    expect(chips()).toEqual(items.slice(0, 4));
+    const more = [...document.querySelectorAll("button")].find((b) => b.textContent === "+2 more");
+    more?.click();
+    flushSync();
+    expect(chips()).toEqual(items);
+    host.rows = [];
   });
 });

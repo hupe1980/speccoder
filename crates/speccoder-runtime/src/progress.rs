@@ -138,6 +138,9 @@ pub enum Event {
         ok: Option<bool>,
         /// The last lines of a failed command (at most five).
         tail: Vec<String>,
+        /// Allowed without asking because the sandbox confines it.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        contained: bool,
     },
     /// Tokens so far in the current attempt.
     Usage {
@@ -670,6 +673,9 @@ pub struct LiveState {
     /// The latest tool calls, oldest first (at most [`RECENT`]).
     #[serde(default)]
     pub recent: Vec<String>,
+    /// Commands the sandbox confined, run without asking, this attempt.
+    #[serde(default)]
+    pub contained: u32,
     /// Tokens of the current attempt.
     pub input_tokens: u64,
     /// Output tokens of the current attempt.
@@ -885,13 +891,20 @@ impl Progress for Live {
                     tool,
                     target,
                     decision,
+                    contained,
                     ..
                 } => {
+                    let decision = if *contained {
+                        s.contained += 1;
+                        "contained"
+                    } else {
+                        decision.as_str()
+                    };
                     if let Some(a) = s.agent.as_mut()
                         && decision != "reported"
                     {
                         a.asked += 1;
-                        match decision.as_str() {
+                        match decision {
                             "allow" => a.allowed += 1,
                             "deny" => a.refused += 1,
                             _ => {}

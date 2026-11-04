@@ -359,6 +359,15 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
             .collect();
         evidence.push_str(&format!("Executor: {preset}\n"));
     }
+    // Commands the sandbox confined ran without asking: how many, on the tick.
+    let contained = report
+        .tool_calls
+        .iter()
+        .filter(|c| c["contained"] == true)
+        .count();
+    if contained > 0 {
+        evidence.push_str(&format!("Contained: {contained}\n"));
+    }
     evidence.push_str(&f.extra);
     format!(
         "{}\n\n{}\n\nSpec-Task: {}/{}\nVerdict: {verdict_word}\n{evidence}Run: {}\n{}{}",

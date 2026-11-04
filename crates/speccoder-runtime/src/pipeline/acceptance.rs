@@ -248,7 +248,14 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
                 };
                 let not_there = speccoder_core::verify::missing_names(&first)
                     .filter(|names| !names.is_empty() && !names.iter().any(|n| theirs(n)));
+                let escape = crate::integrity::invalid_escape(
+                    &format!("{}\n{}", first.stdout_tail, first.stderr_tail),
+                    &paths,
+                );
                 let wrong = match class {
+                    _ if escape.is_some() => escape.map(|w| {
+                        format!("hold a string other than written (an invalid escape: {w})")
+                    }),
                     RedClass::CollectionError | RedClass::BuildError => {
                         Some("do not build or collect".to_owned())
                     }
@@ -485,6 +492,7 @@ pub(crate) fn refusal_words(why: &str) -> &'static str {
         "not_collected" => "is not where the runner collects tests",
         "skip_marker" => "skips a test",
         "placeholder" => "is a placeholder that can never pass",
+        "invalid_escape" => "holds a string other than written (an invalid escape sequence)",
         "crlf_as_text" => "asserts `\\r\\n` in output it reads as text, which can never pass",
         "imagined" => "calls code that is not there",
         "errored" => "fails only on an error of its own, or does not build",

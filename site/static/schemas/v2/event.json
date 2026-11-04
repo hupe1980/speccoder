@@ -278,6 +278,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "contained": {
+          "description": "Allowed without asking: the sandbox confines it.",
+          "type": "boolean"
         }
       },
       "required": [

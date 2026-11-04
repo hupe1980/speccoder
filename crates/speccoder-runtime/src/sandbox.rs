@@ -218,6 +218,9 @@ pub struct Unenforced {
     /// Commands can signal every process of the user, not only their own
     /// (Linux older than 6.12 cannot keep signals within the run).
     pub signal_scope: bool,
+    /// In place: `.git` and ignored files could not be carved out, so
+    /// commands can write the one and read the other.
+    pub carve: bool,
 }
 
 fn canonical(p: &Path) -> PathBuf {
@@ -549,6 +552,35 @@ pub fn runner(root: &Path, config: &Config) -> Result<(Runner, Option<String>), 
     }
 }
 
+/// What `[approvals] contained` comes to at `root`, in one line: the
+/// commands the sandbox confines run without asking, or why every command
+/// that is not a check asks — what `init`, `new` and `doctor` say.
+#[must_use]
+pub fn contained_at(root: &Path) -> (bool, String) {
+    let text = crate::verify::find_config(root)
+        .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())
+        .unwrap_or_default();
+    let allowed = crate::substrate::run_config::parse(&text).is_ok_and(|c| c.contained);
+    if !allowed {
+        return (
+            true,
+            "every command that is not a check asks ([approvals] contained = \"ask\")".to_owned(),
+        );
+    }
+    match runner_at(root).map(|(r, _)| r.confines()) {
+        Ok(Some(m)) => (
+            true,
+            format!(
+                "commands the sandbox confines run without asking ({m}) — [approvals] contained = \"ask\" to be asked"
+            ),
+        ),
+        Ok(None) | Err(_) => (
+            false,
+            "every command that is not a check asks: no sandbox confines them here".to_owned(),
+        ),
+    }
+}
+
 /// [`runner`] with `[sandbox]` read from the `speccoder.toml` that governs `root`.
 pub fn runner_at(root: &Path) -> Result<(Runner, Option<String>), String> {
     let text = crate::verify::find_config(root)
@@ -573,7 +605,10 @@ impl Runner {
                         (Self::Sandboxed(s), notice)
                     }
                     Err(e) => (
-                        Self::Sandboxed(s),
+                        Self::Sandboxed({
+                            s.profile.unenforced.carve = true;
+                            s
+                        }),
                         Some(format!(
                             "the sandbox cannot carve here ({e}): commands can write `.git` and read ignored secrets in place; the run stops if `.git` changes"
                         )),
@@ -599,6 +634,24 @@ impl Runner {
     #[must_use]
     pub fn is_sandboxed(&self) -> bool {
         matches!(self, Self::Sandboxed(_))
+    }
+
+    /// The mechanism that confines a command to the worktree — writes
+    /// there, no network beyond loopback, no signal to other processes,
+    /// `.git` carved out in place — when this runner does: a call it
+    /// confines needs nobody's approval (`[approvals] contained`).
+    #[must_use]
+    pub fn confines(&self) -> Option<&'static str> {
+        match self {
+            Self::Sandboxed(s)
+                if s.profile.network != Network::On
+                    && !s.profile.unenforced.signal_scope
+                    && !s.profile.unenforced.carve =>
+            {
+                Some(s.backend.mechanism())
+            }
+            _ => None,
+        }
     }
 
     /// The same runner, with git hooks, git config and agent configuration

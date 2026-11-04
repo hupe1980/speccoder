@@ -293,6 +293,7 @@ impl Repo {
             model: (!decision).then_some(Value::Null),
             run: (!decision).then_some(Value::Null),
             decisions: (!decision).then(|| json!([])),
+            contained: None,
             strength: (!decision).then(|| json!({ "visible": { "share": 0.82 }, "combined": { "share": 0.91 }, "near_misses": [], "permitted": [] })),
             instructions: (!decision).then(|| json!([])),
             decider: decision.then(|| predicate::Decider {

@@ -323,9 +323,84 @@ fn denied_calls_are_refused_and_the_loop_continues() {
     assert!(f.asked().len() >= 2);
 }
 
+/// The md2csv example's T012 (2026-11-04): five probes asked a person,
+/// each inside the enforced sandbox. Contained, they run unasked and are
+/// recorded as such — on the call and on the tick.
+#[test]
+fn a_contained_command_runs_without_asking_and_is_recorded() {
+    if speccoder_runtime::sandbox::backend().is_err() {
+        return; // nothing is contained without the OS sandbox
+    }
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "run_command", json!({ "argv": ["touch", "probe"] }));
+    f.will_call_tool(
+        "c2",
+        "run_command",
+        json!({ "argv": ["sh", "-c", "echo hi"] }),
+    );
+    f.will_call_tool("c3", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("probed, then added login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    for c in &rep.tool_calls[..2] {
+        assert_eq!(c["decision"], "allow", "{c}");
+        assert_eq!(c["by"], "rule", "{c}");
+        assert_eq!(c["contained"], true, "{c}");
+        assert!(
+            c["rule"].as_str().unwrap().starts_with("contained ("),
+            "{c}"
+        );
+    }
+    assert!(rep.pending.is_none());
+    let tick = Command::new("git")
+        .args(["log", "-1", "--format=%B", rep.commit.as_deref().unwrap()])
+        .current_dir(&rep.worktree)
+        .output()
+        .unwrap();
+    let tick = String::from_utf8_lossy(&tick.stdout);
+    assert!(tick.contains("\nContained: 2\n"), "{tick}");
+}
+
+/// Nothing is contained where nothing confines it, nor when the project
+/// asks: the call waits for a person, and an unconfined run says why.
+#[test]
+fn without_the_sandbox_or_when_asked_a_command_asks() {
+    for (config, notice) in [
+        (
+            "[sandbox]\nmode = \"off\"\n",
+            Some("contained calls ask: no sandbox is enforced"),
+        ),
+        ("[approvals]\ncontained = \"ask\"\n", None),
+    ] {
+        let r = repo(config);
+        let state = tempfile::tempdir().unwrap();
+        let (f, d) = fake();
+        f.will_call_tool("c1", "run_command", json!({ "argv": ["touch", "probe"] }));
+        let res = run(r.path(), state.path(), "T005", d);
+        assert_eq!(
+            res.status(),
+            CommandStatus::NeedsHuman,
+            "{config}: {}",
+            res.message()
+        );
+        let rep = report(&res);
+        assert_eq!(rep.attempt_status, "needs_approval", "{config}");
+        if let Some(n) = notice {
+            assert!(
+                rep.notices.iter().any(|x| x.starts_with(n)),
+                "{config}: {:?}",
+                rep.notices
+            );
+        }
+    }
+}
+
 #[test]
 fn a_call_needing_approval_stops_the_attempt_unexecuted() {
-    let r = repo("");
+    let r = repo("[approvals]\ncontained = \"ask\"\n");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_call_tool(
@@ -3424,7 +3499,7 @@ impl speccoder_runtime::approvals::Approver for Slow {
 // lease renewal and every other task on it (MCP servers, progress).
 #[test]
 fn a_person_who_takes_their_time_keeps_the_run() {
-    let r = repo("");
+    let r = repo("[approvals]\ncontained = \"ask\"\n");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     // `touch` needs approval; the person answers after 13 s (the lease is 4 s).
@@ -3733,7 +3808,7 @@ fn no_instructions_when_turned_off() {
 /// with approve and reject; a task whose attempt did not pass is one too.
 #[test]
 fn the_inbox_lists_a_waiting_call_and_a_task_that_did_not_pass() {
-    let r = repo("");
+    let r = repo("[approvals]\ncontained = \"ask\"\n");
     let state = tempfile::tempdir().unwrap();
     // A waiting call holds the worktree: the attempt that did not pass first.
     let (f, d) = fake();

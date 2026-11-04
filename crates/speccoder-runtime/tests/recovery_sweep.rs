@@ -114,6 +114,7 @@ fn every_crash_point_of_an_attempt_resumes_honestly() {
         hidden: &[],
         autopilot: false,
         planning: None,
+        contained: None,
     };
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()

@@ -54,7 +54,7 @@
     {#if r.last_call}<p class="row"><Icon name="terminal" size={12} /><span class="mono">{r.last_call}</span></p>{/if}
     {#if r.thinking}<p class="row thought"><span class="therefore" aria-hidden="true">∴</span><span>{r.thinking}</span></p>{/if}
     {#if r.said}<p class="row said">“{r.said}”</p>{/if}
-    <p class="row tokens muted">{tokens(r.input_tokens)} in · {tokens(r.output_tokens)} out{#if r.usd != null}{" · "}${r.usd.toFixed(4)}{/if}</p>
+    <p class="row tokens muted">{tokens(r.input_tokens)} in · {tokens(r.output_tokens)} out{#if r.usd != null}{" · "}${r.usd.toFixed(4)}{/if}{#if r.contained}{" · "}<span title="Commands the sandbox confined ran without asking">{r.contained} contained</span>{/if}</p>
     <footer>
       <button class="btn small" onclick={show}><Icon name="grid" size={12} /> Show on Board</button>
       {#if interrupted}

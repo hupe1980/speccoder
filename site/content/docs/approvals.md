@@ -9,6 +9,12 @@ group = "Use"
 
 [The policy](@/docs/security.md#the-policy) allows, denies, or sends a call to a person. This page is about the last kind. No approval lifts a denial.
 
+## Contained calls
+
+A command the OS sandbox confines runs without asking: one the policy asks about only for what it runs (not a check or allowed command, a shell, a recursive `rm`), in a sandbox that keeps writes to the worktree, the network to loopback and signals to its own processes. It is recorded as `contained`: `run_command … contained` live, `— contained` in the report, a **Ran without asking** row in the task's evidence (signed) and `Contained: N` on the tick.
+
+Everything else asks as before: the network beyond loopback, git that changes the repository, protected paths, MCP tools, and every command where no sandbox is enforced (the run says so once). `[approvals] contained = "ask"` asks for each; `speccoder init`, `new` and `doctor` say which applies. A contained command still reaches services listening on loopback and reads what the sandbox leaves readable; what it changes in the worktree is audited like any other change.
+
 ## Inline
 
 In a foreground run at a terminal (the [dashboard](@/docs/running.md#the-dashboard), or a prompt with `--plain`) speccoder asks while the attempt waits:
@@ -78,7 +84,7 @@ The web Needs You item and the dashboard (`B` on a batched call) decide the batc
 
 A run started with `speccoder review approve --run autopilot` (**Approve and Run on Autopilot**) asks nobody:
 
-- A call the policy would ask about is refused for that run (`autopilot: not asked — listed for you`) and the attempt goes on. Each is listed in the run report (`autopilot_denied`) and in Needs You.
+- [Contained calls](#contained-calls) run. A call that would still ask is refused for that run (`autopilot: not asked — listed for you`) and the attempt goes on. Each is listed in the run report (`autopilot_denied`) and in Needs You.
 - Its only grants are the ones you ticked: objects a person approved earlier for this feature, named by grant id (`--grant g-…`; `--list-grants` lists them). None is ticked by default; none outlives the run.
 - It resumes no interrupted attempt (that attempt is set aside) and takes no grant or answer an earlier run kept for the task.
 - It needs the OS sandbox enforced; with none, or `[sandbox] mode = "off"`, it is refused (`SANDBOX-UNAVAILABLE`).

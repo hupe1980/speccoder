@@ -210,6 +210,7 @@ fn hosted() -> App {
         decision: "allow".to_owned(),
         ok: Some(true),
         tail: Vec::new(),
+        contained: false,
     });
     app.apply(&Event::Usage {
         task: "T002".to_owned(),

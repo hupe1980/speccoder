@@ -172,6 +172,7 @@ impl Default for AttestConfig {
 struct RawApprovals {
     wait: Option<String>,
     budget: Option<i64>,
+    contained: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -211,6 +212,9 @@ pub struct RunConfig {
     /// Prompts a run shows a person before further calls wait together in
     /// Needs You (`[approvals] budget`, 0–100, default 12).
     pub approval_budget: u32,
+    /// Commands the enforced sandbox confines run without asking
+    /// (`[approvals] contained = "allow"`, the default; `"ask"` asks).
+    pub contained: bool,
     /// Commit each passed task on the speccoder branch (`[git] commit = "per-task"`).
     pub commit_per_task: bool,
     /// Derive acceptance tests from the spec before attempts (`[acceptance] generate`).
@@ -262,6 +266,7 @@ impl Default for RunConfig {
             allow: Vec::new(),
             allow_prefix: Vec::new(),
             approval_budget: DEFAULT_BUDGET,
+            contained: true,
             commit_per_task: true,
             acceptance: true,
             held_out: true,
@@ -472,6 +477,15 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
             .filter(|n| *n <= 100)
             .ok_or_else(|| format!("[approvals]: budget = {n} (a whole number from 0 to 100)"))?,
     };
+    let contained = match approvals.contained.as_deref() {
+        None | Some("allow") => true,
+        Some("ask") => false,
+        Some(other) => {
+            return Err(format!(
+                "[approvals]: contained = \"{other}\" (allow or ask)"
+            ));
+        }
+    };
     let oracle_samples = match review.oracle_samples {
         None => d.oracle_samples,
         Some(n @ 1..=2) => u8::try_from(n).unwrap_or(d.oracle_samples),
@@ -496,6 +510,7 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
             .collect(),
         allow_prefix: commands.allow_prefix,
         approval_budget,
+        contained,
         commit_per_task,
         acceptance: acceptance.generate.unwrap_or(true),
         held_out: acceptance.held_out.unwrap_or(true),
@@ -666,5 +681,22 @@ mod tests {
         assert_eq!(c.allow_prefix, [vec!["npm".to_owned(), "run".to_owned()]]);
         let e = parse("[commands]\nallow_prefix = [[\"python3\"]]\n").unwrap_err();
         assert!(e.contains("a bare program allows any argument"), "{e}");
+    }
+
+    #[test]
+    fn contained_calls_are_allowed_unless_asked_for() {
+        assert!(parse("").unwrap().contained);
+        assert!(
+            parse("[approvals]\ncontained = \"allow\"\n")
+                .unwrap()
+                .contained
+        );
+        assert!(
+            !parse("[approvals]\ncontained = \"ask\"\n")
+                .unwrap()
+                .contained
+        );
+        let e = parse("[approvals]\ncontained = \"yes\"\n").unwrap_err();
+        assert_eq!(e, "[approvals]: contained = \"yes\" (allow or ask)");
     }
 }

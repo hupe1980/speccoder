@@ -194,6 +194,21 @@ pub fn asserts_crlf_as_text(path: &str, text: &str) -> bool {
             .any(|l| l.contains("assert") && l.contains("\\r\\n"))
 }
 
+/// Python's warning of an invalid escape in one of `paths`' own string
+/// literals, from a run's output (`test_x.py:15: SyntaxWarning: "\\|" is an
+/// invalid escape sequence`): the string holds what its author did not
+/// write (the example's US3-2, 2026-11-04).
+#[must_use]
+pub fn invalid_escape(output: &str, paths: &[&str]) -> Option<String> {
+    output.lines().map(str::trim).map(str::to_owned).find(|l| {
+        l.contains("SyntaxWarning")
+            && l.contains("escape sequence")
+            && paths
+                .iter()
+                .any(|p| l.contains(p.rsplit('/').next().unwrap_or(p)))
+    })
+}
+
 /// Why a test can never pass, whatever the code, when speccoder can tell:
 /// the words a ruling on it gives.
 #[must_use]
@@ -616,6 +631,26 @@ mod tests {
         );
         assert_eq!(
             never_passes("tests/test_us1.py", &format!("{run}assert r.stdout\n")),
+            None
+        );
+    }
+
+    /// The example's US3-2 oracle (2026-11-04): its string held a backslash
+    /// more than its author meant; Python says so, in either form.
+    #[test]
+    fn python_s_invalid_escape_warning_names_its_own_test() {
+        let py315 = "  /w/tests/test_acceptance_us3_2.py:15: SyntaxWarning: \"\\|\" is an invalid escape sequence.\n";
+        let py312 =
+            "tests/test_acceptance_us3_2.py:15: SyntaxWarning: invalid escape sequence '\\|'\n";
+        for out in [py315, py312] {
+            assert!(
+                invalid_escape(out, &["tests/test_acceptance_us3_2.py"]).is_some(),
+                "{out}"
+            );
+        }
+        // Another file's warning is not this test's.
+        assert_eq!(
+            invalid_escape(py312, &["tests/test_acceptance_us3_1.py"]),
             None
         );
     }

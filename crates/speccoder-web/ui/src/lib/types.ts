@@ -140,6 +140,8 @@ export interface Row {
   label: string;
   mark: string;
   text: string;
+  /** What it lists, one each (the commands that ran without asking). */
+  items?: string[];
 }
 
 export interface Presentation {
@@ -227,6 +229,8 @@ export interface LiveRun {
     input_tokens: number;
     output_tokens: number;
     usd: number | null;
+    /** Commands the sandbox confined, run without asking, this attempt. */
+    contained?: number;
     finished: string | null;
     started_at: number;
     updated_at: number;

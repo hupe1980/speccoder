@@ -1802,6 +1802,8 @@ export type EventLine = {
     ok: boolean | null;
     /** The last lines of a failed command. */
     tail: string[];
+    /** Allowed without asking: the sandbox confines it. */
+    contained?: boolean;
   }
   /** A call waits for a person. */
   | {

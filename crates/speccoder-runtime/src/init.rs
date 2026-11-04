@@ -566,7 +566,11 @@ pub fn render(
          \n# Commands run in an OS sandbox: writes only to the worktree, credentials unreadable,\n\
          # no network beyond loopback. Give commands that fetch the network, or switch it off.\n\
          # [sandbox]\n# network_allow = [[\"cargo\", \"fetch\"]]\n# mode = \"auto\"           # \"required\" refuses to run unsandboxed; \"off\"\n\
-         \n# Commands the model may run besides the checks (argv prefixes); others need approval.\n",
+         \n# Commands the OS sandbox confines (writes only here, no network beyond loopback)\n\
+         # run without asking; \"ask\" asks for each.\n\
+         [approvals]\ncontained = \"allow\"\n\
+         \n# Commands the model may run besides the checks, exactly as written; what the\n\
+         # sandbox confines runs anyway, the rest needs approval.\n",
         about,
         quote(provider),
         quote(model),

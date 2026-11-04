@@ -485,9 +485,23 @@
         {
           "name": "approvals",
           "title": "Approvals",
-          "about": "How long a call waits for a person, and how often a run may ask.",
+          "about": "What runs without asking, how long a call waits for a person, and how often a run may ask.",
           "named": false,
           "keys": [
+            {
+              "key": "contained",
+              "kind": "choice",
+              "about": "Commands the OS sandbox confines (writes only here, no network beyond loopback) run without asking; \"ask\" asks for each",
+              "default": "allow",
+              "value": null,
+              "choices": [
+                "allow",
+                "ask"
+              ],
+              "min": null,
+              "max": null,
+              "required": false
+            },
             {
               "key": "wait",
               "kind": "duration",

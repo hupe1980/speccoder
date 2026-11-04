@@ -180,6 +180,14 @@ pub struct TaskVerificationV0 {
         skip_serializing_if = "Option::is_none"
     )]
     pub decisions: Option<Value>,
+    /// Commands the enforced sandbox confined, run without asking a person:
+    /// each `{argv}`, in the attempt's order.
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub contained: Option<Value>,
     /// The acceptance set's strength (shares, near misses, permitted
     /// alternatives), or `null`.
     #[serde(

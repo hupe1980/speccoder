@@ -82,7 +82,8 @@ pub fn part_of(
 
 /// What of a call's arguments is matched: the whole command line (any
 /// length), a write's full path (any length), each argv element after the
-/// program and each MCP argument string of at least [`MIN_CHARS`].
+/// program that is a span worth copying (a path, a URL, a phrase — never
+/// one word) and each MCP argument string of at least [`MIN_CHARS`].
 #[must_use]
 pub fn candidates(tool: &str, arguments: &Value) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -92,12 +93,7 @@ pub fn candidates(tool: &str, arguments: &Value) -> Vec<String> {
             if argv.len() >= 2 {
                 out.push(argv.join(" "));
             }
-            out.extend(
-                argv.iter()
-                    .skip(1)
-                    .filter(|a| a.chars().count() >= MIN_CHARS)
-                    .cloned(),
-            );
+            out.extend(argv.iter().skip(1).filter(|a| meaningful(a)).cloned());
         }
         "write_file" | "edit_file" => {
             if let Some(p) = arguments["path"].as_str().filter(|p| !p.is_empty()) {
@@ -118,6 +114,15 @@ pub fn candidates(tool: &str, arguments: &Value) -> Vec<String> {
     let mut seen = std::collections::BTreeSet::new();
     out.retain(|c| !c.trim().is_empty() && seen.insert(c.clone()));
     out
+}
+
+/// An argument worth calling copied: a path, a URL, an assignment or a
+/// phrase of at least 8 characters, or any of at least 16 — never one word
+/// (`python`, the project's own name `md2csv`), which every read holds
+/// (the md2csv example, 2026-11-04).
+fn meaningful(a: &str) -> bool {
+    let n = a.chars().count();
+    n >= 16 || (n >= 8 && a.contains(['/', '.', ':', '=', ' ']))
 }
 
 fn collect(v: &Value, out: &mut Vec<String>) {
@@ -236,6 +241,35 @@ mod tests {
         assert_eq!(m[0].argument, "robert'); DROP");
     }
 
+    /// The md2csv example (2026-11-04): `python` and the project's name
+    /// matched every read, so each prompt offered "once" only.
+    #[test]
+    fn one_word_is_never_copied_a_path_or_url_is() {
+        let read = [part(
+            "tool://fs/list_files",
+            1,
+            "src/md2csv/parser.py\npython -m pytest\nsee https://x.example/a.sh",
+        )];
+        let (none, _) = sources(
+            "run_command",
+            &json!({ "argv": ["uv", "run", "python", "-m", "md2csv"] }),
+            &read,
+        );
+        assert!(none.is_empty(), "{none:?}");
+        let (path, _) = sources(
+            "run_command",
+            &json!({ "argv": ["cat", "src/md2csv/parser.py"] }),
+            &read,
+        );
+        assert_eq!(path[0].argument, "src/md2csv/parser.py");
+        let (url, _) = sources(
+            "run_command",
+            &json!({ "argv": ["sh", "-c", "fetch https://x.example/a.sh"] }),
+            &[part("README.md", 2, "run fetch https://x.example/a.sh now")],
+        );
+        assert_eq!(url[0].argument, "fetch https://x.example/a.sh");
+    }
+
     #[test]
     fn at_most_five_sources_are_kept_in_turn_order() {
         let parts: Vec<Part> = (0..8)
@@ -297,7 +331,8 @@ mod tests {
 
         #[test]
         fn an_argument_present_verbatim_is_always_a_source(
-            arg in "[a-z0-9./:-]{6,30}",
+            // A span worth calling copied: a path (one word never is).
+            arg in "[a-z0-9]{3,12}/[a-z0-9./:-]{4,20}",
             before in "[A-Z ]{0,20}",
             after in "[A-Z ]{0,20}",
         ) {

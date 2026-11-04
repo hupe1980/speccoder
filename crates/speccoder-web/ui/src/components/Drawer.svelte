@@ -21,6 +21,8 @@
 
   let tab = $state<"evidence" | "tour" | "diff">("evidence");
   let data = $state<{ task: Task; banner: { mark: string; words: string }; rows: Row[] } | null>(null);
+  // Rows whose whole list is open (the commands that ran without asking).
+  let opened = $state(new Set<string>());
   let patch = $state("");
   let loadingPatch = $state(false);
   // The change to show: the commit that ticked the task, else the last
@@ -178,7 +180,17 @@
         {#each data.rows as r (r.label + r.text)}
           <div class="row" class:claim={r.label === "Model says"} {...askable("evidence_row", { task: app.selected, label: r.label }, `${app.selected} · ${r.label}`, `Evidence of ${app.selected}, ${r.label}: ${r.text}`)}>
             <dt><span class="dot s-{r.mark}"><Icon name={symbol(r.mark)} size={11} weight={2.4} /></span>{r.label}</dt>
-            <dd><Code text={r.text} /></dd>
+            {#if r.items?.length}
+              <dd class="sandboxed">
+                <span class="seal"><Icon name="shield" size={12} weight={2.2} /> {r.items.length} ran in the sandbox — nobody had to be asked</span>
+                <ul class="cmds" aria-label="Commands that ran without asking">
+                  {#each opened.has(r.label) ? r.items : r.items.slice(0, 4) as c, i (i)}<li class="mono" title={c}>{c}</li>{/each}
+                  {#if r.items.length > 4 && !opened.has(r.label)}<li><button class="more" onclick={() => (opened = new Set([...opened, r.label]))}>+{r.items.length - 4} more</button></li>{/if}
+                </ul>
+              </dd>
+            {:else}
+              <dd><Code text={r.text} /></dd>
+            {/if}
           </div>
         {/each}
       </dl>
@@ -262,6 +274,12 @@
   .dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: var(--fill-c); color: #fff; flex: none; }
   dd { margin: 0; color: var(--text-2); font-size: 0.88rem; overflow-wrap: anywhere; }
   .claim dd { font-style: italic; color: var(--muted); }
+  .sandboxed { display: grid; gap: 0.4rem; }
+  .seal { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--verified); font-weight: 600; font-size: 0.84rem; }
+  .cmds { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .cmds li { max-width: 100%; }
+  .cmds .mono { font-size: 0.74rem; padding: 0.1rem 0.45rem; border-radius: 6px; background: var(--fill); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  .more { border: 0; background: none; color: var(--accent-ink); font-size: 0.76rem; cursor: pointer; padding: 0.1rem 0.2rem; }
   .note { display: flex; align-items: center; gap: 0.35rem; margin: -0.25rem 0.25rem 0; font-size: 0.78rem; color: var(--muted); }
   .note code { font-size: 0.95em; }
   .account { border-radius: var(--radius); background: var(--surface); padding: 0.6rem 0.85rem; }

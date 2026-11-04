@@ -58,6 +58,7 @@ The [JSON Schema](https://hupe1980.github.io/speccoder/schemas/task-verification
 | `strength` | object or null | ticks | the acceptance set's strength: `visible` and `combined` shares, near misses, permitted alternatives and rulings |
 | `sandbox`, `executor`, `model`, `run` | object / null | ticks | where the attempt ran, who implemented, which model judged, the agentplane run |
 | `decisions`, `instructions` | array | ticks | people's decisions on the attempt's calls; the repository instruction files given to it |
+| `contained` | array of `{argv}` | ticks | commands the sandbox confined, run without asking |
 | `decider` | `{by, reason}` | decisions | who accepted or skipped, and why |
 | `policy_sha256` | string | yes | sha256 of the judge's configuration in `speccoder.toml` at the parent commit |
 | `time` | string | yes | RFC 3339, UTC |

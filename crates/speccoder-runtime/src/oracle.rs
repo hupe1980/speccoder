@@ -1384,6 +1384,12 @@ impl Bench {
             }
             std::fs::write(&full, content).map_err(|e| format!("{path}: {e}"))?;
             let (first, summary) = run();
+            let said = format!("{}\n{}", first.stdout_tail, first.stderr_tail);
+            if crate::integrity::invalid_escape(&said, &[path.as_str()]).is_some() {
+                let _ = std::fs::remove_file(&full);
+                out.push(Err("invalid_escape"));
+                continue;
+            }
             let class = classify_red(&first, summary.as_ref());
             let class = if !class.is_red() {
                 class

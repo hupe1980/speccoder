@@ -199,6 +199,8 @@ export function discardWord(reason: string, req: string): string {
     command_not_allowed: "its command is not allowed",
     command_shared: "its command also runs another test",
     red_without_it: "its command fails without it",
+    invalid_escape: "a string holds an invalid escape",
+    crlf_as_text: "it asserts \\r\\n in text output",
     limit: "more than four tests",
   };
   return words[reason] ?? reason.replaceAll("_", " ");

@@ -80,6 +80,12 @@ fn repo(extra: &str) -> tempfile::TempDir {
     .unwrap();
     fs::write(r.join("specs/001-graph/plan.md"), "# Plan\n\nRust.\n").unwrap();
     fs::write(r.join("src/lib.rs"), "pub fn ok() {}\n").unwrap();
+    // These tests are about asking: contained calls would not ask.
+    let extra = if extra.contains("[approvals]\n") {
+        extra.replace("[approvals]\n", "[approvals]\ncontained = \"ask\"\n")
+    } else {
+        format!("{extra}\n[approvals]\ncontained = \"ask\"\n")
+    };
     fs::write(r.join("speccoder.toml"), format!("{MODEL}{CHECK}{extra}")).unwrap();
     git(r, &["init", "-q"]);
     git(r, &["config", "user.name", "t"]);

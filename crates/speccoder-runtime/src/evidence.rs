@@ -66,6 +66,7 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
         label: label.to_owned(),
         mark: mark.to_owned(),
         text,
+        items: Vec::new(),
     };
     let tv = statements
         .iter()
@@ -238,6 +239,39 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
                 decisions.join("; ")
             },
         ));
+        // What ran without asking: the sandbox confined it.
+        let contained: Vec<String> = tv["contained"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|c| {
+                let argv: Vec<&str> = c["argv"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .collect();
+                format!("`{}`", argv.join(" "))
+            })
+            .collect();
+        if !contained.is_empty() {
+            out.push(Row {
+                items: contained
+                    .iter()
+                    .map(|c| c.trim_matches('`').to_owned())
+                    .collect(),
+                ..row(
+                    "Ran without asking",
+                    "ready",
+                    format!(
+                        "{} command{} the sandbox confined: {}",
+                        contained.len(),
+                        if contained.len() == 1 { "" } else { "s" },
+                        contained.join("; ")
+                    ),
+                )
+            });
+        }
         let instructions: Vec<&str> = tv["instructions"]
             .as_array()
             .into_iter()
@@ -359,6 +393,7 @@ pub fn collection_row(
         label: "Collection".to_owned(),
         mark: mark.to_owned(),
         text,
+        items: Vec::new(),
     };
     let Some(c) = c.filter(|c| !c.files.is_empty()) else {
         return recorded.then(|| row("ready", "no test files changed".to_owned()));
@@ -469,6 +504,7 @@ mod tests {
                 "integrity": { "findings": [] }, "monitor": { "state": "clean" },
                 "mutation": { "caught": 26, "missed": 3 },
                 "decisions": [{ "verb": "approve", "grant": "run `cargo add x`", "by": "Ada", "via": "dashboard" }],
+                "contained": [{ "argv": ["python3", "-c", "print(1)"] }],
                 "instructions": [{ "path": "AGENTS.md" }] } }),
         ];
         let rows = rows(&task("verified"), &statements, None);
@@ -485,6 +521,10 @@ mod tests {
         assert_eq!(text("Held-out"), "not run");
         assert_eq!(text("Mutation"), "26 caught, 3 survived");
         assert!(text("Approvals").contains("Ada via dashboard"));
+        assert_eq!(
+            text("Ran without asking"),
+            "1 command the sandbox confined: `python3 -c print(1)`"
+        );
         assert_eq!(text("Instructions"), "AGENTS.md");
         assert!(text("Attestation").starts_with("signed"));
     }

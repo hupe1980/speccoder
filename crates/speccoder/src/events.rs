@@ -141,6 +141,9 @@ pub enum Body {
         ok: Option<bool>,
         /// The last lines of a failed command.
         tail: Vec<String>,
+        /// Allowed without asking: the sandbox confines it.
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        contained: bool,
     },
     /// A call waits for a person.
     #[serde(rename = "approval.requested")]
@@ -1000,6 +1003,7 @@ pub fn body(event: &Event) -> Body {
             decision,
             ok,
             tail,
+            contained,
         } => Body::ToolCall {
             task: clean(task),
             turn: *turn,
@@ -1008,6 +1012,7 @@ pub fn body(event: &Event) -> Body {
             decision: decision.clone(),
             ok: *ok,
             tail: cleaned(tail),
+            contained: *contained,
         },
         Event::Usage {
             task,

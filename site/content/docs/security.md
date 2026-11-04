@@ -89,6 +89,8 @@ A command gets the network only when it is exactly in `[sandbox] network_allow`,
 
 Where the OS has no sandbox, every run says `commands run unsandboxed`; with `[sandbox] mode = "required"` it stops instead (`SANDBOX-UNAVAILABLE`).
 
+A command this confinement holds runs without asking ([contained calls](@/docs/approvals.md#contained-calls)); what it still reaches — services on loopback, files the sandbox leaves readable — is what this list does not take away.
+
 **Ubuntu 23.10 and later** restrict unprivileged user namespaces through AppArmor. Landlock and seccomp still apply and credentials stay unreadable, but without the namespace a command can write `.git` in place (the [git guard](#in-place-mode) catches it), read git-ignored secrets in place and write git hooks and shell startup files in the workspace, and no Unix socket is reachable; every run says so. To give speccoder its namespace, allow it in an AppArmor profile (the path is where your `speccoder` is installed):
 
 ```text

@@ -475,6 +475,10 @@ pub fn run(w: &mut impl Write, r: &RunReport, message: &str) -> io::Result<()> {
                 c["approver"]["via"].as_str().unwrap_or("?")
             ));
         }
+        // Nobody asked: the sandbox confined it.
+        if c["contained"] == true {
+            failed.push_str(" — contained");
+        }
         writeln!(
             w,
             "  {decision:<8} {tool:<12} {}{failed}",

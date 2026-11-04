@@ -641,6 +641,22 @@ fn run_task_once(
         None => (policy, runner, None),
     };
     let sandbox_notice = sandbox_notice.or(carve_notice);
+    // Contained calls run without asking only where the sandbox confines
+    // them; asked for, and not confined, the run says why once.
+    let contained = runner.confines().filter(|_| run_config.contained);
+    let contained_notice = (run_config.contained && contained.is_none()).then(|| {
+        format!(
+            "contained calls ask: {}",
+            match &runner {
+                sandbox::Runner::Plain => "no sandbox is enforced",
+                sandbox::Runner::Sandboxed(s) if s.profile.network == sandbox::Network::On => {
+                    "the sandbox gives the network"
+                }
+                sandbox::Runner::Sandboxed(_) =>
+                    "the sandbox cannot confine signals or `.git` here",
+            }
+        )
+    });
     // In place: the checkout as speccoder left it, the intent as the run
     // started with it — before the task, and again before the tick.
     if let Some(e) = options.session.as_ref().and_then(|s| {
@@ -1033,6 +1049,7 @@ fn run_task_once(
         })
         .chain(connected.notices.iter().cloned())
         .chain(sandbox_notice.clone())
+        .chain(contained_notice.clone())
         .chain(prepare_notes.iter().cloned())
         .chain(resumed_from.as_ref().map(|(stage, last_call)| {
             format!(
@@ -1908,6 +1925,7 @@ fn run_task_once(
                     hidden: &hidden,
                     autopilot: options.mode == speccoder_core::oracle::RunMode::Autopilot,
                     planning: planning.as_deref(),
+                    contained,
                 },
                 digest.as_ref(),
                 attempt_instructions,

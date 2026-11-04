@@ -654,7 +654,7 @@ fn an_approved_call_is_never_run_or_asked_again_after_a_kill() {
         eprintln!("skipped: no python3");
         return;
     }
-    // The model asks for a shell command (needs a person), then hangs once
+    // The model asks for a shell command (the project asks for each), then hangs once
     // before its final answer.
     let mock_dir = tempfile::tempdir().unwrap();
     let done = json!({ "summary": "noted", "status": "done", "files_changed": [], "checks_run": [], "notes": [] });
@@ -696,7 +696,7 @@ fn an_approved_call_is_never_run_or_asked_again_after_a_kill() {
     fs::write(
         r.join("speccoder.toml"),
         format!(
-            "[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[model]\nprovider = \"openai-compatible\"\nmodel = \"mock\"\nbase_url = \"http://127.0.0.1:{port}/v1\"\n\n[acceptance]\ngenerate = false\n"
+            "[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[model]\nprovider = \"openai-compatible\"\nmodel = \"mock\"\nbase_url = \"http://127.0.0.1:{port}/v1\"\n\n[acceptance]\ngenerate = false\n\n[approvals]\ncontained = \"ask\"\n"
         ),
     )
     .unwrap();

@@ -106,6 +106,7 @@ Credentials come from the AWS credential chain where you start speccoder: a Bedr
 |---|---|---|
 | `[commands] allow` | `[]` | Exact commands the model may run without asking, besides the checks, e.g. `[["cargo", "check"]]`: `cargo check --all` still asks. Always Allow adds to it |
 | `[commands] allow_prefix` | `[]` | Prefixes of two elements or more whose every extension runs without asking, e.g. `[["npm", "run"]]`. Saved only from its [coverage preview](#prefix-lists) |
+| `[approvals] contained` | `"allow"` | Commands the OS sandbox confines run without asking; `"ask"` asks for each ([contained calls](@/docs/approvals.md#contained-calls)) |
 | `[approvals] wait` | `"7d"` | How long a call waits for a person (`m`, `h` or `d`) before it is denied as expired; recorded as an expiry, not as anyone's decision |
 | `[approvals] budget` | `12` | Prompts a run shows you (`0`–`100`); after them, calls wait together in [Needs You](@/docs/approvals.md#the-asking-budget). `0` never prompts |
 | `[tests] frozen` | `"ask"` | Tests that existed before an attempt: `ask` before any change, or `additions` (new lines need no approval; changing or removing lines does) |

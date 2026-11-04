@@ -447,6 +447,12 @@ pub fn render(
             };
             writeln!(err, "  check {:<10} {word}", run.name)?;
         }
+        writeln!(
+            err,
+            "  {:<16} {}",
+            "contained",
+            speccoder_runtime::sandbox::contained_at(Path::new(&r.plan.target)).1
+        )?;
         if i.ran.iter().any(|r| !r.passed && r.status != "no_tests") {
             writeln!(
                 err,

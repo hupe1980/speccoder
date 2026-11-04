@@ -67,6 +67,9 @@
     "decisions": {
       "description": "People's decisions on the attempt's calls."
     },
+    "contained": {
+      "description": "Commands the enforced sandbox confined, run without asking a person:\neach `{argv}`, in the attempt's order."
+    },
     "strength": {
       "description": "The acceptance set's strength (shares, near misses, permitted\nalternatives), or `null`."
     },

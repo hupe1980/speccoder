@@ -825,12 +825,17 @@ fn us3_autopilot_refuses_what_would_ask_and_lists_it() {
     let r = repo();
     let state = tempfile::tempdir().unwrap();
     let (f, d) = written(r.path(), state.path());
-    // An unlisted command would ask: on autopilot it is refused, then the
-    // attempt goes on.
+    // A command the sandbox confines runs; one that asks for the network
+    // would ask: on autopilot it is refused, then the attempt goes on.
+    f.will_call_tool(
+        "c9",
+        "run_command",
+        json!({ "argv": ["sh", "-c", "echo probe"] }),
+    );
     f.will_call_tool(
         "c0",
         "run_command",
-        json!({ "argv": ["cargo", "add", "serde"] }),
+        json!({ "argv": ["cargo", "add", "serde"], "network": true }),
     );
     write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n");
     // An unknown grant id is refused, listing the offered ones.
@@ -1120,7 +1125,7 @@ fn autopilot_never_adopts_the_grants_of_an_interrupted_earlier_run() {
     f.will_call_tool(
         "c0",
         "run_command",
-        json!({ "argv": ["cargo", "add", "serde"] }),
+        json!({ "argv": ["cargo", "add", "serde"], "network": true }),
     );
     let asked = speccoder_runtime::pipeline::run_feature_with(
         r.path(),
@@ -1148,7 +1153,7 @@ fn autopilot_never_adopts_the_grants_of_an_interrupted_earlier_run() {
     f.will_call_tool(
         "c2",
         "run_command",
-        json!({ "argv": ["cargo", "add", "serde"] }),
+        json!({ "argv": ["cargo", "add", "serde"], "network": true }),
     );
     write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n");
     let res = speccoder_runtime::pipeline::run_feature_with(

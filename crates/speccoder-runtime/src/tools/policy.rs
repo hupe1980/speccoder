@@ -455,6 +455,9 @@ pub struct Policy {
     /// An autopilot run: a call that would ask a person, and that
     /// no grant covers, is refused for the run instead.
     autopilot: bool,
+    /// The enforced sandbox's mechanism when contained calls run without
+    /// asking (`[approvals] contained`, network off or loopback).
+    contained: Option<String>,
     /// Exploring: the paths it may write (the format's own exploration
     /// artifacts) and the read-only commands it may run. Nothing asks.
     exploring: Option<Exploring>,
@@ -651,6 +654,35 @@ impl Policy {
         self
     }
 
+    /// Commands the enforced sandbox (`mechanism`) confines run without
+    /// asking ([`Policy::contains`]).
+    #[must_use]
+    pub fn contained(mut self, mechanism: &str) -> Self {
+        self.contained = Some(mechanism.to_owned());
+        self
+    }
+
+    /// Whether `tool` with `args`, which the policy would ask about, runs
+    /// without asking because the enforced sandbox confines it: a command
+    /// asked about only for what it runs — not a check or allowed command,
+    /// a shell, a recursive `rm` — never for the network, the repository's
+    /// state or a path; never in planning or exploring.
+    #[must_use]
+    pub fn contains(&self, tool: &str, args: &Value) -> bool {
+        if self.contained.is_none()
+            || tool != "run_command"
+            || self.authoring
+            || self.planning.is_some()
+            || self.exploring.is_some()
+            || args["network"] == true
+            || self.network_allowed(&argv_of(args))
+        {
+            return false;
+        }
+        matches!(self.base(tool, args), Decision::Approval(r)
+            if r == NOT_ALLOWED || r.ends_with("runs arbitrary commands") || r == "recursive `rm`")
+    }
+
     /// Whether it is an autopilot run's.
     #[must_use]
     pub const fn is_autopilot(&self) -> bool {
@@ -807,16 +839,19 @@ impl Policy {
         if !matches!(decision, Decision::Approval(_)) {
             return decision;
         }
-        let Some(object) = object else {
-            return decision;
-        };
-        if let Some(r) = self.rejected.iter().find(|r| r.object == *object) {
-            return Decision::Deny(format!("a person rejected this: {}", r.reason));
+        if let Some(object) = object {
+            if let Some(r) = self.rejected.iter().find(|r| r.object == *object) {
+                return Decision::Deny(format!("a person rejected this: {}", r.reason));
+            }
+            if self.approved.iter().any(|a| a == object) {
+                return Decision::Allow;
+            }
         }
-        if self.approved.iter().any(|a| a == object) {
-            return Decision::Allow;
+        if self.contains(tool, args) {
+            Decision::Allow
+        } else {
+            decision
         }
-        decision
     }
 
     /// A person's rejection of exactly `object`, if one holds.
@@ -871,7 +906,10 @@ impl Policy {
                 }
                 match self.prefix.iter().find(|p| prefix_matches(p, &argv)) {
                     Some(p) => format!("allowed prefix `{}`", p.join(" ")),
-                    None => "command policy".to_owned(),
+                    None => match &self.contained {
+                        Some(m) if self.contains(tool, args) => format!("contained ({m})"),
+                        _ => "command policy".to_owned(),
+                    },
                 }
             }
             _ => "tool policy".to_owned(),
@@ -1298,6 +1336,83 @@ mod tests {
         for (tool, args, want) in cases {
             assert_eq!(kind(p.classify(tool, args, None)), *want, "{tool} {args}");
         }
+    }
+
+    /// The md2csv example's T012 (2026-11-04): its probes asked five times
+    /// inside the enforced sandbox. Contained, they run; what leaves the
+    /// sandbox, or a person rejected, still decides.
+    #[test]
+    fn a_contained_command_runs_and_what_leaves_the_sandbox_does_not() {
+        let p = policy().contained("Seatbelt");
+        for c in [
+            "python3 -c print(1)",
+            "sh -c make",
+            "rm -r build",
+            "uv run python -m md2csv",
+        ] {
+            assert_eq!(
+                p.classify("run_command", &cmd(c), None),
+                Decision::Allow,
+                "{c}"
+            );
+            assert_eq!(
+                p.rule("run_command", &cmd(c), None),
+                "contained (Seatbelt)",
+                "{c}"
+            );
+        }
+        for c in ["curl https://x", "git commit -m x", "ssh host"] {
+            assert!(
+                !matches!(p.classify("run_command", &cmd(c), None), Decision::Allow),
+                "{c}"
+            );
+        }
+        let net = json!({ "argv": ["python3", "-c", "x"], "network": true });
+        assert!(matches!(
+            p.classify("run_command", &net, None),
+            Decision::Approval(_)
+        ));
+        let allowed = policy()
+            .with_network(vec![vec![
+                "pip".to_owned(),
+                "install".to_owned(),
+                "x".to_owned(),
+            ]])
+            .contained("Seatbelt");
+        assert!(!allowed.contains("run_command", &cmd("pip install x")));
+        assert!(!p.contains("write_file", &json!({ "path": "tests/frozen.rs" })));
+        assert!(!p.contains("mcp__x__y", &json!({})));
+        // A person's rejection of the very object wins.
+        let rejected = p.clone().with_decisions(
+            vec![],
+            vec![Rejection {
+                object: command("python3 -c print(1)"),
+                reason: "no".to_owned(),
+            }],
+        );
+        assert!(matches!(
+            rejected.classify(
+                "run_command",
+                &cmd("python3 -c print(1)"),
+                Some(&command("python3 -c print(1)"))
+            ),
+            Decision::Deny(_)
+        ));
+        // On autopilot it runs, and only what still asks is refused.
+        let auto = p.clone().autopilot();
+        assert_eq!(
+            auto.settle(auto.classify("run_command", &cmd("python3 -c x"), None)),
+            Decision::Allow
+        );
+        assert!(matches!(
+            auto.settle(auto.classify("run_command", &cmd("curl https://x"), None)),
+            Decision::Deny(_)
+        ));
+        // Not contained: it asks.
+        assert!(matches!(
+            policy().classify("run_command", &cmd("python3 -c print(1)"), None),
+            Decision::Approval(_)
+        ));
     }
 
     #[test]

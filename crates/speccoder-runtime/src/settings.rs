@@ -322,9 +322,15 @@ pub const CATALOGUE: &[Section] = &[
     Section {
         name: "approvals",
         title: "Approvals",
-        about: "How long a call waits for a person, and how often a run may ask.",
+        about: "What runs without asking, how long a call waits for a person, and how often a run may ask.",
         named: false,
         keys: &[
+            k(
+                "contained",
+                Kind::Choice(&["allow", "ask"]),
+                Some("\"allow\""),
+                "Commands the OS sandbox confines (writes only here, no network beyond loopback) run without asking; \"ask\" asks for each",
+            ),
             k(
                 "wait",
                 Kind::Duration,

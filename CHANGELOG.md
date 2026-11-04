@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Commands the OS sandbox confines run without asking (`[approvals]
+  contained = "allow"`, the default; `init` writes it): a probe, a
+  shell, the project's own command. The network beyond loopback, git
+  that changes the repository, protected paths, MCP and every command
+  without an enforced sandbox ask as before. Each is recorded as
+  contained: live, in the report, in the signed evidence (**Ran without
+  asking**) and on the tick (`Contained: N`). `init`, `new` and
+  `doctor` say which applies.
+- Autopilot runs contained calls and refuses only what would still ask.
+
+### Fixed
+
+- After an answer at a prompt, the live output goes on from the answered
+  call instead of printing the attempt's turns again.
+- One word an argument shares with what the model read (`python`, the
+  project's name) is no longer called copied, so "for this task" is
+  offered again.
+- A stop with fix lines prints no `Next:` that contradicts them.
+- A test whose run shows Python's invalid-escape warning for its own
+  file is refused and asked for again: its string is not what its
+  author wrote (`"A \\\| B"`).
+
 ## [0.9.8] - 2026-11-04
 
 ### Fixed

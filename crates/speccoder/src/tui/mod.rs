@@ -131,6 +131,8 @@ pub struct Hosted {
     pub recent: Vec<String>,
     /// Tokens in and out, and money, of the current attempt.
     pub usage: (u64, u64, Option<f64>),
+    /// Commands the sandbox confined, run without asking, this task.
+    pub contained: u32,
     /// Tasks finished in this run: ID and outcome.
     pub finished: Vec<(String, String)>,
     /// What waits for the person.
@@ -336,6 +338,7 @@ impl App {
                 h.task = Some((task.clone(), title.clone()));
                 h.stages.clear();
                 h.usage = (0, 0, None);
+                h.contained = 0;
                 // The task list follows the running task.
                 if let Some(i) = self
                     .snap
@@ -389,11 +392,18 @@ impl App {
                 target,
                 decision,
                 ok,
+                contained,
                 ..
             } => {
                 let mark = match ok {
                     Some(false) => " failed",
                     _ => "",
+                };
+                let decision = if *contained {
+                    h.contained += 1;
+                    "contained"
+                } else {
+                    decision.as_str()
                 };
                 h.recent
                     .push(format!("turn {turn}  {tool} {target} ({decision}){mark}"));

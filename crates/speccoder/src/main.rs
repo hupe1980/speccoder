@@ -2526,6 +2526,11 @@ fn init(
                 (None, false) => eprintln!("  {:<10} FAILS on the untouched code", r.name),
             }
         }
+        eprintln!(
+            "  {:<10} {}",
+            "contained",
+            speccoder_runtime::sandbox::contained_at(&prepared.root).1
+        );
         eprint!(
             "Commit {}? speccoder reads committed files only. [{}] ",
             speccoder_core::words::listed(&prepared.to_commit),

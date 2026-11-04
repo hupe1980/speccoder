@@ -1499,6 +1499,8 @@ impl Governor {
                 decision: entry["decision"].as_str().unwrap_or_default().to_owned(),
                 ok: entry["ok"].as_bool(),
                 tail: Vec::new(),
+                // An external agent runs its own tools: never contained.
+                contained: false,
             });
         }
     }
