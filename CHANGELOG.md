@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The verifier recomputes a tick's policy hash as the speccoder that made
+  the tick did: evidence of an earlier release no longer reads as
+  tampered (every tick of 0.9.x failed the 0.10.0 evidence check).
+
 ## [0.10.0] - 2026-11-04
 
 ### Changed

@@ -653,7 +653,11 @@ pub fn object(cx: &Context<'_>, target: &Target) -> ObjectVerification {
                     out.reasons
                         .push(differs("policy", "policy.digest", claimed, summary_policy));
                 }
-                if let Some(at) = policy_at(cx, &target.object)
+                // Recomputed as the version that made the tick did.
+                let made_by = v["predicate"]["verifier"]["version"]["speccoder"]
+                    .as_str()
+                    .unwrap_or(env!("CARGO_PKG_VERSION"));
+                if let Some(at) = policy_at(cx, &target.object, made_by)
                     && at != claimed
                 {
                     raise(&mut worst, VerifyOutcome::Mismatch);
@@ -678,13 +682,14 @@ pub fn object(cx: &Context<'_>, target: &Target) -> ObjectVerification {
     out
 }
 
-/// The judge-config hash recomputed from `speccoder.toml` at the parent.
-fn policy_at(cx: &Context<'_>, object: &str) -> Option<String> {
+/// The judge-config hash recomputed from `speccoder.toml` at the parent, as
+/// speccoder `version` (the tick's) computed it.
+fn policy_at(cx: &Context<'_>, object: &str, version: &str) -> Option<String> {
     let text = Git::at(cx.repo)
         .run(&["show", &format!("{object}^:{}", cx.config_path)])
         .ok()
         .map(|b| String::from_utf8_lossy(&b).into_owned())?;
-    super::policy::judge_config_sha256(&text).ok()
+    super::policy::judge_config_sha256_as(&text, version).ok()
 }
 
 /// The requirement's text hash at the commit, through the format adapter

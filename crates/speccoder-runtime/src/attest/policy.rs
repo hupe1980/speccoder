@@ -17,6 +17,17 @@ const JUDGE: &[&str] = &[
 /// version, the judge's sections, the model (provider and name only) and
 /// the signer. Comments, prices and key-variable names do not change it.
 pub fn judge_config_sha256(config: &str) -> Result<String, String> {
+    judge_config_sha256_as(config, env!("CARGO_PKG_VERSION"))
+}
+
+/// [`judge_config_sha256`] as speccoder `version` computed it: a verifier
+/// recomputes a tick's with the version that made the tick, never its own
+/// (else no release could verify an earlier one's evidence).
+///
+/// # Errors
+///
+/// `config` is not TOML.
+pub fn judge_config_sha256_as(config: &str, version: &str) -> Result<String, String> {
     let table: toml::Table = toml::from_str(config).map_err(|e| e.to_string())?;
     let section = |k: &str| {
         table
@@ -42,10 +53,7 @@ pub fn judge_config_sha256(config: &str) -> Result<String, String> {
         "attest".to_owned(),
         json!({ "signer": field(table.get("attest"), "signer").unwrap_or_else(|| "git".to_owned()) }),
     );
-    judge.insert(
-        "speccoder_version".to_owned(),
-        json!(env!("CARGO_PKG_VERSION")),
-    );
+    judge.insert("speccoder_version".to_owned(), json!(version));
     Ok(crate::integrity::sha256_hex(&super::statement::canonical(
         &Value::Object(judge),
     )))
@@ -71,5 +79,20 @@ mod tests {
         assert_ne!(judge_config_sha256(&other).unwrap(), base);
         let model = CONFIG.replace("model = \"m\"", "model = \"n\"");
         assert_ne!(judge_config_sha256(&model).unwrap(), base);
+    }
+
+    /// The md2csv example (2026-11-04): ticks of 0.9.7 and 0.9.8 were all
+    /// "tampered" to the 0.10.0 verifier, which hashed its own version in.
+    /// The tick's version recomputes the tick's hash.
+    #[test]
+    fn a_tick_is_recomputed_as_the_version_that_made_it() {
+        let ours = judge_config_sha256(CONFIG).unwrap();
+        assert_eq!(
+            judge_config_sha256_as(CONFIG, env!("CARGO_PKG_VERSION")).unwrap(),
+            ours
+        );
+        let older = judge_config_sha256_as(CONFIG, "0.9.7").unwrap();
+        assert_ne!(older, ours);
+        assert_eq!(judge_config_sha256_as(CONFIG, "0.9.7").unwrap(), older);
     }
 }
