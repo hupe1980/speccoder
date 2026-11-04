@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-11-04
+
 ### Fixed
 
 - A task whose named scenarios stay red offers ruling each one's test
@@ -825,7 +827,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.9.7...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.9.8...HEAD
+[0.9.8]: https://github.com/hupe1980/speccoder/compare/v0.9.7...v0.9.8
 [0.9.7]: https://github.com/hupe1980/speccoder/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/hupe1980/speccoder/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/hupe1980/speccoder/compare/v0.9.4...v0.9.5
