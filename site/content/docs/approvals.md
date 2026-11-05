@@ -13,7 +13,7 @@ group = "Use"
 
 A command the OS sandbox confines runs without asking: one the policy asks about only for what it runs (not a check or allowed command, a shell, a recursive `rm`), in a sandbox that keeps writes to the worktree, the network to loopback and signals to its own processes. It is recorded as `contained`: `run_command … contained` live, `— contained` in the report, a **Ran without asking** row in the task's evidence (signed) and `Contained: N` on the tick.
 
-Everything else asks as before: the network beyond loopback, git that changes the repository, protected paths, MCP tools, and every command where no sandbox is enforced (the run says so once). `[approvals] contained = "ask"` asks for each; `speccoder init`, `new` and `doctor` say which applies. A contained command still reaches services listening on loopback and reads what the sandbox leaves readable; what it changes in the worktree is audited like any other change.
+Everything else asks as before: the network beyond loopback, git that changes the repository, protected paths, MCP tools, and every command where no sandbox is enforced (the run says so once). `[approvals] contained = "ask"` asks for each; `speccoder init`, `new` and `doctor` say which applies. A contained command still reaches services listening on loopback and reads what the sandbox leaves readable — your package caches included, which it cannot write; what it changes in the worktree is audited like any other change.
 
 ## Inline
 

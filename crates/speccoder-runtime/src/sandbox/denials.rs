@@ -127,12 +127,23 @@ fn why(e: &Entry) -> String {
         Rule::NotGranted if e.operation.starts_with("network") || e.operation == "socket" => {
             "outside the sandbox's network (loopback only; `[sandbox] network_allow` or a person's approval opens it)".into()
         }
+        Rule::NotGranted
+            if e.operation.starts_with("file-write") && e.target.as_deref().is_some_and(in_cache) =>
+        {
+            "a shared package cache, read-only to runs: `prepare` fills it with what the lockfile names, or a command allowed the network (`[sandbox] network_allow`) does".into()
+        }
         Rule::NotGranted if e.operation.starts_with("file-write") => {
-            "outside the writable trees (the workspace, the temporary directory, package caches)"
-                .into()
+            "outside the writable trees (the workspace and the temporary directory)".into()
         }
         Rule::NotGranted | Rule::Other => "not allowed in the sandbox".into(),
     }
+}
+
+/// Whether `target` lies in one of the person's shared package caches.
+fn in_cache(target: &str) -> bool {
+    crate::sandbox::CACHES
+        .iter()
+        .any(|c| target.contains(&format!("/{c}/")) || target.ends_with(&format!("/{c}")))
 }
 
 /// What a record with `coverage` cannot show; `None` when it shows every
@@ -245,6 +256,19 @@ mod tests {
             (
                 entry("file-write-create", "/etc/x", Rule::NotGranted),
                 "writable trees",
+            ),
+            // F-141: what a run may not plant in the person's caches.
+            (
+                entry(
+                    "file-write-data",
+                    "/Users/a/.cargo/registry/src/index/serde-1.0.0/src/lib.rs",
+                    Rule::NotGranted,
+                ),
+                "a shared package cache, read-only to runs: `prepare` fills it",
+            ),
+            (
+                entry("file-write-create", "/home/a/.cache/uv/x", Rule::NotGranted),
+                "read-only to runs",
             ),
             (
                 entry("sysctl-write", "kern.x", Rule::NotGranted),

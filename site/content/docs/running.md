@@ -42,7 +42,7 @@ speccoder fix             # commit it in your checkout as `speccoder: setup`
 
 ## Dependency folders
 
-A worktree holds only what is committed, and `node_modules/` or `.venv/` never are. Before the baseline, the step `prepare` installs each Node or uv project in the worktree with its toolchain's locked install, offline from the cache and sandboxed:
+A worktree holds only what is committed, and `node_modules/` or `.venv/` never are. Before the baseline, the step `prepare` installs each Node or uv project in the worktree with its toolchain's locked install, offline from the cache and sandboxed, and unpacks a Rust project's crates into cargo's cache. It is the one step of a run that may write your package caches:
 
 | Lockfile | Install |
 |---|---|
@@ -51,8 +51,9 @@ A worktree holds only what is committed, and `node_modules/` or `.venv/` never a
 | `yarn.lock` | `yarn install --frozen-lockfile --offline` (Yarn 2+: `--immutable`) |
 | `bun.lock`, `bun.lockb` | `bun install --frozen-lockfile` |
 | `uv.lock` | `uv sync --locked --offline` |
+| `Cargo.lock` | `cargo fetch --locked --offline` |
 
-It runs once per lockfile; later tasks reuse it. An attempt that changes the lockfile is installed again before its checks, so they and the tick are about the lockfile committed. A workspace member whose lockfile sits above it is installed where that lockfile is. Go and Rust need no step.
+It runs once per lockfile; later tasks reuse it. An attempt that changes the lockfile is installed again before its checks, so they and the tick are about the lockfile committed. A workspace member whose lockfile sits above it is installed where that lockfile is. Go needs no step.
 
 A package the cache lacks stops the task with `error[PREPARE-FAILED]`: run the install once in your checkout, or let its online form reach the network (`[sandbox] network_allow = [["npm", "ci"]]`). A project `speccoder new` made installs from the cache its own steps filled. 
 

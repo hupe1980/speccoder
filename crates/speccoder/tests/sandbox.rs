@@ -379,6 +379,51 @@ fn the_environment_is_the_invocations() {
     });
 }
 
+/// F-141: the person's package caches are read by a run's commands and
+/// written by none of them — a planted line there would run in every later
+/// build; tools' derived state goes to the private cache; what fetches may
+/// write them.
+#[test]
+fn caches_are_read_only_to_runs_and_written_by_what_fetches() {
+    each(Network::Loopback, |w, s| {
+        let crate_src = w.home.path().join(".cargo/registry/src/i/x-1.0.0/src");
+        fs::create_dir_all(&crate_src).unwrap();
+        fs::write(crate_src.join("lib.rs"), "pub fn x() {}\n").unwrap();
+        fs::create_dir_all(w.home.path().join(".cache/tool")).unwrap();
+        fs::write(w.home.path().join(".cache/tool/f"), "kept\n").unwrap();
+        let lib = crate_src.join("lib.rs").display().to_string();
+        let tool = w.home.path().join(".cache/tool/f").display().to_string();
+        let (ok, out) = sh(&s, w.root.path(), &format!("cat '{lib}' '{tool}'"));
+        assert!(
+            ok && out.contains("pub fn x"),
+            "the caches stay readable: {out}"
+        );
+        for f in [&lib, &tool] {
+            let (ok, _) = sh(&s, w.root.path(), &format!("echo planted >> '{f}'"));
+            assert!(!ok, "wrote into a shared cache: {f}");
+        }
+        assert_eq!(fs::read_to_string(&lib).unwrap(), "pub fn x() {}\n");
+        assert_eq!(fs::read_to_string(&tool).unwrap(), "kept\n");
+        let (ok, out) = sh(
+            &s,
+            w.root.path(),
+            "echo d > \"$UV_CACHE_DIR/d\" && echo g > \"$GOCACHE/g\" && echo x > \"$XDG_CACHE_HOME/x\"",
+        );
+        assert!(ok, "derived state goes to the private cache: {out}");
+        // What fetches (prepare, a command with the network) may fill them.
+        let fetching = Sandboxed {
+            profile: s.profile.clone().fetching(),
+            ..s
+        };
+        let (ok, out) = sh(
+            &fetching,
+            w.root.path(),
+            &format!("echo fetched >> '{tool}'"),
+        );
+        assert!(ok, "a fetching command fills the cache: {out}");
+    });
+}
+
 /// What a command leaves running in its process group is killed once it
 /// exits.
 #[test]

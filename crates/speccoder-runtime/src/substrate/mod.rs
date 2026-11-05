@@ -34,7 +34,7 @@ use self::propose::{CAPABILITY, Propose};
 
 /// The agentplane release speccoder is built against (the exact pin in the
 /// workspace `Cargo.toml`), named in every verification summary.
-pub const AGENTPLANE_VERSION: &str = "0.57.0";
+pub const AGENTPLANE_VERSION: &str = "0.59.0";
 
 /// The journal file inside a project's state directory.
 pub const JOURNAL: &str = "journal.redb";
@@ -488,7 +488,6 @@ fn builder(
             progress: hooks.progress.clone(),
             format,
             present: hooks.present.clone(),
-            delivered: std::sync::Arc::default(),
         })
         .skill(host::Host {
             style: model.prompt_style(),

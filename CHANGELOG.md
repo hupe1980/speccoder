@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Your package caches (`~/.cargo/registry`, `~/.cache`, `~/.npm`,
+  `~/go/pkg/mod`, `~/Library/Caches`, …) are read-only to what a run
+  executes: a model's test or build script can no longer plant code in
+  your later builds. Tools write what they derive (Go's build cache, uv's
+  locks) to the run's private cache; only `prepare` and commands with the
+  network fill the shared ones. A denied write there names its fix;
+  `doctor` and the approval prompt say so.
+- `prepare` unpacks a Rust project's crates (`cargo fetch --locked
+  --offline`) before the baseline, since builds now only read the cache.
+- agentplane 0.59.0: a run resumed after a person's answer shows only
+  what it had not shown, also when the answer lands in another process.
+
 ## [0.10.1] - 2026-11-04
 
 ### Fixed

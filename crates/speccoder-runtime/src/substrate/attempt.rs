@@ -257,40 +257,22 @@ pub struct Attempt {
     pub format: &'static dyn crate::format::Adapter,
     /// The sandbox, as a person asked about a command is told; live only.
     pub present: PresentContext,
-    /// Progress events already delivered, per run: a resumed run says each
-    /// event once.
-    pub delivered: std::sync::Arc<Delivered>,
 }
 
-/// How many progress events each run has delivered.
-#[derive(Debug, Default)]
-pub struct Delivered(std::sync::Mutex<std::collections::HashMap<String, usize>>);
-
-/// A run's progress, each event once: after a person's answer the run is
-/// invoked again and says every journaled turn again, in the same order,
-/// so the events a run already delivered are dropped (agentplane tells a
-/// skill nothing of replaying: AP-replaying).
+/// A turn's progress, said only where no earlier pass said it: dropped
+/// while `replaying` (agentplane's `StepCtx::replaying`, read after each
+/// journaled step) holds.
 #[derive(Debug)]
-struct Once {
-    run: String,
-    seen: std::sync::atomic::AtomicUsize,
-    delivered: std::sync::Arc<Delivered>,
+struct Quiet {
+    replaying: std::sync::Arc<std::sync::atomic::AtomicBool>,
     next: std::sync::Arc<dyn crate::progress::Progress>,
 }
 
-impl crate::progress::Progress for Once {
+impl crate::progress::Progress for Quiet {
     fn event(&self, event: &crate::progress::Event) {
-        let i = self.seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let Ok(mut delivered) = self.delivered.0.lock() else {
-            return;
-        };
-        let n = delivered.entry(self.run.clone()).or_default();
-        if i < *n {
-            return;
+        if !self.replaying.load(std::sync::atomic::Ordering::SeqCst) {
+            self.next.event(event);
         }
-        *n = i + 1;
-        drop(delivered);
-        self.next.event(event);
     }
 }
 
@@ -898,17 +880,10 @@ impl Skill for Attempt {
                     .map(|t| (t.name.clone(), t.digest.clone()))
                     .collect(),
                 stop,
-                observer: self.progress.clone().map(|next| {
-                    let once: std::sync::Arc<dyn crate::progress::Progress> =
-                        std::sync::Arc::new(Once {
-                            run: cx.run_id().to_string(),
-                            seen: std::sync::atomic::AtomicUsize::new(0),
-                            delivered: std::sync::Arc::clone(&self.delivered),
-                            next,
-                        });
+                observer: self.progress.clone().map(|p| {
                     (
                         task_name.rsplit('/').next().unwrap_or_default().to_owned(),
-                        once,
+                        p,
                     )
                 }),
                 finish: |report| {
@@ -1225,6 +1200,20 @@ pub(crate) async fn tool_turn(
         reads,
         halt,
     } = spec;
+    // What an earlier pass already showed is not shown again: after a
+    // person's answer the run is invoked again and every journaled call
+    // returns again (set after each journaled step, from `cx.replaying()`).
+    let replaying = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(cx.replaying()));
+    let observer = observer.map(|(task, next)| {
+        let quiet: std::sync::Arc<dyn crate::progress::Progress> = std::sync::Arc::new(Quiet {
+            replaying: std::sync::Arc::clone(&replaying),
+            next,
+        });
+        (task, quiet)
+    });
+    let seen = |cx: &StepCtx<'_>| {
+        replaying.store(cx.replaying(), std::sync::atomic::Ordering::SeqCst);
+    };
     // The next read id this turn issues, when reads are cited.
     let mut next_read = reads;
     let mut proposed = false;
@@ -1311,6 +1300,7 @@ pub(crate) async fn tool_turn(
                 }
             })
             .await?;
+        seen(cx);
         conversation = transcript.label().join(completion.label());
         usage = usage.plus(completion.peek().usage);
         if let Some((task, p)) = &observer {
@@ -1557,6 +1547,7 @@ pub(crate) async fn tool_turn(
                         Tainted::with_label(json!({ "path": path }), completion.label().clone()),
                     )
                     .await?;
+                seen(cx);
                 let current = read.peek().clone();
                 // `read_file` joins lines with `\n`; the file's last newline is
                 // restored so an edit's `old_string` matches as on disk.
@@ -1606,6 +1597,7 @@ pub(crate) async fn tool_turn(
                             ),
                         )
                         .await?;
+                    seen(cx);
                     let out = resolved.peek();
                     if out["ok"] == true {
                         object = serde_json::from_value(out["object"].clone()).ok();
@@ -1722,6 +1714,7 @@ pub(crate) async fn tool_turn(
                     &crate::approvals::tasks::approval_task(&request, &log),
                 )
                 .await?;
+                seen(cx);
                 let read = crate::approvals::tasks::read(&decided);
                 // A batch decision may start the run's asking again.
                 if read.resume_asking {
@@ -1895,7 +1888,9 @@ pub(crate) async fn tool_turn(
                         o.insert(crate::tools::EXPECT.to_owned(), json!(obj));
                     }
                     let args = Tainted::with_label(arguments, completion.label().clone());
-                    let result = match cx.call_tool(target.clone(), args).await {
+                    let result = cx.call_tool(target.clone(), args).await;
+                    seen(cx);
+                    let result = match result {
                         Ok(r) => r,
                         // A failure the far side reported is the model's to
                         // read, labelled by who wrote it.
@@ -2146,9 +2141,9 @@ mod tests {
     }
 
     /// The md2csv example (2026-11-04): after each answer the attempt's
-    /// whole turn log was printed again. A run says each event once.
+    /// whole turn log was printed again. What a replayed step says is not.
     #[test]
-    fn a_resumed_run_says_each_event_once() {
+    fn a_replayed_step_says_nothing() {
         #[derive(Debug, Default)]
         struct Seen(std::sync::Mutex<Vec<u32>>);
         impl crate::progress::Progress for Seen {
@@ -2159,35 +2154,24 @@ mod tests {
             }
         }
         let seen = std::sync::Arc::new(Seen::default());
-        let delivered = std::sync::Arc::new(Delivered::default());
-        let pass = |run: &str, turns: &[u32]| {
-            let once = Once {
-                run: run.to_owned(),
-                seen: std::sync::atomic::AtomicUsize::new(0),
-                delivered: std::sync::Arc::clone(&delivered),
-                next: seen.clone(),
-            };
-            for t in turns {
-                crate::progress::Progress::event(
-                    &once,
-                    &crate::progress::Event::ToolCall {
-                        task: "T012".to_owned(),
-                        turn: *t,
-                        tool: "run_command".to_owned(),
-                        target: String::new(),
-                        decision: "allow".to_owned(),
-                        ok: Some(true),
-                        tail: Vec::new(),
-                        contained: false,
-                    },
-                );
-            }
+        let replaying = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let quiet = Quiet {
+            replaying: std::sync::Arc::clone(&replaying),
+            next: seen.clone(),
         };
-        pass("r1", &[1, 2]);
-        // The answer: invoked again, turns 1 and 2 said again, then 3.
-        pass("r1", &[1, 2, 3]);
-        // Another run's events are its own.
-        pass("r2", &[1]);
-        assert_eq!(*seen.0.lock().unwrap(), [1, 2, 3, 1]);
+        let call = |turn| crate::progress::Event::ToolCall {
+            task: "T012".to_owned(),
+            turn,
+            tool: "run_command".to_owned(),
+            target: String::new(),
+            decision: "allow".to_owned(),
+            ok: Some(true),
+            tail: Vec::new(),
+            contained: false,
+        };
+        crate::progress::Progress::event(&quiet, &call(1));
+        replaying.store(false, std::sync::atomic::Ordering::SeqCst);
+        crate::progress::Progress::event(&quiet, &call(2));
+        assert_eq!(*seen.0.lock().unwrap(), [2]);
     }
 }

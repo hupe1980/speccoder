@@ -106,6 +106,10 @@ pub enum Toolchain {
     Bun,
     /// uv (`uv.lock`).
     Uv,
+    /// Cargo (`Cargo.lock`): nothing installed in the tree, but the
+    /// crates unpacked into the cache before the baseline, since runs only
+    /// read it.
+    Cargo,
 }
 
 /// The lockfiles, in the order one is chosen when a directory has several.
@@ -129,6 +133,7 @@ impl Toolchain {
             Self::YarnBerry => "yarn-berry",
             Self::Bun => "bun",
             Self::Uv => "uv",
+            Self::Cargo => "cargo",
         }
     }
 
@@ -137,6 +142,7 @@ impl Toolchain {
     pub const fn folder(self) -> &'static str {
         match self {
             Self::Uv => ".venv",
+            Self::Cargo => "target",
             _ => "node_modules",
         }
     }
@@ -146,6 +152,7 @@ impl Toolchain {
     pub const fn manifest(self) -> &'static str {
         match self {
             Self::Uv => "pyproject.toml",
+            Self::Cargo => "Cargo.toml",
             _ => "package.json",
         }
     }
@@ -167,6 +174,8 @@ impl Toolchain {
             (Self::Bun, _) => &["bun", "install", "--frozen-lockfile"],
             (Self::Uv, true) => &["uv", "sync", "--locked", "--offline"],
             (Self::Uv, false) => &["uv", "sync", "--locked"],
+            (Self::Cargo, true) => &["cargo", "fetch", "--locked", "--offline"],
+            (Self::Cargo, false) => &["cargo", "fetch", "--locked"],
         };
         w.iter().map(|s| (*s).to_owned()).collect()
     }
@@ -180,6 +189,7 @@ impl Toolchain {
             Self::Yarn | Self::YarnBerry => "yarn install",
             Self::Bun => "bun install",
             Self::Uv => "uv sync",
+            Self::Cargo => "cargo fetch",
         }
     }
 }
@@ -260,6 +270,20 @@ pub fn roots(project: &Path) -> Vec<Root> {
         }
     }
     let mut roots: Vec<Root> = out.into_iter().map(|(_, r)| r).collect();
+    // Cargo: each committed lockfile beside its manifest.
+    for path in listed
+        .iter()
+        .filter(|p| p.rsplit('/').next() == Some("Cargo.lock"))
+    {
+        let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
+        if project.join(dir).join("Cargo.toml").is_file() {
+            roots.push(Root {
+                dir: dir.to_owned(),
+                toolchain: Toolchain::Cargo,
+                lockfile: path.clone(),
+            });
+        }
+    }
     // A workspace member: its lockfile is the workspace's, above it.
     for uv in [false, true] {
         let manifest = if uv { "pyproject.toml" } else { "package.json" };
@@ -338,6 +362,7 @@ pub fn missing_lockfile(project: &Path, roots: &[Root]) -> Option<(String, Strin
     let at_root = |uv: bool| {
         roots.iter().any(|r| {
             r.dir.split('/').all(|c| c.is_empty() || c == "..")
+                && r.toolchain != Toolchain::Cargo
                 && (r.toolchain == Toolchain::Uv) == uv
         })
     };
@@ -557,9 +582,10 @@ fn prepare_roots(
         let prev = old.roots.iter().find(|e| {
             e.dir == root.dir && e.toolchain == root.toolchain && e.lockfile == root.lockfile
         });
+        // Cargo writes no folder in the tree: its lockfile alone decides.
         if let Some(e) = prev
             && e.lock_sha256 == sha
-            && holds(p.worktree, &folder)
+            && (root.toolchain == Toolchain::Cargo || holds(p.worktree, &folder))
         {
             out.record.roots.push(e.clone());
             continue;
@@ -719,7 +745,9 @@ fn install(p: &Prepare<'_>, root: &Root) -> Result<String, Failure> {
     };
     let ok = |o: &Outcome| o.exit_code == Some(0) && !o.timed_out && o.spawn_error.is_none();
     let began = std::time::Instant::now();
-    let mut out = run(p.runner, env.clone());
+    // What fills the shared caches may write them; nothing else of a run may.
+    let fetching = p.runner.clone().fetching();
+    let mut out = run(&fetching, env.clone());
     if !ok(&out)
         && out.spawn_error.is_none()
         && let Some((cache, vars)) = p.state.and_then(|s| {
@@ -731,7 +759,7 @@ fn install(p: &Prepare<'_>, root: &Root) -> Result<String, Failure> {
             env.retain(|(key, _)| *key != k);
             env.push((k, v));
         }
-        out = run(&p.runner.clone().with_writable(&cache), env);
+        out = run(&fetching.clone().with_writable(&cache), env);
     }
     let shown = argv.join(" ");
     let at = if root.dir.is_empty() {
@@ -1011,7 +1039,10 @@ mod tests {
         type Files<'a> = &'a [(&'a str, &'a str)];
         type Want<'a> = &'a [(&'a str, Toolchain, &'a str)];
         let cases: &[(Files<'_>, Want<'_>)] = &[
-            (&[("Cargo.toml", ""), ("Cargo.lock", "")], &[]),
+            (
+                &[("Cargo.toml", ""), ("Cargo.lock", "")],
+                &[("", Toolchain::Cargo, "Cargo.lock")],
+            ),
             (&[("go.mod", ""), ("go.sum", "")], &[]),
             (
                 &[("package.json", "{}"), ("package-lock.json", "{}")],

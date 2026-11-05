@@ -71,10 +71,9 @@ impl Terminals {
         // Through the sandbox helper it leads a session of its own, else a
         // process group.
         let caged = tmp.is_some();
-        if let Some(tmp) = tmp {
-            env.retain(|(k, _)| !matches!(k.as_str(), "TMPDIR" | "TMP" | "TEMP"));
-            let t = tmp.to_string_lossy().into_owned();
-            env.extend(["TMPDIR", "TMP", "TEMP"].map(|k| (k.to_owned(), t.clone())));
+        if let Some(private) = tmp {
+            env.retain(|(k, _)| !private.iter().any(|(p, _)| p == k));
+            env.extend(private);
         }
         let Some((program, args)) = wrapped.split_first() else {
             return Err("empty command".to_owned());

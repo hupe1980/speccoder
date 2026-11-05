@@ -198,6 +198,10 @@ pub struct Profile {
     pub network: Network,
     /// The private temporary directory (`TMPDIR`), writable.
     pub tmp: PathBuf,
+    /// The person's shared package caches ([`CACHES`] under home): read by
+    /// every command, written only by one that fetches ([`Profile::fetching`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub caches: Vec<PathBuf>,
     /// What this host cannot enforce and the profile leaves out
     /// (`sandbox::procage::fit`).
     #[serde(default)]
@@ -243,10 +247,6 @@ impl Profile {
         let home = home.as_deref();
         let mut writable = vec![root.clone()];
         writable.extend(
-            home.into_iter()
-                .flat_map(|h| CACHES.iter().map(move |c| h.join(c))),
-        );
-        writable.extend(
             config
                 .writable
                 .iter()
@@ -267,14 +267,19 @@ impl Profile {
         };
         // Short (Unix socket paths are limited to ~104 bytes) and per workspace.
         let tmp = canonical(&std::env::temp_dir()).join(format!("speccoder-{digest}"));
-        Self {
+        let profile = Self {
             writable,
             hidden,
             read_only: Vec::new(),
-            network: config.network,
+            network: Network::Off,
             tmp,
+            caches: home
+                .into_iter()
+                .flat_map(|h| CACHES.iter().map(move |c| h.join(c)))
+                .collect(),
             unenforced: Unenforced::default(),
-        }
+        };
+        profile.with_network(config.network)
     }
 
     /// The same profile with `read_only` trees carved out of the writable
@@ -287,11 +292,57 @@ impl Profile {
         self
     }
 
-    /// The same profile with another network.
+    /// The same profile with another network. A command that may reach
+    /// the network fetches: it may write the shared caches too.
     #[must_use]
     pub fn with_network(mut self, network: Network) -> Self {
         self.network = network;
+        if network == Network::On {
+            self = self.fetching();
+        }
         self
+    }
+
+    /// The same profile, the shared caches writable: for what fills them —
+    /// a command with the network, speccoder's `prepare`.
+    #[must_use]
+    pub fn fetching(mut self) -> Self {
+        for c in &self.caches {
+            if !self.writable.contains(c) {
+                self.writable.push(c.clone());
+            }
+        }
+        self
+    }
+
+    /// The environment a command in this profile starts with, beside its
+    /// own: the private `TMPDIR`, and — unless it fetches — a private cache
+    /// for what tools derive (`XDG_CACHE_HOME`, `UV_CACHE_DIR`, `GOCACHE`),
+    /// since the shared caches are read-only to it.
+    #[must_use]
+    pub fn private_env(&self) -> Vec<(String, String)> {
+        let tmp = self.tmp.to_string_lossy().into_owned();
+        let mut env: Vec<(String, String)> = ["TMPDIR", "TMP", "TEMP"]
+            .map(|k| (k.to_owned(), tmp.clone()))
+            .to_vec();
+        let fetching = self.caches.iter().all(|c| self.writable.contains(c));
+        if !fetching {
+            let cache = self.tmp.join("cache");
+            for (k, sub) in [
+                ("XDG_CACHE_HOME", ""),
+                ("UV_CACHE_DIR", "uv"),
+                ("GOCACHE", "go-build"),
+            ] {
+                let dir = if sub.is_empty() {
+                    cache.clone()
+                } else {
+                    cache.join(sub)
+                };
+                let _ = std::fs::create_dir_all(&dir);
+                env.push((k.to_owned(), dir.to_string_lossy().into_owned()));
+            }
+        }
+        env
     }
 }
 
@@ -447,14 +498,18 @@ impl Sandboxed {
         if let Err(e) = std::fs::create_dir_all(&profile.tmp) {
             return failed(format!("the sandbox's temporary directory: {e}"));
         }
-        let tmp = profile.tmp.to_string_lossy().into_owned();
         let mut env: Vec<(String, String)> = inv
             .env
             .iter()
             .filter(|(k, _)| !matches!(k.as_str(), "TMPDIR" | "TMP" | "TEMP"))
             .cloned()
             .collect();
-        env.extend(["TMPDIR", "TMP", "TEMP"].map(|k| (k.to_owned(), tmp.clone())));
+        // The private ones, where the command does not name its own.
+        for (k, v) in profile.private_env() {
+            if !env.iter().any(|(e, _)| *e == k) {
+                env.push((k, v));
+            }
+        }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         return procage::run(&profile, &Invocation { env, ..inv.clone() });
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
@@ -620,6 +675,10 @@ impl Runner {
     }
 }
 
+/// A command as it will be started: its argv, and the environment to start
+/// it with ([`Profile::private_env`]) when something confines it.
+pub type Wrapped = (Vec<String>, Option<Vec<(String, String)>>);
+
 /// A sandboxed or a plain runner.
 #[derive(Debug, Clone)]
 pub enum Runner {
@@ -710,15 +769,33 @@ impl Runner {
         }
     }
 
-    /// `argv` as it will be started (for long-running servers started elsewhere).
-    pub fn wrap(&self, argv: &[String]) -> Result<(Vec<String>, Option<PathBuf>), String> {
+    /// `argv` as it will be started (for long-running servers started
+    /// elsewhere), and the environment to start it with
+    /// ([`Profile::private_env`]); none when nothing confines it.
+    pub fn wrap(&self, argv: &[String]) -> Result<Wrapped, String> {
         match self {
             Self::Plain => Ok((argv.to_vec(), None)),
             Self::Sandboxed(s) => {
                 let profile = s.profile.clone().with_network(s.network_for(argv));
                 std::fs::create_dir_all(&profile.tmp).map_err(|e| e.to_string())?;
-                Ok((wrap(&profile, &s.backend, argv)?, Some(profile.tmp)))
+                Ok((
+                    wrap(&profile, &s.backend, argv)?,
+                    Some(profile.private_env()),
+                ))
             }
+        }
+    }
+
+    /// The same runner for what fills the shared caches (speccoder's
+    /// `prepare`): they are writable to it.
+    #[must_use]
+    pub fn fetching(self) -> Self {
+        match self {
+            Self::Sandboxed(mut s) => {
+                s.profile = s.profile.fetching();
+                Self::Sandboxed(s)
+            }
+            Self::Plain => Self::Plain,
         }
     }
 }
@@ -777,8 +854,42 @@ mod tests {
                 .any(|w| w == Path::new("/s/proj") || w == &home.join(".cargo"))
         );
         assert!(p.hidden.contains(&home.join(".ssh")));
-        assert!(p.writable.contains(&home.join(".cargo/registry")));
         assert_eq!(p.unenforced, Unenforced::default());
+    }
+
+    /// F-141: the person's package caches are read by every command and
+    /// written only by what fetches; the rest derives into a private cache.
+    #[test]
+    fn caches_are_written_only_by_what_fetches() {
+        let home = Path::new("/home/u");
+        let registry = home.join(".cargo/registry");
+        let p = Profile::new(Path::new("/w"), &Config::default(), Some(home));
+        assert!(p.caches.contains(&registry));
+        assert!(!p.writable.contains(&registry));
+        let env = p.private_env();
+        let var = |k: &str| env.iter().find(|(e, _)| e == k).map(|(_, v)| v.clone());
+        let cache = p.tmp.join("cache");
+        assert_eq!(
+            var("UV_CACHE_DIR"),
+            Some(cache.join("uv").to_string_lossy().into_owned())
+        );
+        assert_eq!(
+            var("GOCACHE"),
+            Some(cache.join("go-build").to_string_lossy().into_owned())
+        );
+        assert_eq!(
+            var("XDG_CACHE_HOME"),
+            Some(cache.to_string_lossy().into_owned())
+        );
+        for f in [p.clone().fetching(), p.clone().with_network(Network::On)] {
+            assert!(f.writable.contains(&registry));
+            assert!(f.private_env().iter().all(|(k, _)| k != "UV_CACHE_DIR"));
+        }
+        assert!(
+            !p.with_network(Network::Loopback)
+                .writable
+                .contains(&registry)
+        );
     }
 
     /// A profile written before the signal scope could be left out

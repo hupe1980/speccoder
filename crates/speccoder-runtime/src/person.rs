@@ -264,9 +264,9 @@ fn confined(
     let (profile, _) = crate::sandbox::fit(&profile)?;
     std::fs::create_dir_all(&profile.tmp)
         .map_err(|e| format!("the sandbox's temporary folder: {e}"))?;
-    let tmp = profile.tmp.display().to_string();
-    env.retain(|(k, _)| !matches!(k.as_str(), "TMPDIR" | "TMP" | "TEMP"));
-    env.extend(["TMPDIR", "TMP", "TEMP"].map(|k| (k.to_owned(), tmp.clone())));
+    let private = profile.private_env();
+    env.retain(|(k, _)| !private.iter().any(|(p, _)| p == k));
+    env.extend(private);
     Ok((crate::sandbox::wrap(&profile, &backend, &full)?, env, true))
 }
 

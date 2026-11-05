@@ -419,7 +419,7 @@ pub fn checks(
         (Ok(b), _) => check(
             "sandbox",
             DoctorLevel::Pass,
-            format!("{b:?}").to_lowercase(),
+            format!("{} — commands write only the workspace", b.mechanism()),
         ),
         (Err(e), crate::sandbox::Mode::Required) => failed(
             "sandbox",
@@ -436,6 +436,14 @@ pub fn checks(
             &["→ prefer a container or VM without your credentials"],
         ),
     });
+    // The person's package caches: read-only to what a run executes.
+    if crate::sandbox::backend().is_ok() && sandbox.mode != crate::sandbox::Mode::Off {
+        out.push(check(
+            "caches",
+            DoctorLevel::Pass,
+            "read-only to runs — prepare and commands with the network fill them; what tools derive stays in the run's private cache".to_owned(),
+        ));
+    }
     // What runs without asking.
     let (fine, said) = crate::sandbox::contained_at(path);
     out.push(check(

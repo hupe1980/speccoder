@@ -165,8 +165,8 @@ async fn connect_one(
         .env_clear()
         .envs(crate::verify::process::scrubbed_env(std::env::vars()))
         .kill_on_drop(true);
-    if let Some(t) = tmp {
-        command.env("TMPDIR", &t).env("TMP", &t).env("TEMP", &t);
+    if let Some(private) = tmp {
+        command.envs(private);
     }
     let transport = rmcp::transport::TokioChildProcess::new(command)
         .map_err(|e| format!("cannot start `{}`: {e}", s.command.join(" ")))?;

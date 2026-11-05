@@ -420,13 +420,13 @@ pub fn present(request: &Request, context: &PresentContext) -> Presentation {
     }
     let sandbox = match kind {
         "run" | "network" => match &context.sandbox {
+            // A call with the network fetches: it may fill the caches.
+            Some(m) if kind == "network" => {
+                format!("sandbox on ({m}) · network: this call · writes: worktree, caches")
+            }
             Some(m) => format!(
-                "sandbox on ({m}) · network: {} · writes: worktree",
-                if kind == "network" {
-                    "this call"
-                } else {
-                    context.network.as_str()
-                }
+                "sandbox on ({m}) · network: {} · writes: worktree · caches: read-only",
+                context.network.as_str()
             ),
             None => "sandbox off — runs unconfined".to_owned(),
         },
@@ -664,7 +664,7 @@ mod tests {
         );
         assert_eq!(
             p.sandbox,
-            "sandbox on (Seatbelt) · network: none · writes: worktree"
+            "sandbox on (Seatbelt) · network: none · writes: worktree · caches: read-only"
         );
         // High risk: no "for this run", no "always"; the numbers stay fixed.
         let numbers: Vec<u8> = p.options.iter().map(|o| o.number).collect();

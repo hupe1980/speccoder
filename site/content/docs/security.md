@@ -77,7 +77,8 @@ Commands that run to completion start from speccoder's own process. MCP servers 
 
 Inside, a command:
 
-- **writes** only to the worktree, a private temporary directory and the package caches builds need (`~/.cargo/registry`, `~/.cache`, `~/.npm`, `~/go/pkg/mod`, `~/Library/Caches`, …), plus `[sandbox] writable`; not to speccoder's state, `~/.cargo/bin` or your checkout;
+- **writes** only to the worktree and a private temporary directory, plus `[sandbox] writable`; not to speccoder's state, `~/.cargo/bin` or your checkout;
+- **reads but cannot write your package caches** (`~/.cargo/registry`, `~/.cache`, `~/.npm`, `~/go/pkg/mod`, `~/Library/Caches`, …), so nothing a run executes can plant code in your later builds: what tools derive there (Go's build cache, uv's locks) goes to a private cache instead (`XDG_CACHE_HOME`, `UV_CACHE_DIR`, `GOCACHE`), and only what fetches fills them — the [`prepare`](@/docs/running.md#dependency-folders) step and a command with the network;
 - **cannot read** credentials: `~/.ssh`, `~/.aws`, `~/.azure`, `~/.gnupg`, `~/.netrc`, `~/.docker`, `~/.kube`, `~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.password-store`, `~/.config/gh`, `~/.config/gcloud`, `~/.cargo/credentials`, keyrings and keychains;
 - **has no network** beyond loopback (`[sandbox] network = "loopback"`, the default), so local test servers work; on Linux loopback is blocked too;
 - **cannot connect to a Unix socket outside the writable paths** (a database's, an agent's); a check that needs one lists its directory in `[sandbox] writable`. Sockets inside the writable paths work (test servers); on Linux without user namespaces no socket is reachable;
@@ -146,7 +147,7 @@ Only a command speccoder issued runs: built as exact argvs (a file name stays on
 
 ## What it does not protect against
 
-- **Code that runs during checks, within the sandbox's limits:** it can read files outside the hidden paths, use CPU and memory, and write to package caches.
+- **Code that runs during checks, within the sandbox's limits:** it can read files outside the hidden paths and use CPU and memory.
 - **MCP servers:** speccoder gates the calls; what a server does when called is up to the server. Configure only servers you trust.
 - **What you send to the model provider:** your spec, plan, the files the model reads, command output and diffs. Do not run speccoder on code you may not share with it.
 - **Prompt injection:** text in the repository or in tool output can try to steer the model. The policy, the sandbox and the verifier limit what that achieves; they do not prevent the attempt.
