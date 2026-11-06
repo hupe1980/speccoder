@@ -200,7 +200,7 @@
   header p { margin: 0.3rem 0 0; color: var(--text-2); font-size: 0.9rem; }
   .strip { display: flex; gap: 0.25rem; list-style: none; margin: 0; padding: 0; }
   .strip li { flex: 1; text-align: center; font-size: 0.74rem; padding: 0.25rem 0; border-radius: 6px; background: var(--fill); color: var(--muted); }
-  .strip li.done { background: var(--accent-fill, var(--fill)); color: var(--text); }
+  .strip li.done { background: var(--verified-bg); color: var(--verified); font-weight: 600; }
   .strip li.now { background: var(--accent); color: #fff; font-weight: 650; }
   .field { display: grid; gap: 0.4rem; }
   .field > span { font-weight: 600; font-size: 0.88rem; }

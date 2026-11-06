@@ -5758,6 +5758,11 @@ export interface StatusReport {
    * format has requirement identifiers.
    */
   review?: ReviewTotals | null;
+  /**
+   * A unit that is a bug (a Kiro bugfix spec): its bug, which runs as
+   * one and closes the tasks with its verified fix.
+   */
+  bug?: UnitBug | null;
 }
 
 /** Counts of [`TaskStatus::state`]. */
@@ -6203,6 +6208,20 @@ export interface UndoOffer {
   kind: string;
   /** Why not, when not. */
   reason?: string | null;
+}
+
+/** The bug a unit is, as the board shows it. */
+export interface UnitBug {
+  /** `<unit>/<task>`: what the Bug sheet opens. */
+  key: string;
+  /** A short title. */
+  title: string;
+  /** Where it is (`record` until it has run). */
+  stage: BugStage;
+  /** How it stands; `None` until it has run. */
+  outcome: BugOutcome | null;
+  /** The fix's verdict, once judged. */
+  verdict: Verdict | null;
 }
 
 /** A scenario an author found untestable, and why. */

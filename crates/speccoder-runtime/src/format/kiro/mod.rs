@@ -295,7 +295,7 @@ impl Adapter for Kiro {
             current: vec![texts(&b.current).join(" ")],
             expected: texts(&b.expected),
             unchanged: texts(&b.unchanged),
-            title: Some(key.replace('-', " ")),
+            title: Some(speccoder_core::words::titled(key)),
             file: format!("{dir}/bugfix.md"),
         })
     }

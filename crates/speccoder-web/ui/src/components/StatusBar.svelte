@@ -6,6 +6,7 @@
   import { app } from "../lib/app.svelte";
   import { get, latest, q } from "../lib/api";
   import type { Reply, StatusTotals } from "../lib/types";
+  import { unitWords } from "../lib/bug";
   import Icon from "./Icon.svelte";
   import LiveCard from "./LiveCard.svelte";
 
@@ -52,7 +53,7 @@
         <button onclick={() => go("code")} title="The feature's branch{r.unmerged_commits ? `: ${r.unmerged_commits} ${r.unmerged_commits === 1 ? 'commit' : 'commits'} not merged` : ''}"><Icon name="branch" size={12} />{r.branch.replace(/^speccoder\//, "")}{#if r.unmerged_commits}<span class="dim">↑{r.unmerged_commits}</span>{/if}</button>
       {/if}
       <button onclick={() => go("board")} title="Verified · regression only · ready · blocked">
-        <span class="v">✓ {t.verified ?? 0}</span>{#if t.regression_only}<span class="r">~ {t.regression_only}</span>{/if}<span class="dim">· {t.ready ?? 0} ready</span>{#if t.blocked}<span class="dim">· {t.blocked} blocked</span>{/if}
+        <span class="v">✓ {t.verified ?? 0}</span>{#if t.regression_only}<span class="r">~ {t.regression_only}</span>{/if}{#if r.bug}<span class="dim">· bug: {unitWords(r.bug).toLowerCase()}</span>{:else}<span class="dim">· {t.ready ?? 0} ready</span>{#if t.blocked}<span class="dim">· {t.blocked} blocked</span>{/if}{/if}
       </button>
       {#if review && reviewed}
         <button class:warn={review.changes_requested + review.lapsed > 0} onclick={() => go("documents", "review")} title="Requirements approved on their current wording"><Icon name="doc" size={12} />{review.approved}/{reviewed} approved</button>

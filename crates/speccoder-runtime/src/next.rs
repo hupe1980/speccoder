@@ -268,6 +268,7 @@ fn classify(result: &CommandResult) -> Option<Outcome> {
         ("report", CommandStatus::Ok, Some(CommandData::Report(r))) => Some(Outcome::ReportShown {
             ready: r.totals.ready,
             stale: r.totals.stale,
+            bug: r.bug.is_some(),
             open_approvals: r
                 .tasks
                 .iter()

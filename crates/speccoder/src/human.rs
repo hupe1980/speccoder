@@ -136,6 +136,15 @@ pub fn inspect(w: &mut impl Write, s: &ProjectSnapshot) -> io::Result<()> {
                             w,
                             "           in number order; a parent closes with its last sub-task"
                         )?;
+                        for run in speccoder_core::graph::side_by_side(t) {
+                            let (first, last) = (&run[0], &run[run.len() - 1]);
+                            let ids = if run.len() == 2 {
+                                format!("{first} and {last}")
+                            } else {
+                                format!("{first}–{last}")
+                            };
+                            writeln!(w, "           {ids} run side by side (P)")?;
+                        }
                     } else if t.dependency_mode == DependencyMode::Chain {
                         writeln!(w, "           a chain: groups in order, tasks in order")?;
                     }
@@ -835,6 +844,26 @@ pub fn approvals(w: &mut impl Write, a: &ApprovalsReport, message: &str) -> io::
 }
 
 /// A feature's tasks and their evidence.
+/// A unit's bug in words, as the board's bug card says it.
+fn bug_words(b: &speccoder_core::UnitBug) -> &'static str {
+    use speccoder_core::bug::Outcome;
+    match b.outcome {
+        None => "not run yet: speccoder run reproduces it, you confirm once, then it is fixed",
+        Some(Outcome::Recorded) => "recorded, not reproduced yet: speccoder run",
+        Some(Outcome::AwaitingConfirmation) => {
+            "the reproductions fail on the untouched code: confirm they show the bug"
+        }
+        Some(Outcome::CannotReproduce) => "could not be reproduced — nothing was fixed",
+        Some(Outcome::AlreadySatisfied) => "already fixed — every reproduction passes",
+        Some(Outcome::UnchangedNotHolding) => "an Unchanged statement does not hold today",
+        Some(Outcome::Fixed) if b.verdict == Some(speccoder_core::verify::Verdict::Verified) => {
+            "fixed and verified"
+        }
+        Some(Outcome::Fixed) => "fixed, not verified: see its verdict",
+        Some(Outcome::Failed) => "the fix did not pass",
+    }
+}
+
 pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result<()> {
     writeln!(
         w,
@@ -849,6 +878,9 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
     )?;
     if !r.journey.is_empty() {
         writeln!(w, "Journey    {}", journey(&r.journey))?;
+    }
+    if let Some(b) = &r.bug {
+        writeln!(w, "Bug        {} — {}", b.title, bug_words(b))?;
     }
     if !r.planning.is_empty() {
         // Being planned: the journey says where; the Next: block what follows.
@@ -899,6 +931,8 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
             }
             "attested" => "attested by a person (not verified)".to_owned(),
             "skipped" => "skipped".to_owned(),
+            // A bug's tasks close together with its verified fix.
+            _ if r.bug.is_some() => "open — ticked with the fix".to_owned(),
             "ready" => "ready".to_owned(),
             _ => format!("blocked by {}", t.blocked_by.join(", ")),
         };
@@ -910,7 +944,10 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         } else {
             format!("{note} · {} {}", t.lane.mark(), t.lane.as_str())
         };
-        let glyph = crate::style::Glyph::of_state(&t.state);
+        let glyph = crate::style::Glyph::of_state(match t.state.as_str() {
+            "blocked" if r.bug.is_some() => "ready",
+            s => s,
+        });
         if look.screen_reader {
             writeln!(w, "task: {} {} — {note}", t.id, t.title)?;
         } else {

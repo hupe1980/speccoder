@@ -630,6 +630,7 @@ mod look_tests {
         edit(&mut tasks);
         let r = CommandResult::ok("report", "8 tasks").with_data(CommandData::Report(Box::new(
             StatusReport {
+                bug: None,
                 stories,
                 review: None,
                 issues: Vec::new(),

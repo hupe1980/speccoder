@@ -190,6 +190,23 @@ fn a_kiro_spec_reads_as_requirements_criteria_and_tasks() {
     assert_eq!(ids, ["1.1", "1.2", "2.1", "3"]);
     assert!(tasks[0].parallel);
     assert_eq!(tasks[2].depends_on, ["1.1"]);
+    // `1.1 (P)` and `1.2 (P)` run side by side; 2.1 waits for both.
+    let status = speccoder_runtime::service::status::report(r.path(), None);
+    let Some(CommandData::Report(st)) = status.data() else {
+        panic!("{}", status.message())
+    };
+    let state = |id: &str| {
+        let t = st.tasks.iter().find(|t| t.id == id).unwrap();
+        (t.state.as_str(), t.blocked_by.clone())
+    };
+    assert_eq!(state("1.1").0, "ready");
+    assert_eq!(state("1.2").0, "ready");
+    let (s21, mut by) = state("2.1");
+    by.sort();
+    assert_eq!(
+        (s21, by),
+        ("blocked", vec!["1.1".to_owned(), "1.2".to_owned()])
+    );
 }
 
 #[test]
@@ -468,6 +485,18 @@ fn a_bugfix_spec_runs_on_the_bug_rung_and_its_fix_closes_kiros_tasks() {
         approver: Some(Arc::new(Confirms)),
         ..speccoder_runtime::RunOptions::default()
     };
+    // Before it runs, the report carries the bug, not run yet.
+    let bug_of = |root: &Path| {
+        let opened = speccoder_runtime::format::open(root, None).unwrap();
+        speccoder_runtime::bug::of_unit_in(&opened.snapshot, Some(state.path())).unwrap()
+    };
+    let before = bug_of(r.path());
+    assert_eq!(before.key, "empty-title/bug:empty-title");
+    assert_eq!(before.title, "Empty title");
+    assert_eq!(
+        (before.stage, before.outcome),
+        (speccoder_core::bug::Stage::Record, None)
+    );
     // `speccoder run` with the bugfix spec selected: the bug, not its tasks.
     let res = speccoder_runtime::run_feature_with(r.path(), None, state.path(), &d, None, &options);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
@@ -534,6 +563,15 @@ fn a_bugfix_spec_runs_on_the_bug_rung_and_its_fix_closes_kiros_tasks() {
     for t in &rep.tasks {
         assert_eq!(t.state, "verified", "{t:?}");
     }
+    assert!(rep.bug.is_some(), "the report names the unit's bug");
+    let after = bug_of(Path::new(&wt));
+    assert_eq!(
+        (after.stage, after.outcome),
+        (
+            speccoder_core::bug::Stage::Done,
+            Some(speccoder_core::bug::Outcome::Fixed)
+        )
+    );
 }
 
 #[test]

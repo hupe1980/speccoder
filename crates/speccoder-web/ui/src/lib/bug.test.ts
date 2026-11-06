@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { STAGES, at, blocked, command, outcomeWords } from "./bug";
-import type { BugReport } from "./schema.gen";
+import { STAGES, at, blocked, bugStep, command, outcomeWords, unitWords } from "./bug";
+import type { BugReport, UnitBug } from "./schema.gen";
 import { bugReport } from "../test/fixtures";
 
 describe("blocked", () => {
@@ -45,5 +45,32 @@ describe("outcomeWords", () => {
     for (const outcome of outcomes) expect(outcomeWords(bugReport({ outcome }))).toBeTruthy();
     expect(outcomeWords(bugReport({ outcome: "fixed", verdict: { verdict: "verified" } }))).toBe("Fixed and verified");
     expect(outcomeWords(bugReport({ outcome: "fixed", verdict: null }))).toBe("Fixed");
+  });
+});
+
+describe("a bug unit's card", () => {
+  const unit = (outcome: UnitBug["outcome"], verified = false): UnitBug => ({
+    key: "empty-title/bug:empty-title",
+    title: "empty title",
+    stage: outcome === null ? "record" : outcome === "fixed" ? "done" : "confirm",
+    outcome,
+    verdict: verified ? { verdict: "verified" } : null,
+  });
+
+  it("offers one step for each outcome", () => {
+    expect(bugStep(unit(null))).toBe("run");
+    expect(bugStep(unit("recorded"))).toBe("run");
+    expect(bugStep(unit("awaiting_confirmation"))).toBe("confirm");
+    for (const stop of ["cannot_reproduce", "already_satisfied", "unchanged_not_holding", "failed"] as const) expect(bugStep(unit(stop))).toBe("run");
+    expect(bugStep(unit("fixed", true))).toBeNull();
+    expect(bugStep(unit("fixed"))).toBe("run");
+  });
+
+  it("says where it stands", () => {
+    expect(unitWords(unit(null))).toBe("Not run yet");
+    expect(unitWords(unit("fixed", true))).toBe("Fixed and verified");
+    expect(unitWords(unit("cannot_reproduce"))).toBe("Could not be reproduced — nothing was fixed");
+    expect(at(unit(null))).toBe(0);
+    expect(at(unit("fixed", true))).toBe(STAGES.length);
   });
 });

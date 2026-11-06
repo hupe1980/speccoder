@@ -18,8 +18,11 @@
 //! written references are the complete order within a phase:
 //! subsection and `[P]` edges are dropped, phase order is kept.
 //!
-//! In **chain** mode (OpenSpec) a group waits on every earlier group and a
-//! task on the one before it in its group; written references are added.
+//! In **chain** mode (OpenSpec, Kiro) a group waits on every earlier group
+//! and a task on the one before it in its group; written references are
+//! added. Consecutive parallel peers (cc-sdd's `(P)`: siblings of one parent,
+//! or top-level tasks) form a run: each waits on what the first waits on,
+//! and the task after the run waits on all of it.
 //!
 //! Dangling references and cycles are errors; the tasks involved are blocked.
 
@@ -114,6 +117,40 @@ fn groups(tasks: &[Task]) -> Vec<Group> {
         .collect()
 }
 
+/// Whether `a` and `b` are siblings in a chain's outline (`2.1` and `2.2`,
+/// or top-level `3` and `4`).
+fn peers(a: &Task, b: &Task) -> bool {
+    let parent = |t: &Task| t.id.rsplit_once('.').map(|(p, _)| p.to_owned());
+    parent(a) == parent(b)
+}
+
+/// A chain's runs of two or more parallel peers, as task IDs: the tasks
+/// that run side by side.
+#[must_use]
+pub fn side_by_side(parsed: &ParsedTasks) -> Vec<Vec<String>> {
+    if parsed.dependency_mode != DependencyMode::Chain {
+        return Vec::new();
+    }
+    let mut out: Vec<Vec<&Task>> = Vec::new();
+    let mut open = false;
+    for t in &parsed.tasks {
+        match out.last_mut() {
+            Some(run) if open && t.parallel && run.last().is_some_and(|r| peers(r, t)) => {
+                run.push(t);
+            }
+            _ if t.parallel => {
+                out.push(vec![t]);
+                open = true;
+            }
+            _ => open = false,
+        }
+    }
+    out.into_iter()
+        .filter(|r| r.len() > 1)
+        .map(|r| r.into_iter().map(|t| t.id.clone()).collect())
+        .collect()
+}
+
 /// Builds the schedule of `parsed`, with `graph.*` diagnostics.
 #[must_use]
 pub fn schedule(parsed: &ParsedTasks) -> (Schedule, Vec<Diagnostic>) {
@@ -131,6 +168,8 @@ pub fn schedule(parsed: &ParsedTasks) -> (Schedule, Vec<Diagnostic>) {
     let declared = parsed.dependency_mode == DependencyMode::Declared;
     let chain = parsed.dependency_mode == DependencyMode::Chain;
     let groups = groups(tasks);
+    // Chain mode: the open run of parallel peers.
+    let mut run: Vec<usize> = Vec::new();
     for (g, group) in groups.iter().enumerate() {
         if chain {
             let earlier: Vec<usize> = groups[..g]
@@ -141,6 +180,17 @@ pub fn schedule(parsed: &ParsedTasks) -> (Schedule, Vec<Diagnostic>) {
             for &i in group.blocks.iter().flatten() {
                 let mut deps = earlier.clone();
                 deps.extend(previous);
+                if tasks[i].parallel && run.last().is_some_and(|&r| peers(&tasks[r], &tasks[i])) {
+                    // Beside its peers: waits on what the run waits on.
+                    deps.clone_from(&structural[run[0]]);
+                    run.push(i);
+                } else {
+                    // After a run: waits on all of it.
+                    deps.append(&mut run);
+                    if tasks[i].parallel {
+                        run.push(i);
+                    }
+                }
                 structural[i] = deps;
                 previous = Some(i);
             }
@@ -449,6 +499,111 @@ mod tests {
     const US1: &str = "Phase 3: User Story 1 - A";
     const US2: &str = "Phase 4: User Story 2 - B";
     const POLISH: &str = "Phase 5: Polish & Cross-Cutting Concerns";
+
+    /// A cc-sdd list: (id, parallel, done, explicit deps), phases by
+    /// major task as the Kiro adapter names them.
+    fn chain(spec: &[(&'static str, bool, bool, &'static [&'static str])]) -> ParsedTasks {
+        let rows: Vec<Spec<'static>> = spec
+            .iter()
+            .map(|&(id, p, done, deps)| {
+                let major: &'static str = match id.split('.').next() {
+                    Some("1") => "1.",
+                    Some("2") => "2.",
+                    Some("3") => "3.",
+                    Some("4") => "4.",
+                    _ => "5.",
+                };
+                (id, major, None, p, None, done, deps)
+            })
+            .collect();
+        parsed_in(DependencyMode::Chain, &rows)
+    }
+
+    fn ready(s: &Schedule) -> Vec<&str> {
+        s.tasks
+            .iter()
+            .filter(|t| t.state == Ready)
+            .map(|t| t.id.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn a_chain_without_parallel_tasks_is_one_task_after_another() {
+        let p = chain(&[
+            ("1", false, true, &[]),
+            ("2.1", false, false, &[]),
+            ("2.2", false, false, &[]),
+            ("3", false, false, &[]),
+        ]);
+        let (s, _) = schedule(&p);
+        assert_eq!(ready(&s), ["2.1"]);
+        assert_eq!(s.tasks[2].blocked_by, ["2.1"]);
+        assert_eq!(s.tasks[3].blocked_by, ["2.1", "2.2"]);
+        assert!(side_by_side(&p).is_empty());
+    }
+
+    #[test]
+    fn parallel_peers_run_side_by_side_and_the_next_task_waits_for_all() {
+        let list = [
+            ("1", false, true, &[][..]),
+            ("2.1", true, false, &[][..]),
+            ("2.2", true, false, &[][..]),
+            ("2.3", false, false, &[][..]),
+            ("3", true, false, &[][..]),
+            ("4", true, false, &[][..]),
+            ("5", false, false, &[][..]),
+        ];
+        let (s, _) = schedule(&chain(&list));
+        assert_eq!(ready(&s), ["2.1", "2.2"]);
+        let mut by = s.tasks[3].blocked_by.clone();
+        by.sort();
+        assert_eq!(by, ["2.1", "2.2"]);
+        assert_eq!(
+            side_by_side(&chain(&list)),
+            [vec!["2.1", "2.2"], vec!["3", "4"]]
+        );
+        // Once 2.x is done, the top-level peers 3 and 4 are ready together.
+        let mut done = list;
+        for d in &mut done[1..4] {
+            d.2 = true;
+        }
+        let (s, _) = schedule(&chain(&done));
+        assert_eq!(ready(&s), ["3", "4"]);
+        let mut by = s.tasks[6].blocked_by.clone();
+        by.sort();
+        assert_eq!(by, ["3", "4"]);
+    }
+
+    #[test]
+    fn a_run_never_crosses_from_one_parent_to_another() {
+        let p = chain(&[
+            ("1", false, true, &[]),
+            ("2.1", true, false, &[]),
+            ("2.2", true, false, &[]),
+            ("3.1", true, false, &[]),
+            ("3.2", true, false, &[]),
+        ]);
+        let (s, _) = schedule(&p);
+        assert_eq!(ready(&s), ["2.1", "2.2"]);
+        assert_eq!(side_by_side(&p), [vec!["2.1", "2.2"], vec!["3.1", "3.2"]]);
+        let mut by = s.tasks[3].blocked_by.clone();
+        by.sort();
+        assert_eq!(by, ["2.1", "2.2"]);
+    }
+
+    #[test]
+    fn a_written_dependency_is_added_to_the_runs() {
+        // 2.3 runs beside 2.1 and 2.2, but its `_Depends: 2.1_` holds.
+        let p = chain(&[
+            ("1", false, true, &[]),
+            ("2.1", true, false, &[]),
+            ("2.2", true, false, &[]),
+            ("2.3", true, false, &["2.1"]),
+        ]);
+        let (s, _) = schedule(&p);
+        assert_eq!(ready(&s), ["2.1", "2.2"]);
+        assert_eq!(s.tasks[3].blocked_by, ["2.1"]);
+    }
 
     #[test]
     fn classifies_spec_kit_headings() {

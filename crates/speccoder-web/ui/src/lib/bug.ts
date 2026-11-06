@@ -2,7 +2,7 @@
 // be recorded, and the command each step equals. Pure, so the page's rules
 // are type-checked with the generated types and decide nothing by wording.
 
-import type { BugReport, BugStage } from "./schema.gen";
+import type { BugReport, BugStage, UnitBug } from "./schema.gen";
 
 /** The stages, in order, as the strip shows them. */
 export const STAGES: { stage: BugStage; label: string }[] = [
@@ -15,7 +15,7 @@ export const STAGES: { stage: BugStage; label: string }[] = [
 ];
 
 /** Where the strip stands for `bug` (`done`: past the last stage). */
-export function at(bug: BugReport | null): number {
+export function at(bug: { stage: BugStage; outcome: BugReport["outcome"] | null } | null): number {
   if (!bug) return 0;
   if (bug.stage === "done") return bug.outcome === "fixed" ? STAGES.length : STAGES.findIndex((s) => s.stage === "reproduce");
   const i = STAGES.findIndex((s) => s.stage === bug.stage);
@@ -56,5 +56,23 @@ export function outcomeWords(b: BugReport): string {
     case "unchanged_not_holding": return "An Unchanged statement does not hold today";
     case "fixed": return b.verdict?.verdict === "verified" ? "Fixed and verified" : "Fixed";
     case "failed": return "The fix did not pass";
+  }
+}
+
+/** What a bug unit's card offers next: run it, confirm its reproductions,
+ *  or nothing once the fix is verified. */
+export function bugStep(b: UnitBug): "run" | "confirm" | null {
+  if (b.outcome === "awaiting_confirmation") return "confirm";
+  if (b.outcome === "fixed" && b.verdict?.verdict === "verified") return null;
+  return "run";
+}
+
+/** A bug unit's state in words, as the card says it. */
+export function unitWords(b: UnitBug): string {
+  switch (b.outcome) {
+    case null: return "Not run yet";
+    case "recorded": return "Recorded — not reproduced yet";
+    case "fixed": return b.verdict?.verdict === "verified" ? "Fixed and verified" : "Fixed — not verified; open it for the verdict";
+    default: return outcomeWords({ outcome: b.outcome, verdict: b.verdict, confirmation: null } as BugReport);
   }
 }

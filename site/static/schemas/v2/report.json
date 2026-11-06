@@ -109,6 +109,17 @@
           "type": "null"
         }
       ]
+    },
+    "bug": {
+      "description": "A unit that is a bug (a Kiro bugfix spec): its bug, which runs as\none and closes the tasks with its verified fix.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UnitBug"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [
@@ -1130,6 +1141,185 @@
         "lapsed",
         "questions",
         "ambiguous"
+      ]
+    },
+    "UnitBug": {
+      "description": "The bug a unit is, as the board shows it.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "`<unit>/<task>`: what the Bug sheet opens.",
+          "type": "string"
+        },
+        "title": {
+          "description": "A short title.",
+          "type": "string"
+        },
+        "stage": {
+          "description": "Where it is (`record` until it has run).",
+          "$ref": "#/$defs/BugStage"
+        },
+        "outcome": {
+          "description": "How it stands; `None` until it has run.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BugOutcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verdict": {
+          "description": "The fix's verdict, once judged.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Verdict"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "stage",
+        "outcome",
+        "verdict"
+      ]
+    },
+    "BugStage": {
+      "description": "Where the bug is.",
+      "oneOf": [
+        {
+          "description": "The triad is being recorded.",
+          "type": "string",
+          "const": "record"
+        },
+        {
+          "description": "Reproductions are being written and shown to fail.",
+          "type": "string",
+          "const": "reproduce"
+        },
+        {
+          "description": "The reproductions wait for the person's confirmation.",
+          "type": "string",
+          "const": "confirm"
+        },
+        {
+          "description": "The pass-to-pass set is chosen and run.",
+          "type": "string",
+          "const": "unchanged"
+        },
+        {
+          "description": "The fix is attempted and judged.",
+          "type": "string",
+          "const": "fix"
+        },
+        {
+          "description": "The verdict commit.",
+          "type": "string",
+          "const": "ship"
+        },
+        {
+          "description": "Nothing more happens without the person.",
+          "type": "string",
+          "const": "done"
+        }
+      ]
+    },
+    "BugOutcome": {
+      "description": "The bug's outcome; distinct from a task's verdict.",
+      "oneOf": [
+        {
+          "description": "The triad is recorded; nothing reproduced yet.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "Every statement is reproduced; the person confirms.",
+          "type": "string",
+          "const": "awaiting_confirmation"
+        },
+        {
+          "description": "The tries ran out without a reproduction of every statement.",
+          "type": "string",
+          "const": "cannot_reproduce"
+        },
+        {
+          "description": "Every reproduction passed on the untouched code, on every try.",
+          "type": "string",
+          "const": "already_satisfied"
+        },
+        {
+          "description": "An *Unchanged* statement does not hold today.",
+          "type": "string",
+          "const": "unchanged_not_holding"
+        },
+        {
+          "description": "The fix was judged; see the verdict.",
+          "type": "string",
+          "const": "fixed"
+        },
+        {
+          "description": "The fix did not pass.",
+          "type": "string",
+          "const": "failed"
+        }
+      ]
+    },
+    "Verdict": {
+      "description": "How strong the evidence for a task is.",
+      "oneOf": [
+        {
+          "description": "A task-specific check produced evidence, nothing failed, nothing regressed.",
+          "type": "object",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "const": "verified"
+            }
+          },
+          "required": [
+            "verdict"
+          ]
+        },
+        {
+          "description": "Nothing failed or regressed, but nothing task-specific was established.",
+          "type": "object",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "const": "regression_only"
+            }
+          },
+          "required": [
+            "verdict"
+          ]
+        },
+        {
+          "description": "Something failed or regressed.",
+          "type": "object",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "const": "failed"
+            },
+            "reasons": {
+              "description": "One line per reason.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "verdict",
+            "reasons"
+          ]
+        }
       ]
     }
   },

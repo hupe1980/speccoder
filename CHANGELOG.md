@@ -12,8 +12,9 @@ adheres to [Semantic Versioning](https://semver.org/).
   `.kiro/specs/<name>/`. Each requirement's acceptance criteria become
   tests before any code; a task is ticked only when the criteria its
   `_Requirements:_` cites pass; a parent is ticked with its last required
-  sub-task; optional `[ ]*` tasks are left alone; Kiro's own ticks show as
-  ticked without evidence. In the app, Spec & Plan shows the
+  sub-task; optional `[ ]*` tasks are left alone; cc-sdd's `(P)` tasks
+  run side by side in parallel lanes; Kiro's own ticks show as ticked
+  without evidence. In the app, Spec & Plan shows the
   requirements as a living spec: each criterion with its state and the
   task that turned it. Steering is read as Kiro includes it (`fileMatch`
   and `auto` with their condition stated, `#[[file:…]]` inlined); cc-sdd
@@ -22,7 +23,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 - **Kiro bugfix specs** run as a bug: one reproduction per Expected
   statement, red on the untouched code, your one confirmation, the
   Unchanged set held, the revert rejected; the verified fix ticks the
-  spec's `tasks.md` in its commit
+  spec's `tasks.md` in its commit. The board shows it as one bug card
+  with its stage and next step
   ([Bugfix specs](https://hupe1980.github.io/speccoder/docs/kiro/#bugfix-specs)).
 
 ### Changed

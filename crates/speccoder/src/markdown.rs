@@ -296,6 +296,7 @@ mod tests {
 
     fn report(n: usize) -> StatusReport {
         StatusReport {
+            bug: None,
             stories: Vec::new(),
             issues: Vec::new(),
             feature: "001-x".to_owned(),

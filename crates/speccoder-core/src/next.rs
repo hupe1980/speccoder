@@ -136,6 +136,8 @@ pub enum Outcome {
         open_approvals: usize,
         /// Ticks proven against an earlier wording of what they cite.
         stale: usize,
+        /// The unit is a bug: it runs as one.
+        bug: bool,
     },
     /// `approvals` listed.
     ApprovalsListed {
@@ -348,6 +350,12 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
             "speccoder run --converge".to_owned(),
             "the spec changed: re-check the code against it as it is now",
         )],
+        O::ReportShown {
+            ready, bug: true, ..
+        } if *ready > 0 => vec![(
+            "speccoder run".to_owned(),
+            "run the bug: reproduce it, confirm once, fix it",
+        )],
         O::ReportShown { ready, .. } if *ready > 0 => {
             vec![("speccoder run".to_owned(), "continue with the ready tasks")]
         }
@@ -515,6 +523,7 @@ mod tests {
             ),
             (
                 Outcome::ReportShown {
+                    bug: false,
                     ready: 1,
                     open_approvals: 1,
                     stale: 1,
@@ -523,6 +532,7 @@ mod tests {
             ),
             (
                 Outcome::ReportShown {
+                    bug: false,
                     ready: 1,
                     open_approvals: 0,
                     stale: 0,
@@ -531,6 +541,7 @@ mod tests {
             ),
             (
                 Outcome::ReportShown {
+                    bug: false,
                     ready: 0,
                     open_approvals: 0,
                     stale: 2,
@@ -539,6 +550,7 @@ mod tests {
             ),
             (
                 Outcome::ReportShown {
+                    bug: false,
                     ready: 0,
                     open_approvals: 0,
                     stale: 0,

@@ -1313,3 +1313,36 @@ pub fn held_out_warning(bug: &BugReport) -> Option<String> {
         format!("no held-out variant could be kept ({why}): the fix cannot be verified until one is — confirming now only leads to a failed verdict")
     })
 }
+
+/// The bug a unit is (the format's bug spec), as the report shows it: the
+/// one speccoder keeps, or one not run yet.
+#[must_use]
+pub fn of_unit(
+    snapshot: &speccoder_core::snapshot::ProjectSnapshot,
+) -> Option<speccoder_core::UnitBug> {
+    of_unit_in(snapshot, crate::worktree::state_dir().as_deref())
+}
+
+/// [`of_unit`] with speccoder's state in `state`.
+#[must_use]
+pub fn of_unit_in(
+    snapshot: &speccoder_core::snapshot::ProjectSnapshot,
+    state: Option<&Path>,
+) -> Option<speccoder_core::UnitBug> {
+    let format = crate::format::of(snapshot);
+    let slug = format.bug_spec(snapshot)?;
+    let root = Path::new(&snapshot.root);
+    let (_, unit) = format.bug_dir(&format.bug_unit(root).ok()?, &slug)?;
+    let task = format!("bug:{slug}");
+    let kept =
+        state.and_then(|s| state::load(&crate::worktree::project_state_dir(s, root), &unit, &task));
+    Some(speccoder_core::UnitBug {
+        key: format!("{unit}/{task}"),
+        title: kept
+            .as_ref()
+            .map_or_else(|| speccoder_core::words::titled(&slug), |b| b.title.clone()),
+        stage: kept.as_ref().map_or(Stage::Record, |b| b.stage),
+        verdict: kept.as_ref().and_then(|b| b.verdict.clone()),
+        outcome: kept.map(|b| b.outcome),
+    })
+}

@@ -57,7 +57,7 @@ pub use command::{
     ReviewItem, ReviewReport, ReviewTotals, RiskReason, RunReport, SCHEMA_VERSION, SchemaName,
     SchemaReport, SetAside, ShapeReport, SignerView, SkillEntry, SkillRunReport, SkillsReport,
     SpecVersion, StatusReport, StatusTotals, TaskCost, TaskStatus, TickState, TraceRow, UiReport,
-    Unverified, Usage, VerifyOutcome, VerifyReason, WorkingRun, WorktreeReport,
+    UnitBug, Unverified, Usage, VerifyOutcome, VerifyReason, WorkingRun, WorktreeReport,
 };
 pub use command::{
     ChainStep, ChainStop, PlanCheck, PlanningChainReport, Readiness, SampleRecording, SampleReport,

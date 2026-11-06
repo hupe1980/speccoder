@@ -1,6 +1,6 @@
 # speccoder-kiro
 
-The [Kiro](https://kiro.dev) adapter of [speccoder](https://github.com/hupe1980/speccoder): finds a Kiro (or [cc-sdd](https://github.com/gotalab/cc-sdd)) project and its specs in `.kiro/specs/<name>/`, reads a spec's requirements with their numbered EARS acceptance criteria, a bugfix spec's Current/Expected/Unchanged statements, its `tasks.md` line by line (parents, optional `[ ]*` tasks, `_Requirements:_`, cc-sdd's `(P)` and `_Depends:_`), cc-sdd's approvals and the steering as Kiro includes it. Read-only except the engine's sanctioned writes: a tick, closing a fixed bug's task list, the convergence append.
+The [Kiro](https://kiro.dev) adapter of [speccoder](https://github.com/hupe1980/speccoder): finds a Kiro (or [cc-sdd](https://github.com/gotalab/cc-sdd)) project and its specs in `.kiro/specs/<name>/`, reads a spec's requirements with their numbered EARS acceptance criteria, a bugfix spec's Current/Expected/Unchanged statements, its `tasks.md` line by line (parents, optional `[ ]*` and `7.9*` tasks, `_Requirements:_`, cc-sdd's `(P)` and `_Depends:_`), cc-sdd's approvals and the steering as Kiro includes it. Read-only except the engine's sanctioned writes: a tick, closing a fixed bug's task list, the convergence append.
 
 Entry points:
 

@@ -7748,6 +7748,17 @@
               "type": "null"
             }
           ]
+        },
+        "bug": {
+          "description": "A unit that is a bug (a Kiro bugfix spec): its bug, which runs as\none and closes the tasks with its verified fix.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitBug"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -8460,6 +8471,53 @@
         "lapsed",
         "questions",
         "ambiguous"
+      ]
+    },
+    "UnitBug": {
+      "description": "The bug a unit is, as the board shows it.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "`<unit>/<task>`: what the Bug sheet opens.",
+          "type": "string"
+        },
+        "title": {
+          "description": "A short title.",
+          "type": "string"
+        },
+        "stage": {
+          "description": "Where it is (`record` until it has run).",
+          "$ref": "#/$defs/BugStage"
+        },
+        "outcome": {
+          "description": "How it stands; `None` until it has run.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BugOutcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "verdict": {
+          "description": "The fix's verdict, once judged.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Verdict"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "stage",
+        "outcome",
+        "verdict"
       ]
     },
     "ApprovalsReport": {

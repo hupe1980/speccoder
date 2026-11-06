@@ -27,7 +27,8 @@
   const labels: Record<string, string> = { spec: "Spec", plan: "Plan", tasks: "Tasks", commit: "Commit", run: "Run", review: "Review" };
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
   const totals = $derived<Partial<StatusTotals>>(report?.totals ?? {});
-  const legend = $derived(ORDER.map((k) => ({ k, n: totals[k] ?? 0 })).filter((s) => s.n > 0));
+  // A bug unit runs as one: its tasks are neither ready nor blocked one by one.
+  const legend = $derived(ORDER.map((k) => ({ k, n: totals[k] ?? 0 })).filter((s) => s.n > 0 && !(report?.bug && (s.k === "ready" || s.k === "blocked"))));
   const headline = $derived(primary ? (primary.run?.kind === "skill" ? cap(primary.why) : cap(primary.label)) : "");
   const verb = $derived(
     busy ? "Working…" : primary?.run?.kind === "commit" ? "Commit" : primary?.input ? "Start…" : stops.length ? "Run Anyway" : "Run",

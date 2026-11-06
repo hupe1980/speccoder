@@ -2416,6 +2416,25 @@ pub struct StatusReport {
     /// format has requirement identifiers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review: Option<ReviewTotals>,
+    /// A unit that is a bug (a Kiro bugfix spec): its bug, which runs as
+    /// one and closes the tasks with its verified fix.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bug: Option<UnitBug>,
+}
+
+/// The bug a unit is, as the board shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct UnitBug {
+    /// `<unit>/<task>`: what the Bug sheet opens.
+    pub key: String,
+    /// A short title.
+    pub title: String,
+    /// Where it is (`record` until it has run).
+    pub stage: crate::bug::Stage,
+    /// How it stands; `None` until it has run.
+    pub outcome: Option<crate::bug::Outcome>,
+    /// The fix's verdict, once judged.
+    pub verdict: Option<crate::verify::Verdict>,
 }
 
 /// One task and its evidence.

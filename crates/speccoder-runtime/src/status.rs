@@ -336,6 +336,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             ),
         )
         .with_data(CommandData::Report(Box::new(StatusReport {
+            bug: crate::bug::of_unit(snapshot),
             stories: Vec::new(),
             review: crate::review::totals_of(
                 Path::new(&snapshot.root),
@@ -529,15 +530,21 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     .filter(|(n, _)| *n > 0)
     .map(|(n, w)| format!("{n} {w}"))
     .collect();
-    let open: Vec<String> = [
-        (totals.ready, "ready"),
-        (totals.blocked, "blocked"),
-        (totals.skipped, "skipped"),
-    ]
-    .iter()
-    .filter(|(n, _)| *n > 0)
-    .map(|(n, w)| format!("{n} {w}"))
-    .collect();
+    // A bug's tasks close together with its fix: none is ready on its own.
+    let bug = crate::bug::of_unit(snapshot);
+    let open: Vec<String> = if bug.is_some() {
+        Vec::new()
+    } else {
+        [
+            (totals.ready, "ready"),
+            (totals.blocked, "blocked"),
+            (totals.skipped, "skipped"),
+        ]
+        .iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, w)| format!("{n} {w}"))
+        .collect()
+    };
     // A task list without a task: nothing is done, the tasks are to write.
     let mut message = if tasks.is_empty() {
         format!(
@@ -636,13 +643,15 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             t.state.as_str(),
             "verified" | "regression_only" | "attested" | "ticked_without_evidence" | "skipped"
         );
-        if open {
+        // A bug's tasks are judged by the bug's verdict, not one by one.
+        if open && bug.is_none() {
             t.judged = shares.get(&t.id).cloned();
         }
     }
     CommandResult::new("report", CommandStatus::Ok, &message).with_data(CommandData::Report(
         Box::new(StatusReport {
-            stories,
+            stories: if bug.is_some() { Vec::new() } else { stories },
+            bug,
             review: crate::review::totals_of(root, format, &name, &f.feature.dir),
             issues: issues_of(root, Some(&name)),
             feature: name,

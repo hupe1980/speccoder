@@ -7,12 +7,15 @@
   import type { Action, Task } from "../lib/types";
   import { neverRan, regressionLabel } from "../lib/evidence";
   import { judgedChip, judgedWords, storyLine } from "../lib/story";
+  import BugCard from "./BugCard.svelte";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
   let expanded = $state<Record<string, boolean>>({});
   const LIMIT = 5;
 
   const tasks = $derived<Task[]>(app.report?.data?.tasks ?? []);
+  // A unit that is a bug runs as one: one card, no task lanes.
+  const bug = $derived(app.report?.data?.bug ?? null);
   // Each open story's scenarios: verified by a tick, or left for its checkpoint.
   const stories = $derived((app.report?.data?.stories ?? []).filter((s) => !s.proven && !s.before_oracle));
   const waitingFor = $derived(new Set(app.approvals.map((p) => p.task)));
@@ -78,7 +81,9 @@
   }
 </script>
 
-{#if tasks.length === 0}
+{#if bug}
+  <BugCard {bug} {tasks} />
+{:else if tasks.length === 0}
   <div class="empty">
     <Icon name="list" size={28} />
     <p><strong>No tasks yet</strong></p>

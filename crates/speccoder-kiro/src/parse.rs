@@ -131,7 +131,8 @@ pub struct Tasks {
     pub optional: Vec<String>,
 }
 
-/// One checkbox line: `- [ ]`, `[x]`, `[X]`, an optional `*`, a number.
+/// One checkbox line: `- [ ]`, `[x]`, `[X]`, an optional `*` (after the
+/// box or the number), a number.
 struct Line {
     done: bool,
     open: bool,
@@ -159,6 +160,8 @@ fn checkbox(line: &str) -> Option<Line> {
         .chars()
         .take_while(|c| c.is_ascii_digit() || *c == '.')
         .collect();
+    // cc-sdd also writes the star after the number: `- [ ] 7.9* (P) …`.
+    let optional = optional || after[id.len()..].starts_with('*');
     let id = id.trim_end_matches('.').to_owned();
     if id.is_empty() || !id.starts_with(|c: char| c.is_ascii_digit()) {
         return None;
@@ -665,6 +668,17 @@ mod tests {
             t.parents.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
             ["1", "2"]
         );
+    }
+
+    #[test]
+    fn a_star_after_the_number_is_optional_too() {
+        let (t, _) = tasks(
+            "tasks.md",
+            "- [ ] 7.8 E2E tests\n- [ ] 7.9* (P) Performance tests\n",
+        );
+        let ids: Vec<&str> = t.parsed.tasks.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids, ["7.8"]);
+        assert_eq!(t.optional, ["7.9"]);
     }
 
     #[test]

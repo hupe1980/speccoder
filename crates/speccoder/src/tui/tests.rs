@@ -39,6 +39,7 @@ fn snapshot() -> Snapshot {
     blocked.blocked_by = vec!["T002".to_owned()];
     Snapshot {
         report: Some(StatusReport {
+            bug: None,
             stories: Vec::new(),
             review: None,
             issues: Vec::new(),
