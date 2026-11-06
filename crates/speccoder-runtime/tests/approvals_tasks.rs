@@ -772,7 +772,7 @@ fn a_run_in_another_process_leaves_the_journal_readable() {
         state.path(),
         speccoder_core::actions::Via::Terminal,
     );
-    assert!(started.elapsed() < std::time::Duration::from_millis(500));
+    timed("the refused decision", started);
     assert_ne!(approve.status(), CommandStatus::Ok, "{}", approve.message());
     assert!(
         approve.message().contains("another speccoder"),
