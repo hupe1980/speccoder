@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
-use super::Carried;
+use super::Started;
 use crate::pipeline::*;
 use crate::{approvals, external, git, mutation, progress, resume, sandbox, substrate, tools, verify, worktree};
 
@@ -29,7 +29,6 @@ pub(super) struct Opened {
     pub(super) marker_path: std::path::PathBuf,
     pub(super) autopilot: bool,
     pub(super) interrupted: Option<resume::Marker>,
-    pub(super) marker_guard: resume::Guard,
     pub(super) resumed_from: Option<(Option<speccoder_core::stage::Stage>, Option<String>)>,
     pub(super) format: &'static dyn crate::format::Adapter,
     pub(super) snap: speccoder_core::snapshot::ProjectSnapshot,
@@ -68,7 +67,7 @@ pub(super) fn task(
     state: &Path,
     secret: Option<&str>,
     options: &RunOptions,
-) -> Result<(Opened, Carried), Box<CommandResult>> {
+) -> Result<(Opened, Started), Box<CommandResult>> {
     let approver = options.approver.clone();
     use speccoder_core::snapshot::TaskState;
 
@@ -646,7 +645,6 @@ pub(super) fn task(
             marker_path,
             autopilot,
             interrupted,
-            marker_guard,
             resumed_from,
             format,
             snap,
@@ -675,7 +673,8 @@ pub(super) fn task(
             decisions,
             task_grants,
         },
-        Carried {
+        Started {
+            marker_guard,
             head_now,
             set_aside,
         },

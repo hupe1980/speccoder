@@ -8,7 +8,7 @@ use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
 use crate::pipeline::*;
 use crate::{
-    approvals, attempts, external, git, integrity, mcp, mutation, progress, resume, sandbox,
+    approvals, attempts, external, integrity, mcp, mutation, progress, resume, sandbox,
     substrate, tools, verify, worktree,
 };
 
@@ -112,6 +112,8 @@ pub fn run_native_bug(
 /// the task again as code (the planning attempt saved and undone, its
 /// saved outcome the reason it is code from now on).
 mod open;
+mod ready;
+mod tests;
 
 /// A phase's result, or the run's end with what a person sees.
 macro_rules! ok {
@@ -123,14 +125,54 @@ macro_rules! ok {
     };
 }
 
+/// What opening the task started that later phases carry on.
+pub(super) struct Started {
+    /// Removes the resume marker when the run ends, unless kept.
+    pub(super) marker_guard: crate::resume::Guard,
+    /// The worktree's head an interrupted attempt is resumed at.
+    pub(super) head_now: String,
+    /// Leftovers set aside before the run, named in its report.
+    pub(super) set_aside: Option<String>,
+}
+
 /// What one phase sets and a later phase changes: handed on explicitly,
 /// changed only by a phase that takes it mutably.
 pub(super) struct Carried {
     /// The worktree's head an interrupted attempt is resumed at (moved by
     /// the story's oracle commit).
     pub(super) head_now: String,
+    /// Removes the resume marker when the run ends, unless kept.
+    pub(super) marker_guard: crate::resume::Guard,
     /// Leftovers set aside before the run, named in its report.
     pub(super) set_aside: Option<String>,
+    /// The checks on the tree the attempt starts from (re-run after the
+    /// story's oracle is committed).
+    pub(super) baseline: speccoder_core::verify::VerifyReport,
+    /// What the run tells a person, gathered by every phase.
+    pub(super) notices: Vec<String>,
+}
+
+/// An early end recorded as the task run's end (`TaskFinished`), redacted.
+pub(super) fn ended(
+    live: &dyn progress::Progress,
+    task: &str,
+    secret: Option<&str>,
+    status: CommandStatus,
+    m: String,
+) -> CommandResult {
+    live.event(&progress::Event::TaskFinished {
+        task: task.to_owned(),
+        outcome: "error".to_owned(),
+        message: redact(&m, secret),
+        run: None,
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        usd: None,
+        regression: None,
+    });
+    CommandResult::new("run", status, &redact(&m, secret))
 }
 
 pub(crate) fn run_task(
@@ -185,7 +227,7 @@ fn run_task_once(
             run_task(path, feature, task, state, Arc::clone(&provider), secret, o)
         });
     }
-    let (opened, carried) = ok!(open::task(path, feature, task, state, secret, options));
+    let (opened, started) = ok!(open::task(path, feature, task, state, secret, options));
     let open::Opened {
         approver,
         s,
@@ -197,1139 +239,107 @@ fn run_task_once(
         project,
         wt_root,
         tmp,
-        elsewhere,
         marker_path,
         autopilot,
         interrupted,
-        marker_guard,
-        resumed_from,
         format,
         snap,
         checklists_overridden,
         parsed_task,
         tasks_file,
-        bundle,
         acceptance_story,
-        story_task,
         config_text,
         run_config,
         executor,
         sandbox_config,
         runner,
-        sandbox_notice,
         mutation_config,
         worktree_config,
         check_argvs,
-        unit_dir,
         planning,
         policy,
         contained,
-        contained_notice,
         wt_root_canonical,
         this_run,
         decisions,
-        task_grants,
-    } = opened;
-    let Carried {
-        mut head_now,
-        set_aside,
-    } = carried;
-    let refuse =
-        |status: CommandStatus, m: String| CommandResult::new("run", status, &redact(&m, secret));
-    // From here on, an early end is recorded as the task run's end.
-    let fail = |status: CommandStatus, m: String| {
-        live.event(&progress::Event::TaskFinished {
-            task: task.to_owned(),
-            outcome: "error".to_owned(),
-            message: redact(&m, secret),
-            run: None,
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-            usd: None,
-            regression: None,
-        });
-        refuse(status, m)
-    };
-    // 4. Prepare: the git-ignored files `[worktree] include` names copied
-    //    from the checkout, and the worktree's dependency folders (Node,
-    //    uv) installed, once per lockfile. In place, the checkout has its own.
-    let mut prepare_notes: Vec<String> = Vec::new();
-    // Files copied from the checkout: an external agent's own read of one
-    // cannot be masked, so it is refused one.
-    let mut copied_files: Vec<String> = Vec::new();
-    if options.session.is_none() {
-        match crate::include::copy(
-            &wt_root,
-            &project,
-            Path::new(&s.snapshot.root),
-            &worktree_config.include,
-        ) {
-            Ok(c) => {
-                copied_files.clone_from(&c.files);
-                if !c.now.is_empty() {
-                    prepare_notes.push(format!(
-                        "copied from your checkout ([worktree] include): {}",
-                        c.now.join(", ")
-                    ));
-                }
-                prepare_notes.extend(
-                    c.skipped
-                        .iter()
-                        .map(|n| format!("not copied ([worktree] include): {n}")),
-                );
-                for n in &prepare_notes {
-                    live.event(&progress::Event::Notice { text: n.clone() });
-                }
-            }
-            Err(e) => {
-                return fail(
-                    CommandStatus::ConfigError,
-                    format!("the files [worktree] include names could not be copied: {e}"),
-                )
-                .with_code("PREPARE-FAILED");
-            }
-        }
-    }
-    let prepares =
-        options.session.is_none() && worktree_config.prepare && crate::prepare::needed(&project);
-    if prepares {
-        let began = std::time::Instant::now();
-        stage(
-            &*live,
-            task,
-            Stage::Prepare,
-            StageState::Started,
-            None,
-            None,
-        );
-        let prepared = crate::prepare::prepare(&crate::prepare::Prepare {
-            worktree: &wt_root,
-            project: &project,
-            config: &worktree_config,
-            runner: &runner,
-            state: Some(state),
-        });
-        match prepared {
-            Ok(None) => {}
-            Ok(Some(p)) => {
-                stage(
-                    &*live,
-                    task,
-                    Stage::Prepare,
-                    if p.done.is_empty() {
-                        StageState::Skipped
-                    } else {
-                        StageState::Passed
-                    },
-                    Some(if p.done.is_empty() {
-                        "reused: the lockfiles are unchanged".to_owned()
-                    } else {
-                        p.done.join(", ")
-                    }),
-                    Some(began),
-                );
-            }
-            Err(f) => {
-                stage(
-                    &*live,
-                    task,
-                    Stage::Prepare,
-                    StageState::Failed,
-                    Some(f.message.clone()),
-                    Some(began),
-                );
-                return fail(CommandStatus::ConfigError, f.message)
-                    .with_code("PREPARE-FAILED")
-                    .with_fix(f.fix)
-                    .with_commands(f.commands);
-            }
-        }
-    } else if options.session.is_none() {
-        // Nothing to prepare (any more): the next prepare starts over.
-        crate::prepare::forget(&wt_root);
-    }
-
-    // 4'. Baseline: no verdict without a judge.
-    let began = std::time::Instant::now();
-    stage(
-        &*live,
+        ..
+    } = &opened;
+    let (format, live) = (*format, Arc::clone(live));
+    let (autopilot, contained, checklists_overridden) = (*autopilot, *contained, *checklists_overridden);
+    let (ready, mut carried) = ok!(ready::make(
+        &opened,
+        started,
         task,
-        Stage::Baseline,
-        StageState::Started,
-        None,
-        None,
-    );
-    let mut baseline = match verify::run_checks(&project, Some(verify::config::Tier::Fast), &runner)
-    {
-        Ok(b) => b,
-        Err(e) => {
-            stage(
-                &*live,
-                task,
-                Stage::Baseline,
-                StageState::Failed,
-                None,
-                Some(began),
-            );
-            return fail(CommandStatus::ConfigError, format!("baseline: {e}"));
-        }
-    };
-    // A check that cannot run on the untouched code — it failed without
-    // running a test: not found, a build or configuration error, a file the
-    // worktree lacks because it was never committed — can never judge the
-    // task. Stop before any model call rather than spend attempts on it.
-    // A story's red oracle may stop the build until its tasks land.
-    if !options.allow_failing_baseline
-        && !super::story::open_oracle(&wt_root, &snap, format)
-        && let Some((c, why)) = baseline
-            .checks
-            .iter()
-            .find_map(|c| broken(c).map(|w| (c, w)))
-    {
-        stage(
-            &*live,
-            task,
-            Stage::Baseline,
-            StageState::Failed,
-            Some(format!("`{}` cannot run", c.name)),
-            Some(began),
-        );
-        // Configuration the checkout never committed is the likely cause,
-        // and one speccoder can fix.
-        let checkout = std::path::Path::new(&s.snapshot.root);
-        if let Some(remedy) = crate::code::setup_remedy(checkout, Some(&feature_name)) {
-            return fail(
-                CommandStatus::GitPrecondition,
-                format!(
-                    "check `{}` cannot run in the worktree: your checkout has not committed its setup — {why}",
-                    c.name
-                ),
-            )
-            .with_code("SETUP-INCOMPLETE")
-            .with_fix(vec!["speccoder fix".to_owned(), remedy.command.clone()])
-            .with_remedy(Some(remedy));
-        }
-        return fail(
-            CommandStatus::ConfigError,
-            // A cause speccoder recognised comes with its fix; else the
-            // general one.
-            if why.contains("git add") || why.contains("--allow-failing-baseline") {
-                format!(
-                    "check `{}` cannot run on the untouched code, so it could never judge {task}: {why}",
-                    c.name
-                )
-            } else {
-                format!(
-                    "check `{}` cannot run on the untouched code, so it could never judge {task}: {why} — fix the check (a file it needs may be uncommitted: `git status`), or run with --allow-failing-baseline",
-                    c.name
-                )
-            },
-        )
-        .with_code("CHECK-BROKEN");
-    }
-    // Failing tests at the baseline are reported, not blamed: the stage held.
-    let failing = baseline
-        .checks
-        .iter()
-        .filter(|c| c.status.is_failure())
-        .count();
-    stage(
-        &*live,
-        task,
-        Stage::Baseline,
-        StageState::Passed,
-        (failing > 0).then(|| format!("{failing} check(s) already failing")),
-        Some(began),
-    );
-
-    let rt = match tokio_runtime() {
-        Ok(rt) => rt,
-        Err(e) => return fail(CommandStatus::RunFailed, e),
-    };
-    let bundle_value = match serde_json::to_value(&bundle) {
-        Ok(v) => v,
-        Err(e) => return fail(CommandStatus::Error, e.to_string()),
-    };
-    // The repository's instructions for agents, from the tree the
-    // attempt starts in: for speccoder's own calls (the attempt, the test
-    // authors); an external agent reads its own files.
-    let instructions = crate::instructions::collect(
-        &wt_root,
-        &project,
-        &speccoder_core::scope::named_paths(&bundle.task.title),
-        &run_config.instructions,
-    );
+        state,
+        secret,
+        options,
+        Arc::clone(&provider),
+    ));
+    let ready::Ready {
+        rt,
+        bundle_value,
+        instructions,
+        connected,
+        present,
+        plane,
+        start,
+        copied_files,
+        prepares,
+        ..
+    } = &ready;
+    let prepares = *prepares;
     let attempt_instructions: &[crate::instructions::Instruction] = if executor.is_none() {
-        &instructions
+        instructions
     } else {
         &[]
     };
+    // From here on, an early end is recorded as the task run's end.
+    let fail = |status: CommandStatus, m: String| ended(&*live, task, secret, status, m);
 
-    // MCP servers, started in the worktree for this task's attempts.
-    let servers = match mcp::parse(&config_text) {
-        Ok(s) => s,
-        Err(e) => {
-            return fail(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
-                .with_code("CONFIG-INVALID");
-        }
-    };
-    let mut connected = if servers.is_empty() {
-        mcp::Connected::default()
-    } else {
-        live.event(&progress::Event::Notice {
-            text: format!("starting {} MCP server(s)", servers.len()),
-        });
-        rt.block_on(mcp::connect(&servers, &project, &runner))
-    };
-    // An allowed tool its server changed since review needs approval again.
-    let approved_tools: Vec<String> = task_grants
-        .iter()
-        .filter_map(|g| g.tool_name().map(str::to_owned))
-        .collect();
-    let pinned = mcp::pin_reviewed(&s.plane_dir, &mut connected.tools, &approved_tools);
-    connected.notices.extend(pinned);
-
-    // One plane for the whole task. Its tool server enforces denials; the
-    // frozen-test approvals are the skill's, from its journaled input.
-    let tools_server = match tools::WorkspaceTools::new(&wt_root, policy.clone()) {
-        Ok(t) => std::sync::Arc::new(t.with_runner(runner.clone())),
-        Err(e) => return fail(CommandStatus::Error, e.to_string()),
-    };
-    // Calls past their deadline are denied as expired before anything
-    // resumes; a run that cannot tell does not start.
-    let swept =
-        match crate::approvals::expire_due(&plane_dir, agentplane::core::Timestamp::now_utc()) {
-            Ok(p) => p,
-            Err(e) => {
-                return fail(
-                    CommandStatus::RunFailed,
-                    format!("the calls past their deadline could not be denied: {e}"),
-                );
-            }
-        };
-    // What a person is shown about the sandbox, for every call they decide.
-    let present = crate::approvals::PresentContext {
-        root: None,
-        sandbox: runner.is_sandboxed().then(|| {
-            if cfg!(target_os = "macos") {
-                "Seatbelt".to_owned()
-            } else {
-                "Landlock+seccomp".to_owned()
-            }
-        }),
-        network: match sandbox_config.network {
-            sandbox::Network::Off => "none",
-            sandbox::Network::Loopback => "loopback",
-            sandbox::Network::On => "unrestricted",
-        }
-        .to_owned(),
-        file_text: None,
-    };
-    let plane = match rt.block_on(async {
-        substrate::Plane::open_with(
-            &plane_dir,
-            &s.model,
-            provider,
-            Some(tools_server),
-            substrate::Hooks {
-                progress: Some(Arc::clone(&live)),
-                mcp: connected.clients.clone(),
-                mcp_tools: connected.tools.clone(),
-                format: Some(format),
-                present: present.clone(),
-            },
-        )
-    }) {
-        Ok(p) => p,
-        Err(e) => return fail(CommandStatus::RunFailed, e.0),
-    };
-    let mut notices: Vec<String> = elsewhere
-        .replaced_journal
-        .iter()
-        .chain(swept.iter())
-        .chain(plane.replaced_journal.iter())
-        .map(|p| {
-            format!(
-                "the journal could not be read by this build and was moved to {}; past runs stay in git",
-                p.display()
-            )
-        })
-        .chain(connected.notices.iter().cloned())
-        .chain(sandbox_notice.clone())
-        .chain(contained_notice.clone())
-        .chain(prepare_notes.iter().cloned())
-        .chain(resumed_from.as_ref().map(|(stage, last_call)| {
-            format!(
-                "Resuming — {task} was interrupted during {}{}; finished calls will not repeat.",
-                stage.map_or("a run", speccoder_core::stage::Stage::name),
-                last_call
-                    .as_ref()
-                    .map(|c| format!(" ({c})"))
-                    .unwrap_or_default()
-            )
-        }))
-        .collect();
-
-    // A Convergence task is the converge model's claim that a gap exists;
-    // it changes no code until a failing test demonstrates the gap.
-    let demand_red =
-        run_config.acceptance && planning.is_none() && format.is_convergence(&bundle.task.phase);
-    // Where this run started: an attempt that does not pass is undone to here.
-    // Where an attempt that does not pass is undone to: the tree the task
-    // started from. A resumed attempt (interrupted, or waiting for a
-    // person) left its own writes in the tree, so its start is the branch
-    // tip it began at — a task always starts from a clean tip.
-    let start = match &interrupted {
-        Some(_) => match git::Git::at(&wt_root).line(&["rev-parse", "HEAD^{tree}"]) {
-            Ok(tree) => worktree::Checkpoint(tree),
-            Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
-        },
-        None => match worktree::checkpoint(&wt_root, &tmp) {
-            Ok(c) => c,
-            Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
-        },
-    };
-
-    let began = std::time::Instant::now();
-    // 4b. Acceptance tests derived from the spec, written before the
-    //     attempt so they are frozen, and required to be red now.
-    // 4a. A bug task: reproduce (and the person's confirmation) before
-    //     anything else; once confirmed, its reproductions are the visible set.
-    let bug_ctx = super::bug::Ctx {
-        rt: &rt,
-        plane: &plane,
-        project: &project,
-        wt_root: &wt_root,
-        wt_path: &wt_path,
-        tmp: &tmp,
-        policy: &policy,
-        runner: &runner,
-        state: &s.plane_dir,
-        feature: &feature_name,
+    let tests = ok!(tests::first(
+        &opened,
+        &ready,
+        &mut carried,
         task,
-        bundle: &bundle_value,
-        instructions: &instructions,
-        live: &*live,
-        approver: approver.as_deref(),
-        held_out: run_config.held_out,
-        max_tries: run_config.reproduce_tries,
-        bug_test: run_config.bug_test.as_deref(),
-        start: &start,
-    };
-    let mut bug_fix = match super::bug::phase(&s.plane_dir, &feature_name, task, &project, format) {
-        Err(e) => return fail(CommandStatus::NeedsHuman, e),
-        Ok(None) => None,
-        Ok(Some(super::bug::Phase::Fix(f))) => Some(*f),
-        Ok(Some(super::bug::Phase::Reproduce(b))) if interrupted.is_none() => {
-            match super::bug::reproduce(&bug_ctx, *b) {
-                Ok(f) => Some(f),
-                Err(stop) => return *stop,
-            }
-        }
-        Ok(Some(super::bug::Phase::Reproduce(_))) => None,
-    };
-    let bug_candidate = bug_fix.as_ref().and_then(|f| {
-        f.bug.candidate.clone().and_then(|c| {
-            crate::bug::state::extra(&s.plane_dir, &f.bug.unit, &f.bug.task)
-                .candidate_patch
-                .map(|d| (d, c))
-        })
-    });
-    // The test layout, detected from the checkout: a fact for the
-    // implementer and every test author, never a judge input.
-    let test_layout = crate::layout::detect(&project, &check_argvs);
-    let test_layout_text = test_layout.text();
-    let story_scenarios = match &bug_fix {
-        Some(f) => super::bug::scenarios(&f.bug),
-        None => format.scenarios(&snap, story_task.as_deref().unwrap_or(task)),
-    };
-    // What judges this task — decided by code from the plan, never by a
-    // test author's choice (speccoder_core::story): a task of a story by
-    // the progress it makes on the story's oracle; a task outside any
-    // story by the scenarios it cites (a convergence gap). A bug's
-    // reproductions judge a bug.
-    let rules = format.rules().judged;
-    let whole_unit = format.kind() == speccoder_core::spec::FormatKind::Openspec;
-    // A task outside any story citing scenarios of one story (a
-    // convergence gap): judged by that story's oracle — each scenario has
-    // one test, never a second the task's own author would write.
-    let linked_story: Option<(crate::format::OracleRequirement, Vec<String>)> = if bug_fix.is_some()
-        || acceptance_story.is_some()
-        || whole_unit
-        || parsed_task.as_ref().is_none_or(|t| t.story.is_some())
-    {
-        None
-    } else {
-        parsed_task.as_ref().and_then(|t| {
-            super::acceptance::linked_story(
-                t,
-                &story_scenarios,
-                &unit_dir,
-                &rules,
-                &format.oracle_requirements(&snap),
-            )
-        })
-    };
-    let story_scenarios = linked_story
-        .as_ref()
-        .map_or(story_scenarios, |(r, _)| r.scenarios.clone());
-    // The story it is judged in: its label, the story a person had its
-    // acceptance written at (`acceptance at`), or the whole unit (OpenSpec).
-    let story_key: Option<String> = if bug_fix.is_some() || story_scenarios.is_empty() {
-        None
-    } else {
-        acceptance_story
-            .clone()
-            .or_else(|| parsed_task.as_ref().and_then(|t| t.story.clone()))
-            .or_else(|| whole_unit.then(|| feature_name.clone()))
-            .or_else(|| linked_story.as_ref().map(|(r, _)| r.key.clone()))
-    };
-    let parsed_tasks = snap.feature.as_ref().and_then(|f| f.tasks.as_ref());
-    let story_members: Vec<&speccoder_core::snapshot::Task> = match (&story_key, parsed_tasks) {
-        (Some(key), Some(pt)) => pt
-            .tasks
-            .iter()
-            .filter(|t| whole_unit || t.story.as_deref() == Some(key.as_str()))
-            .collect(),
-        _ => Vec::new(),
-    };
-    let judged_by: Option<speccoder_core::story::Judged> = if bug_fix.is_some() {
-        None
-    } else if let Some((_, links)) = &linked_story {
-        Some(speccoder_core::story::Judged::Linked {
-            scenarios: links.clone(),
-        })
-    } else if story_key.is_some() {
-        let ids: Vec<String> = story_scenarios.iter().map(|s| s.id.clone()).collect();
-        let st = super::story::story_tasks(&story_members, &unit_dir, &rules);
-        speccoder_core::story::judged(&st, task, &ids).or_else(|| {
-            acceptance_story
-                .is_some()
-                .then_some(speccoder_core::story::Judged::Progress)
-        })
-    } else {
-        parsed_task
-            .as_ref()
-            .and_then(|t| super::acceptance::outside_story(t, &story_scenarios, &unit_dir, &rules))
-    };
-    // A task of a story is judged by its story's oracle: no acceptance
-    // tests of its own. Per-task tests remain outside stories.
-    let in_story =
-        story_key.is_some() && judged_by.is_some() && run_config.acceptance && planning.is_none();
-    let scenarios: Vec<speccoder_core::spec::ScenarioRef> = match &judged_by {
-        Some(speccoder_core::story::Judged::Linked { scenarios: l }) if story_key.is_none() => {
-            story_scenarios
-                .iter()
-                .filter(|s| l.contains(&s.id))
-                .cloned()
-                .collect()
-        }
-        _ => story_scenarios.clone(),
-    };
-    // A requirement's oracle frozen at review: reused by the
-    // first task citing its scenarios while its wording is unchanged.
-    let mut review_frozen: Option<(speccoder_core::acceptance::PreFrozenAcceptance, String)> = None;
-    let mut review_reuse = None;
-    // 5a. The story's oracle: written once, through the product, before
-    //     the story's first code task implements anything — committed on
-    //     the unit branch and frozen. Every task of the story is judged by
-    //     the progress it makes on it.
-    let mut story_oracle: Option<super::story::StoryOracle> = None;
-    // What the implementer is told of the story's oracle.
-    let mut oracle_note = serde_json::Value::Null;
-    // The author found nothing testable in the story: judged by its checks.
-    let mut oracle_empty = false;
-    let mut before_run = super::story::Run::default();
-    // What writing the story's oracle cost in this run: the task's too.
-    let mut oracle_spent: Option<serde_json::Value> = None;
-    if in_story && let Some(key) = story_key.as_deref() {
-        stage(&*live, task, Stage::Red, StageState::Started, None, None);
-        match super::story::ensure(&super::story::Ensure {
-            key,
-            scenarios: &story_scenarios,
-            feature: &feature_name,
-            project: &project,
-            wt_root: &wt_root,
-            state,
-            // A story's oracle, rulings and sealed sets are the project's,
-            // never a lane's.
-            plane_dir: &s.plane_dir,
-            runner: &runner,
-            rt: &rt,
-            plane: &plane,
-            options,
-            format,
-            snapshot: &snap,
-            fresh: options.fresh_acceptance,
-            resuming: interrupted.is_some(),
-        }) {
-            Ok((oracle, wrote, said)) => {
-                notices.extend(said);
-                oracle_spent.clone_from(&oracle.usage);
-                if wrote {
-                    notices.push(format!(
-                        "{key}'s oracle: {} test(s) for {} scenario(s), committed {}",
-                        oracle.tests.len(),
-                        oracle.scenarios.len(),
-                        oracle.commit.get(..7).unwrap_or(&oracle.commit)
-                    ));
-                    // The attempt starts on the oracle's commit: a resume
-                    // marker names it.
-                    head_now = git::Git::at(&wt_root)
-                        .line(&["rev-parse", "HEAD"])
-                        .unwrap_or_default();
-                    // The baseline is the tree the attempt starts from: with
-                    // the oracle's red tests in it.
-                    match verify::run_checks(&project, Some(verify::config::Tier::Fast), &runner) {
-                        Ok(b) => baseline = b,
-                        Err(e) => {
-                            return fail(CommandStatus::ConfigError, format!("baseline: {e}"));
-                        }
-                    }
-                }
-                // A resumed attempt is judged against the tree it started
-                // from, as recorded — never its own changed tree.
-                before_run = interrupted
-                    .as_ref()
-                    .and_then(|m| m.story_before.clone())
-                    .and_then(|v| serde_json::from_value(v).ok())
-                    .unwrap_or_else(|| super::story::run(&project, &oracle, &runner));
-                // The implementer is told the story's red scenarios, what
-                // they must hold, which this task must turn, and how to
-                // report a test that contradicts the spec.
-                if !oracle.tests.is_empty() {
-                    oracle_note = serde_json::json!({
-                        "red": oracle
-                            .scenarios
-                            .iter()
-                            .filter(|s| {
-                                before_run.states.get(&s.id)
-                                    != Some(&speccoder_core::story::ScenarioState::Green)
-                                    && !oracle.untestable.contains_key(&s.id)
-                            })
-                            .map(|s| serde_json::json!({
-                                "id": s.id,
-                                "contract": oracle.contracts.get(&s.id),
-                                "tests": oracle
-                                    .tests
-                                    .iter()
-                                    .filter(|t| t.scenarios.contains(&s.id))
-                                    .map(|t| t.path.clone())
-                                    .collect::<Vec<_>>(),
-                            }))
-                            .collect::<Vec<_>>(),
-                        "links": judged_by.as_ref().map(speccoder_core::story::Judged::links).unwrap_or_default(),
-                        "checkpoint": matches!(judged_by, Some(speccoder_core::story::Judged::Checkpoint)),
-                    });
-                }
-                // Frozen at review: the ticks name the approval and manifest.
-                if let Some((record, manifest)) = oracle.reviewed.clone() {
-                    review_frozen = Some((record, manifest));
-                }
-                // A gap its story's oracle already holds: nothing to do, and
-                // no model call to learn it.
-                if let Some((_, links)) = &linked_story
-                    && !oracle.tests.is_empty()
-                    && links.iter().all(|l| {
-                        before_run.states.get(l)
-                            == Some(&speccoder_core::story::ScenarioState::Green)
-                    })
-                {
-                    stage(
-                        &*live,
-                        task,
-                        Stage::Red,
-                        StageState::Skipped,
-                        Some("already holds".to_owned()),
-                        None,
-                    );
-                    let reason = format!(
-                        "{} already hold{} — {key}'s oracle passes {}: nothing for {task} to do",
-                        links.join(", "),
-                        if links.len() == 1 { "s" } else { "" },
-                        if links.len() == 1 {
-                            "its test"
-                        } else {
-                            "their tests"
-                        },
-                    );
-                    let report = speccoder_core::RunReport {
-                        reason: Some(reason.clone()),
-                        notices: notices.clone(),
-                        usage: oracle.usage.clone(),
-                        ..bare_report(&feature_name, task, &wt_path, "holds")
-                    };
-                    return CommandResult::new("run", CommandStatus::NeedsHuman, &reason)
-                        .with_code("TASK-HOLDS")
-                        .with_data(CommandData::Run(Box::new(report)));
-                }
-                // The story's last task waits on a person for every scenario
-                // its author called untestable: no attempt can turn it.
-                if matches!(judged_by, Some(speccoder_core::story::Judged::Checkpoint))
-                    && !oracle.untestable.is_empty()
-                {
-                    let accepted = super::story::accepted_on_branch(&wt_root, "HEAD");
-                    let open: Vec<(&String, &String)> = oracle
-                        .untestable
-                        .iter()
-                        .filter(|(id, _)| !accepted.contains(id))
-                        .collect();
-                    if let Some((first, _)) = open.first() {
-                        stage(
-                            &*live,
-                            task,
-                            Stage::Red,
-                            StageState::Skipped,
-                            Some("untestable".to_owned()),
-                            None,
-                        );
-                        let said: Vec<String> = open
-                            .iter()
-                            .map(|(id, why)| format!("{id} (\"{why}\")"))
-                            .collect();
-                        let reason = format!(
-                            "{key} closes with {task}, but its test author called {} untestable — a person accepts each, or has its test written again",
-                            said.join(", ")
-                        );
-                        let report = speccoder_core::RunReport {
-                            reason: Some(reason.clone()),
-                            notices: notices.clone(),
-                            usage: oracle.usage.clone(),
-                            ..bare_report(&feature_name, task, &wt_path, "untestable")
-                        };
-                        return CommandResult::new("run", CommandStatus::NeedsHuman, &reason)
-                            .with_code("STORY-UNTESTABLE")
-                            .with_fix(vec![
-                                format!("speccoder story accept {first} --reason \"…\""),
-                                format!("speccoder task rule {task} --tests-wrong --scenario {first} --reason \"…\""),
-                            ])
-                            .with_data(CommandData::Run(Box::new(report)));
-                    }
-                }
-                if oracle.tests.is_empty() {
-                    oracle_empty = true;
-                } else {
-                    story_oracle = Some(oracle);
-                }
-            }
-            Err(r) => {
-                stage(
-                    &*live,
-                    task,
-                    Stage::Red,
-                    StageState::Failed,
-                    Some(r.message().to_owned()),
-                    None,
-                );
-                let reason = format!(
-                    "the acceptance tests could not be written ({}); nothing was attempted",
-                    r.message()
-                );
-                let report = speccoder_core::RunReport {
-                    reason: Some(redact(&reason, secret)),
-                    notices: notices.clone(),
-                    ..bare_report(&feature_name, task, &wt_path, "acceptance_failed")
-                };
-                let code = r.code().map_or("ORACLE-UNWRITTEN", |c| c.name);
-                return CommandResult::new(
-                    "run",
-                    CommandStatus::NeedsHuman,
-                    &redact(&reason, secret),
-                )
-                .with_code(code)
-                // The oracle's own way on (its story's tests), then the task's.
-                .with_fix(if r.given_fix().is_empty() {
-                    Vec::new()
-                } else {
-                    r.given_fix()
-                        .iter()
-                        .cloned()
-                        .chain([format!("speccoder run --task {task}")])
-                        .collect()
-                })
-                .with_data(CommandData::Run(Box::new(report)));
-            }
-        }
-    }
-    // A person ruled the task's own test wrong (a task outside a story):
-    // every author of its tests is told why — the visible, held-out and
-    // strengthening ones, a resumed attempt's too — and nothing frozen
-    // earlier is reused; the tick records the rulings and clears them.
-    // An unreadable list stops the run: never read as "no ruling".
-    let ruled: Vec<crate::acceptance_at::Ruling> = if bug_fix.is_none() && !in_story {
-        match crate::acceptance_at::rulings_for_task(&s.plane_dir, &feature_name, task) {
-            Ok(r) => r,
-            Err(e) => {
-                return fail(
-                    CommandStatus::Error,
-                    format!("the person's rulings cannot be read: {e}"),
-                );
-            }
-        }
-    } else {
-        Vec::new()
-    };
-    let told: Vec<String> = ruled
-        .iter()
-        .map(|r| format!("{} ruled the tests wrong: {}", r.by, r.reason))
-        .collect();
-    // The tasks on the same requirements: their tests are the author's to
-    // agree with.
-    let related: Vec<String> = match (parsed_task.as_ref(), parsed_tasks) {
-        (Some(t), Some(pt)) => super::acceptance::related(t, &pt.tasks),
-        _ => Vec::new(),
-    };
-    if bug_fix.is_none()
-        && run_config.acceptance
-        && !options.fresh_acceptance
-        && planning.is_none()
-        && !in_story
-        && ruled.is_empty()
-    {
-        match crate::oracle::for_task(&s.plane_dir, &project, &wt_root, format, &snap, &scenarios) {
-            Some(r @ crate::oracle::TaskReuse::Ready { .. }) => review_reuse = Some(r),
-            Some(crate::oracle::TaskReuse::Reused { req }) => notices.push(format!(
-                "{req}'s frozen tests were reused by an earlier task of this run: this task's acceptance tests are authored"
-            )),
-            Some(crate::oracle::TaskReuse::Elsewhere { req }) => {
-                notices.push(format!("{req}: frozen oracle not present here — authoring"))
-            }
-            Some(crate::oracle::TaskReuse::Lapsed {
-                req,
-                frozen,
-                current,
-            }) => {
-                if crate::oracle::note_lapse(&s.plane_dir, &feature_name, &req, &frozen) {
-                    live.event(&progress::Event::Oracle {
-                        step: progress::OracleEvent::Lapsed {
-                            unit: feature_name.clone(),
-                            requirement: req.clone(),
-                            frozen_wording_sha256: frozen,
-                            current_wording_sha256: current,
-                        },
-                    });
-                }
-                notices.push(format!(
-                    "{req}'s wording changed since its tests were frozen at review: the frozen oracle lapsed — authoring"
-                ));
-            }
-            Some(crate::oracle::TaskReuse::Tampered(why)) => {
-                return fail(
-                    CommandStatus::NeedsHuman,
-                    format!("{why}: the task stops for a person, nothing is ticked"),
-                )
-                .with_code("ORACLE-TAMPERED");
-            }
-            Some(crate::oracle::TaskReuse::Unreadable(why)) => {
-                return fail(
-                    CommandStatus::NeedsHuman,
-                    format!("{why}: whether its tests are frozen is unknown, so the task stops for a person, nothing is ticked"),
-                )
-                .with_code("REVIEW-UNREADABLE");
-            }
-            None => {}
-        }
-    }
-    let mut acceptance = if let Some(prepared) = interrupted
-        .as_ref()
-        .and_then(|m| m.acceptance.clone())
-        .and_then(|a| serde_json::from_value::<PreparedAcceptance>(a).ok())
-    {
-        // The interrupted attempt's tests, already in the worktree. A bug
-        // task's held-out set is the one its pre-frozen record seals now: a
-        // special case's regeneration re-sealed it after the marker was kept.
-        let mut prepared = prepared;
-        if let Some(sealed) = bug_fix
-            .as_ref()
-            .and_then(|f| f.record.held_out_sealed.as_ref())
-        {
-            prepared.held_out = Some(sealed.manifest_sha256.clone());
-            prepared.report["held_out"] = serde_json::json!({
-                "state": "on",
-                "manifest": format!("sha256:{}", sealed.manifest_sha256),
-                "kept": sealed.count,
-            });
-        }
-        Some(prepared)
-    } else if let Some(f) = &bug_fix {
-        stage(&*live, task, Stage::Red, StageState::Started, None, None);
-        match super::bug::reuse(&bug_ctx, f) {
-            Ok(a) => Some(a),
-            Err(e) => {
-                let _ = worktree::restore(&wt_root, &tmp, &start);
-                stage(
-                    &*live,
-                    task,
-                    Stage::Red,
-                    StageState::Failed,
-                    Some(e.clone()),
-                    Some(began),
-                );
-                return fail(CommandStatus::NeedsHuman, e);
-            }
-        }
-    } else if let Some(reuse) = review_reuse.take() {
-        // A frozen oracle: its tests at this checkpoint, red by
-        // the run-time rule, its sealed held-out set red too — no author call.
-        stage(&*live, task, Stage::Red, StageState::Started, None, None);
-        let crate::oracle::TaskReuse::Ready {
-            record,
-            files,
-            tests,
-            manifest,
-        } = reuse
-        else {
-            return fail(CommandStatus::Error, "no frozen oracle".to_owned());
-        };
-        match reuse_pre_frozen(
-            &project,
-            &record,
-            &files,
-            &tests,
-            &runner,
-            RedRule::RunTime,
-            Some(&SealedCheck {
-                state: &s.plane_dir,
-                unit: &feature_name,
-                wt_root: &wt_root,
-                tmp: &tmp,
-                policy: &policy,
-            }),
-        ) {
-            Ok(mut a) => {
-                a.report["pre_frozen"]["manifest"] = serde_json::json!(manifest);
-                notices.push(format!(
-                    "acceptance tests frozen at review by {} ({}) for {}: no author call",
-                    record.decided.by, record.decided.via, record.requirement
-                ));
-                review_frozen = Some((*record, manifest));
-                Some(a)
-            }
-            Err(e) => {
-                let _ = worktree::restore(&wt_root, &tmp, &start);
-                stage(
-                    &*live,
-                    task,
-                    Stage::Red,
-                    StageState::Failed,
-                    Some(e.clone()),
-                    Some(began),
-                );
-                return fail(CommandStatus::NeedsHuman, e).with_code("ORACLE-TAMPERED");
-            }
-        }
-    } else if run_config.acceptance
-        && planning.is_none()
-        && !in_story
-        && format.acceptance_testable(&bundle)
-    {
-        stage(&*live, task, Stage::Red, StageState::Started, None, None);
-        Some(prepare_acceptance(&AcceptanceSetup {
-            rt: &rt,
-            plane: &plane,
-            project: &project,
-            worktree: &wt_root,
-            tmp: &tmp,
-            policy: &policy,
-            feature: &feature_name,
-            task,
-            bundle: bundle_value.clone(),
-            scenarios: &scenarios,
-            instructions: &instructions,
-            runner: &runner,
-            layout: Some(&test_layout),
-            told: &told,
-            related: &related,
-            oracle: false,
-        }))
-    } else {
-        None
-    };
-    if review_frozen.is_none()
-        && acceptance
-            .as_ref()
-            .is_some_and(|a| a.report["source"] == "review")
-        && let Some(crate::oracle::TaskReuse::Ready {
-            record, manifest, ..
-        }) = review_reuse.take()
-    {
-        review_frozen = Some((*record, manifest));
-    }
-    // 4c. The held-out set: written after a red visible set, kept in
-    //     the state directory, never shown to the implementer.
-    let held_out_store = match (&bug_fix, &review_frozen) {
-        (Some(f), _) => crate::held_out::sealed_dir(&s.plane_dir, &f.bug.unit, &f.bug.requirement),
-        (None, Some((r, _))) => {
-            crate::held_out::sealed_dir(&s.plane_dir, &feature_name, &r.requirement)
-        }
-        (None, None) => crate::held_out::dir(&s.plane_dir, &feature_name, task),
-    };
-    if let Some(a) = acceptance
-        .as_mut()
-        .filter(|a| a.report.get("held_out").is_none())
-    {
-        if !run_config.held_out {
-            a.report["held_out"] = serde_json::json!({ "state": "off" });
-        } else if a.argv.is_none() {
-            a.report["held_out"] =
-                serde_json::json!({ "state": "absent", "reason": "no_visible_tests" });
-        } else if !a.red {
-            a.report["held_out"] = serde_json::json!({ "state": "absent", "reason": "not_red" });
-        } else if scenarios.is_empty() {
-            a.report["held_out"] =
-                serde_json::json!({ "state": "absent", "reason": "no_scenarios" });
-        } else {
-            let (held, sha) = prepare_held_out(
-                &AcceptanceSetup {
-                    rt: &rt,
-                    plane: &plane,
-                    project: &project,
-                    worktree: &wt_root,
-                    tmp: &tmp,
-                    policy: &policy,
-                    feature: &feature_name,
-                    task,
-                    bundle: bundle_value.clone(),
-                    scenarios: &scenarios,
-                    instructions: &instructions,
-                    runner: &runner,
-                    layout: Some(&test_layout),
-                    told: &told,
-                    related: &related,
-                    oracle: false,
-                },
-                a,
-                &scenarios,
-                &held_out_store,
-                false,
-            );
-            a.report["held_out"] = held;
-            a.held_out = sha;
-        }
-    }
-    if run_config.held_out && !run_config.acceptance {
-        notices.push(
-            "[acceptance] held_out has no effect while generate = false: no held-out tests"
-                .to_owned(),
-        );
-    }
-    match &acceptance {
-        None => stage(
-            &*live,
-            task,
-            Stage::Red,
-            StageState::Skipped,
-            Some(if planning.is_some() {
-                "planning work: design documents".to_owned()
-            } else if in_story {
-                "judged by its story's oracle".to_owned()
-            } else {
-                "no acceptance examples".to_owned()
-            }),
-            None,
-        ),
-        Some(a) if a.red => stage(
-            &*live,
-            task,
-            Stage::Red,
-            StageState::Passed,
-            a.red_class.map(class_word),
-            Some(began),
-        ),
-        Some(a) => stage(
-            &*live,
-            task,
-            Stage::Red,
-            StageState::Failed,
-            Some(a.red_class.map_or_else(
-                || "not demonstrated".to_owned(),
-                |c| format!("not demonstrated ({})", class_word(c)),
-            )),
-            Some(began),
-        ),
-    }
-
-    // The author call itself failed: without its tests the task could only
-    // be ticked on the regression checks, which would look like "the spec
-    // has no examples". A person decides; nothing was attempted.
-    if let Some(why) = acceptance
-        .as_ref()
-        .and_then(|a| a.generation_failed.clone())
-    {
-        let reason = format!(
-            "the acceptance tests could not be written ({why}); nothing was attempted — run again once the model answers, or set [acceptance] generate = false to rely on the checks alone"
-        );
-        let _ = worktree::restore(&wt_root, &tmp, &start);
-        let report = RunReport {
-            reason: Some(reason.clone()),
-            acceptance: acceptance.as_ref().map(|a| a.report.clone()),
-            set_aside,
-            notices: notices.clone(),
-            ..bare_report(&feature_name, task, &wt_path, "acceptance_failed")
-        };
-        live.event(&finished_event(
-            task,
-            &report,
-            "acceptance_failed",
-            false,
-            redact(&reason, secret),
-        ));
-        return CommandResult::new("run", CommandStatus::NeedsHuman, &redact(&reason, secret))
-            .with_code("ACCEPTANCE-UNWRITTEN")
-            .with_data(CommandData::Run(Box::new(report)));
-    }
-
-    // A gap judged by its story's oracle is shown by that oracle's red test.
-    if demand_red && story_oracle.is_none() && !acceptance.as_ref().is_some_and(|a| a.red) {
-        let why = undemonstrated_why(acceptance.as_ref());
-        let reason = format!(
-            "convergence gap not demonstrated: {why}; a person decides whether {task} is real"
-        );
-        // The undemonstrated tests are kept under an attempt ref, not in the worktree.
-        let saved = attempts::save(
-            &wt_root,
-            &tmp,
-            &feature_name,
-            task,
-            &attempts::Record {
-                run: None,
-                outcome: "not_demonstrated",
-                reason: &reason,
-                pending: None,
-                usage: None,
-                story_open: &[],
-                own_test: None,
-            },
-        )
-        .ok()
-        .map(|s| s.reference);
-        let _ = worktree::restore(&wt_root, &tmp, &start);
-        let report = RunReport {
-            reason: Some(reason.clone()),
-            acceptance: acceptance.as_ref().map(|a| a.report.clone()),
-            saved_attempt: saved,
-            set_aside,
-            notices: notices.clone(),
-            ..bare_report(&feature_name, task, &wt_path, "not_demonstrated")
-        };
-        live.event(&finished_event(
-            task,
-            &report,
-            "not_demonstrated",
-            false,
-            redact(&reason, secret),
-        ));
-        return CommandResult::new("run", CommandStatus::NeedsHuman, &redact(&reason, secret))
-            .with_data(CommandData::Run(Box::new(report)));
-    }
-
+        state,
+        secret,
+        options,
+    ));
+    let tests::TestsFirst {
+        mut bug_fix,
+        bug_candidate,
+        test_layout,
+        test_layout_text,
+        story_scenarios,
+        story_key,
+        judged_by,
+        in_story,
+        scenarios,
+        review_frozen,
+        story_oracle,
+        oracle_note,
+        oracle_empty,
+        before_run,
+        oracle_spent,
+        ruled,
+        related,
+        told,
+        acceptance,
+        held_out_store,
+    } = tests;
+    let Carried {
+        marker_guard,
+        head_now,
+        set_aside,
+        baseline,
+        mut notices,
+    } = carried;
+    let bug_ctx = tests::bug_ctx(&opened, &ready, task);
     // 5. Checkpoint, attempt, checkpoint — again after a failed verdict,
     //    from the same checkpoint, with the verifier's digest.
     let before = match &interrupted {
         Some(m) => worktree::Checkpoint(m.before.clone()),
-        None => match worktree::checkpoint(&wt_root, &tmp) {
+        None => match worktree::checkpoint(wt_root, tmp) {
             Ok(c) => c,
             Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
         },
@@ -1338,7 +348,7 @@ fn run_task_once(
         .as_ref()
         .and_then(|a| serde_json::to_value(a).ok());
     // Tests that exist now are frozen for this attempt.
-    let frozen: Vec<String> = match worktree::files(&wt_root, &before) {
+    let frozen: Vec<String> = match worktree::files(wt_root, &before) {
         Ok(f) => f,
         Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
     }
@@ -1381,13 +391,13 @@ fn run_task_once(
                 // answer kept for the task, no once-grant is taken.
                 Ok(_) if autopilot => (Vec::new(), Vec::new()),
                 Ok(mut d) => {
-                    let once = d.take_once(&feature_name, task, this_run.as_str());
+                    let once = d.take_once(feature_name, task, this_run.as_str());
                     if !once.is_empty()
                         && let Err(e) = d.save(&s.plane_dir)
                     {
                         return fail(CommandStatus::Error, e);
                     }
-                    (d.for_run(&feature_name, task, this_run.as_str()), once)
+                    (d.for_run(feature_name, task, this_run.as_str()), once)
                 }
                 Err(e) => return fail(CommandStatus::ConfigError, e),
             };
@@ -1399,9 +409,9 @@ fn run_task_once(
                 .unwrap_or_default();
             // Everything the attempt's decisions depend on is in its journaled input.
             let input = substrate::attempt::input(
-                with_oracle(&bundle_value, &oracle_note),
+                with_oracle(bundle_value, &oracle_note),
                 &substrate::attempt::Settings {
-                    checks: &check_argvs,
+                    checks: check_argvs,
                     allow: &run_config.allow,
                     allow_prefix: &run_config.allow_prefix,
                     max_turns: run_config.max_turns,
@@ -1414,7 +424,7 @@ fn run_task_once(
                     approved_once: &approved_once,
                     nudges: &decisions.nudges,
                     mcp: &connected.tools,
-                    root: &wt_root_canonical,
+                    root: wt_root_canonical,
                     frozen_additions: run_config.frozen_additions,
                     // Lanes stop (their worktree is merged or dropped with
                     // the group); every other attempt waits for a person.
@@ -1476,7 +486,7 @@ fn run_task_once(
             );
             // Judge inputs as the attempt finds them, git-ignored ones
             // included (an agent loads `.claude/settings.local.json` too).
-            let judged_before = integrity::JudgeSnapshot::take(&wt_root, &policy);
+            let judged_before = integrity::JudgeSnapshot::take(wt_root, policy);
             // The attempt itself: speccoder's governed loop, or an external
             // agent whose result is judged from the diff alike.
             let (run_id, succeeded, mut output) = if let Some((diff, cand)) = &bug_candidate {
@@ -1505,7 +515,7 @@ fn run_task_once(
                     .collect();
                 let prompt = external::prompt_in(
                     format.wording(),
-                    &with_oracle(&bundle_value, &oracle_note),
+                    &with_oracle(bundle_value, &oracle_note),
                     digest.as_ref(),
                 );
                 let withheld = acceptance
@@ -1522,7 +532,7 @@ fn run_task_once(
                 let _ = allow;
                 let o = match &exec.kind {
                     external::Kind::Command(argv) => {
-                        external::run(argv, exec.timeout, &wt_root, &prompt, &tmp)
+                        external::run(argv, exec.timeout, wt_root, &prompt, tmp)
                     }
                     external::Kind::Acp(agent) => {
                         // The agent's calls are decided by the policy a native
@@ -1534,7 +544,7 @@ fn run_task_once(
                             Ok(p) => p,
                             Err(e) => return fail(CommandStatus::RunFailed, e.to_string()),
                         };
-                        let tools = match tools::WorkspaceTools::new(&wt_root, policy.clone()) {
+                        let tools = match tools::WorkspaceTools::new(wt_root, policy.clone()) {
                             Ok(t) => t.with_runner(runner.clone()),
                             Err(e) => {
                                 return fail(
@@ -1545,7 +555,7 @@ fn run_task_once(
                         };
                         let governor = Arc::new(crate::acp::govern::Governor::new(
                             crate::acp::govern::Setup {
-                                root: std::fs::canonicalize(&wt_root)
+                                root: std::fs::canonicalize(wt_root)
                                     .unwrap_or_else(|_| wt_root.clone()),
                                 tools,
                                 policy,
@@ -1569,9 +579,9 @@ fn run_task_once(
                         let a = external::run_acp(
                             exec,
                             agent,
-                            &wt_root,
+                            wt_root,
                             &prompt,
-                            &runner,
+                            runner,
                             governor,
                             Some((task.to_owned(), Arc::clone(&live))),
                         );
@@ -1596,10 +606,10 @@ fn run_task_once(
                     Some(m) if m.attempt == attempt_no && m.sample == samples.len() => {
                         m.key.clone()
                     }
-                    _ => resume::new_key(&feature_name, task),
+                    _ => resume::new_key(feature_name, task),
                 };
                 let _ = resume::save(
-                    &marker_path,
+                    marker_path,
                     &resume::Marker {
                         key: key.clone(),
                         before: before.0.clone(),
@@ -1617,7 +627,7 @@ fn run_task_once(
                 );
                 marker_guard.arm();
                 let outcome = match rt.block_on(plane.attempt_keyed(
-                    &feature_name,
+                    feature_name,
                     task,
                     input,
                     &key,
@@ -1650,7 +660,7 @@ fn run_task_once(
                         // joins the allow list through the one action.
                         notices.extend(crate::actions::allow_always_inline(
                             path,
-                            &feature_name,
+                            feature_name,
                             &x.always,
                             state,
                         ));
@@ -1663,7 +673,7 @@ fn run_task_once(
                     // marker stay, so the next run continues it.
                     marker_guard.keep();
                     let action = &task_row.justification.proposed_action;
-                    let mut report = bare_report(&feature_name, task, &wt_path, "needs_approval");
+                    let mut report = bare_report(feature_name, task, wt_path, "needs_approval");
                     report.judged.clone_from(&judged_by);
                     report.run_id = outcome.run_id.to_string();
                     report.notices = notices;
@@ -1787,10 +797,10 @@ fn run_task_once(
             if prepares {
                 let began = std::time::Instant::now();
                 match crate::prepare::recheck(&crate::prepare::Prepare {
-                    worktree: &wt_root,
-                    project: &project,
-                    config: &worktree_config,
-                    runner: &runner,
+                    worktree: wt_root,
+                    project,
+                    config: worktree_config,
+                    runner,
                     state: Some(state),
                 }) {
                     Ok(done) if done.is_empty() => {}
@@ -1821,9 +831,9 @@ fn run_task_once(
                         // installs.
                         let reason = redact(&f.message, secret);
                         let saved = attempts::save(
-                            &wt_root,
-                            &tmp,
-                            &feature_name,
+                            wt_root,
+                            tmp,
+                            feature_name,
                             task,
                             &attempts::Record {
                                 run: (!run_id.is_empty()).then_some(run_id.as_str()),
@@ -1836,7 +846,7 @@ fn run_task_once(
                             },
                         )
                         .and_then(|saved| {
-                            worktree::restore(&wt_root, &tmp, &before).map(|_| saved)
+                            worktree::restore(wt_root, tmp, &before).map(|_| saved)
                         });
                         let message = match saved {
                             Ok(saved) => format!(
@@ -1852,12 +862,12 @@ fn run_task_once(
                     }
                 }
             }
-            let after = match worktree::checkpoint(&wt_root, &tmp) {
+            let after = match worktree::checkpoint(wt_root, tmp) {
                 Ok(c) => c,
                 Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
             };
             // What the audit reads: never judged blind.
-            let raw_changes = match worktree::diff(&wt_root, &before, &after) {
+            let raw_changes = match worktree::diff(wt_root, &before, &after) {
                 Ok(c) => c,
                 Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
             };
@@ -1872,14 +882,14 @@ fn run_task_once(
                 *asked = n;
             }
             let approved_writes = approved_writes(&task_grants, &output["tool_calls"]);
-            let patch = match worktree::patch(&wt_root, &before, &after) {
+            let patch = match worktree::patch(wt_root, &before, &after) {
                 Ok(p) => p,
                 Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
             };
             // A value copied from the person's secret files, written into a
             // file git would commit: undone, never judged — named, never shown.
             if let Some(name) = crate::include::added_secret(&patch) {
-                let _ = worktree::restore(&wt_root, &tmp, &before);
+                let _ = worktree::restore(wt_root, tmp, &before);
                 return fail(
                     CommandStatus::NeedsHuman,
                     format!(
@@ -1889,8 +899,8 @@ fn run_task_once(
                 .with_code("SECRET-IN-DIFF");
             }
             let findings = attempt_findings(&Audited {
-                wt_root: &wt_root,
-                policy: &policy,
+                wt_root,
+                policy,
                 judged_before: &judged_before,
                 raw_changes: &raw_changes,
                 patch: &patch,
@@ -1944,11 +954,11 @@ fn run_task_once(
                 notices: notices.clone(),
                 agent: external::agent_attempt(&output),
                 judged: judged_by.clone(),
-                ..bare_report(&feature_name, task, &wt_path, &attempt_status)
+                ..bare_report(feature_name, task, wt_path, &attempt_status)
             };
             if let Err(e) = record_inline_approvals(
                 &s.plane_dir,
-                &feature_name,
+                feature_name,
                 task,
                 &report.tool_calls,
                 &options.run_grants,
@@ -2002,8 +1012,8 @@ fn run_task_once(
                     .flat_map(|o| o.tests.iter().map(|t| t.path.clone()))
                     .collect();
                 if let Err(e) = judge_checks(
-                    &project,
-                    &runner,
+                    project,
+                    runner,
                     (&baseline, &oracle_files),
                     acceptance.as_ref(),
                     &findings,
@@ -2024,7 +1034,7 @@ fn run_task_once(
                 if let Some(o) = &story_oracle {
                     // The oracle judges only as frozen: a test the attempt
                     // changed — even by adding lines — fails it.
-                    let touched = super::story::changed(&project, o);
+                    let touched = super::story::changed(project, o);
                     if !touched.is_empty() {
                         let why = format!(
                             "the story's oracle tests were changed: {}",
@@ -2038,7 +1048,7 @@ fn run_task_once(
                             _ => speccoder_core::verify::Verdict::Failed { reasons: vec![why] },
                         });
                     }
-                    let after = super::story::states(&project, o, &runner);
+                    let after = super::story::states(project, o, runner);
                     super::story::judge(
                         o,
                         &before_run.states,
@@ -2109,8 +1119,8 @@ fn run_task_once(
                         )
                     );
                 match judge_collection(
-                    (&project, &wt_root, &tmp),
-                    &runner,
+                    (project, wt_root, tmp),
+                    runner,
                     otherwise_passing,
                     &mut report,
                     &*live,
@@ -2195,7 +1205,7 @@ fn run_task_once(
                         .and_then(|o| o.held_out.as_ref())
                         .map(|h| {
                             (
-                                crate::held_out::sealed_dir(&s.plane_dir, &feature_name, &h.key),
+                                crate::held_out::sealed_dir(&s.plane_dir, feature_name, &h.key),
                                 h.manifest_sha256.clone(),
                             )
                         })
@@ -2244,7 +1254,7 @@ fn run_task_once(
                 });
             }
             if let Some((store, sha)) = held.filter(|_| visibly_passed) {
-                let patch = worktree::patch(&wt_root, &before, &after).unwrap_or_default();
+                let patch = worktree::patch(wt_root, &before, &after).unwrap_or_default();
                 let mut known = format!(
                     "{}\n{}\n{}",
                     bundle_value["story"].as_str().unwrap_or_default(),
@@ -2264,8 +1274,8 @@ fn run_task_once(
                     }
                 }
                 match judge_held_out(
-                    &store, &sha, &scenarios, &known, &wt_root, &project, &tmp, &before, &patch,
-                    &runner, &policy,
+                    &store, &sha, &scenarios, &known, wt_root, project, tmp, &before, &patch,
+                    runner, policy,
                 ) {
                     Ok(j) => {
                         let failed_ids: Vec<String> =
@@ -2310,7 +1320,7 @@ fn run_task_once(
                         )
                     )
             }) {
-                let keep = crate::strength::dir(&s.plane_dir, &feature_name, task);
+                let keep = crate::strength::dir(&s.plane_dir, feature_name, task);
                 let judging = super::bug::Judging {
                     before: &before,
                     baseline: &baseline,
@@ -2388,9 +1398,9 @@ fn run_task_once(
                     None,
                     None,
                 );
-                let patch = worktree::patch(&wt_root, &before, &after).unwrap_or_default();
+                let patch = worktree::patch(wt_root, &before, &after).unwrap_or_default();
                 let scratch = runner.scratch().unwrap_or_else(|| tmp.clone());
-                if let Some(result) = mutation::run(m, &project, &patch, &scratch, &runner) {
+                if let Some(result) = mutation::run(m, project, &patch, &scratch, runner) {
                     if m.mode == mutation::Mode::Require
                         && let Some(reason) = mutation::failure(&result)
                     {
@@ -2457,7 +1467,7 @@ fn run_task_once(
                 report.retry_stop = Some(stop);
                 break (report, attempt_status);
             }
-            if let Err(e) = worktree::restore(&wt_root, &tmp, &before) {
+            if let Err(e) = worktree::restore(wt_root, tmp, &before) {
                 report.retry_stop = Some(format!("cannot undo the attempt: {}", e.0));
                 break (report, attempt_status);
             }
@@ -2476,11 +1486,11 @@ fn run_task_once(
         if run_config.best_of <= 1 {
             break (report, attempt_status);
         }
-        let end = match worktree::checkpoint(&wt_root, &tmp) {
+        let end = match worktree::checkpoint(wt_root, tmp) {
             Ok(c) => c,
             Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
         };
-        let patch = worktree::patch(&wt_root, &before, &end).unwrap_or_default();
+        let patch = worktree::patch(wt_root, &before, &end).unwrap_or_default();
         let summary = sample_summary(&report, &attempt_status, &patch);
         samples.push((report, attempt_status, end, summary));
         if samples.len() >= run_config.best_of as usize {
@@ -2497,14 +1507,14 @@ fn run_task_once(
             let (mut chosen, status, end, _) = samples.swap_remove(best);
             if best != samples.len() {
                 // Not the sample the worktree holds: put the chosen one back.
-                if let Err(e) = worktree::restore(&wt_root, &tmp, &end) {
+                if let Err(e) = worktree::restore(wt_root, tmp, &end) {
                     return fail(CommandStatus::GitPrecondition, e.0);
                 }
             }
             chosen.samples = summaries;
             break (chosen, status);
         }
-        if let Err(e) = worktree::restore(&wt_root, &tmp, &before) {
+        if let Err(e) = worktree::restore(wt_root, tmp, &before) {
             return fail(CommandStatus::GitPrecondition, e.0);
         }
     };
@@ -2551,7 +1561,7 @@ fn run_task_once(
     // 7c. Acceptance strength: the set a verified verdict
     //     rests on, run against wrong and permitted candidates. Judge-side;
     //     the implementer never sees a variant, a survivor or a finding.
-    let strength_dir = crate::strength::dir(&s.plane_dir, &feature_name, task);
+    let strength_dir = crate::strength::dir(&s.plane_dir, feature_name, task);
     let mut attempt_status = attempt_status;
     let verified = attempt_status == "completed"
         && matches!(
@@ -2598,11 +1608,11 @@ fn run_task_once(
             None,
             None,
         );
-        let fin = worktree::checkpoint(&wt_root, &tmp);
+        let fin = worktree::checkpoint(wt_root, tmp);
         let patch = fin
             .as_ref()
             .ok()
-            .and_then(|now| worktree::patch(&wt_root, &start, now).ok())
+            .and_then(|now| worktree::patch(wt_root, start, now).ok())
             .unwrap_or_default();
         let mut notes = Vec::new();
         // The task's own held-out set, or at its story's checkpoint the
@@ -2620,7 +1630,7 @@ fn run_task_once(
                     .and_then(|o| o.held_out.as_ref())
                     .map(|h| {
                         (
-                            crate::held_out::sealed_dir(&s.plane_dir, &feature_name, &h.key),
+                            crate::held_out::sealed_dir(&s.plane_dir, feature_name, &h.key),
                             h.manifest_sha256.clone(),
                         )
                     })
@@ -2648,11 +1658,11 @@ fn run_task_once(
         let measure = |commands: &[Vec<String>]| {
             crate::strength::measure(
                 &crate::strength::Setup {
-                    wt_root: &wt_root,
-                    project: &project,
-                    tmp: &tmp,
-                    runner: &runner,
-                    policy: &policy,
+                    wt_root,
+                    project,
+                    tmp,
+                    runner,
+                    policy,
                     acceptance: commands,
                     held_out: &held,
                     mutation: mutation_config.as_ref(),
@@ -2664,13 +1674,13 @@ fn run_task_once(
                 |changed| {
                     // Source files only: the author never sees a test.
                     let input = substrate::near_miss::input(
-                        &bundle_value,
+                        bundle_value,
                         changed,
                         &crate::mutation::source_patch(&patch),
                         run_config.strength.near_miss,
                         run_config.strength.permitted,
                     );
-                    match rt.block_on(plane.near_miss(&feature_name, task, input)) {
+                    match rt.block_on(plane.near_miss(feature_name, task, input)) {
                         Ok(o) => {
                             let out = o
                                 .output
@@ -2724,18 +1734,18 @@ fn run_task_once(
                 })
                 .collect();
             let setup = AcceptanceSetup {
-                rt: &rt,
-                plane: &plane,
-                project: &project,
-                worktree: &wt_root,
-                tmp: &tmp,
-                policy: &policy,
-                feature: &feature_name,
+                rt,
+                plane,
+                project,
+                worktree: wt_root,
+                tmp,
+                policy,
+                feature: feature_name,
                 task,
                 bundle: bundle_value.clone(),
                 scenarios: &scenarios,
-                instructions: &instructions,
-                runner: &runner,
+                instructions,
+                runner,
                 layout: Some(&test_layout),
                 told: &told,
                 related: &related,
@@ -2867,8 +1877,8 @@ fn run_task_once(
             None,
             None,
         );
-        let patch = worktree::checkpoint(&wt_root, &tmp)
-            .and_then(|now| worktree::patch(&wt_root, &start, &now))
+        let patch = worktree::checkpoint(wt_root, tmp)
+            .and_then(|now| worktree::patch(wt_root, start, &now))
             .unwrap_or_default();
         let calls: Vec<serde_json::Value> = report
             .tool_calls
@@ -2878,8 +1888,8 @@ fn run_task_once(
                 serde_json::json!({ "tool": tool, "target": progress::target(tool, &c["arguments"]), "decision": c["decision"] })
             })
             .collect();
-        let input = substrate::monitor::input(&bundle_value, &patch, &calls, &frozen);
-        let (monitor, suspicion) = monitor_attempt(&rt, &plane, &feature_name, task, input, secret);
+        let input = substrate::monitor::input(bundle_value, &patch, &calls, &frozen);
+        let (monitor, suspicion) = monitor_attempt(rt, plane, feature_name, task, input, secret);
         report.monitor = Some(monitor);
         suspected = suspicion;
         stage(
@@ -2905,7 +1915,7 @@ fn run_task_once(
         .and_then(|s| {
             s.lock()
                 .ok()
-                .and_then(|s| s.check_before_tick(&policy).err())
+                .and_then(|s| s.check_before_tick(policy).err())
         });
     if let Some(e) = &in_place_stop {
         report.reason = Some(e.line());
@@ -2979,7 +1989,7 @@ fn run_task_once(
         let began = std::time::Instant::now();
         stage(&*live, task, Stage::Commit, StageState::Started, None, None);
         let message = tick_message(&TickFacts {
-            feature: &feature_name,
+            feature: feature_name,
             task,
             title: &t.title,
             report: &report,
@@ -3015,7 +2025,7 @@ fn run_task_once(
                     Err(e) => report.integrity.push(format!("tick refused: {e}")),
                 }
                 if report.ticked && run_config.commit_per_task {
-                    match commit_attempt(&wt_root, &message) {
+                    match commit_attempt(wt_root, &message) {
                         Ok(id) => report.commit = Some(id),
                         Err(e) => report.integrity.push(format!("commit failed: {e}")),
                     }
@@ -3025,10 +2035,10 @@ fn run_task_once(
             // tasks.md is never in the commit, so its tick is local.
             Some(session) => {
                 let digest =
-                    crate::in_place::intent_digest(&project, &policy, format.messages().tasks_file);
+                    crate::in_place::intent_digest(project, policy, format.messages().tasks_file);
                 if let Ok(mut s) = session.lock() {
                     let done = s.commit_and_tick(
-                        &plane_dir,
+                        plane_dir,
                         file,
                         &t.line_hash,
                         &message,
@@ -3069,11 +2079,11 @@ fn run_task_once(
                 .unwrap_or_default();
             let requirements = format.requirement_ids(Path::new(&snap.root), &feature_dir);
             let tick = crate::attest::Tick {
-                repo: &wt_root,
-                config: &config_text,
+                repo: wt_root,
+                config: config_text,
                 attest: &run_config.attest,
                 format: &format!("{:?}", format.kind()).to_lowercase(),
-                feature: &feature_name,
+                feature: feature_name,
                 feature_dir: &feature_dir,
                 task,
                 title: &t.title,
@@ -3124,7 +2134,7 @@ fn run_task_once(
             .map(super::outcome::verdict_word)
             .unwrap_or_default();
         let message = tick_message(&TickFacts {
-            feature: &feature_name,
+            feature: feature_name,
             task,
             title: &n.title,
             report: &report,
@@ -3142,18 +2152,18 @@ fn run_task_once(
                 .unwrap_or_default()
                 + &ruling_trailers(&ruled),
         });
-        match commit_attempt(&wt_root, &message) {
+        match commit_attempt(wt_root, &message) {
             Ok(id) => report.commit = Some(id),
             Err(e) => report.integrity.push(format!("commit failed: {e}")),
         }
         if let Some(commit) = report.commit.clone().filter(|_| run_config.attest.enabled) {
             let sandboxed = sandbox_config.mode != sandbox::Mode::Off && sandbox::backend().is_ok();
             let tick = crate::attest::Tick {
-                repo: &wt_root,
-                config: &config_text,
+                repo: wt_root,
+                config: config_text,
                 attest: &run_config.attest,
                 format: &format!("{:?}", format.kind()).to_lowercase(),
-                feature: &feature_name,
+                feature: feature_name,
                 feature_dir: &n.dir,
                 task,
                 title: &n.title,
@@ -3233,7 +2243,7 @@ fn run_task_once(
     }
     // A ticked task's rulings are acted on: its tests were written again.
     if report.ticked && !ruled.is_empty() {
-        let _ = crate::acceptance_at::acted_on_task(&s.plane_dir, &feature_name, task);
+        let _ = crate::acceptance_at::acted_on_task(&s.plane_dir, feature_name, task);
     }
     // The task's own test at fault, when the stop names one (offered a ruling).
     let mut conflict: Option<String> = None;
@@ -3296,8 +2306,8 @@ fn run_task_once(
             own_test: own_test.as_deref(),
         };
         conflict.clone_from(&own_test);
-        match attempts::save(&wt_root, &tmp, &feature_name, task, &record)
-            .and_then(|saved| worktree::restore(&wt_root, &tmp, &start).map(|_| saved))
+        match attempts::save(wt_root, tmp, feature_name, task, &record)
+            .and_then(|saved| worktree::restore(wt_root, tmp, start).map(|_| saved))
         {
             Ok(saved) => report.saved_attempt = Some(saved.reference),
             Err(e) => report
