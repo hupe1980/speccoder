@@ -320,7 +320,10 @@ pub(super) fn run(
                         ) {
                             Ok(p) => p,
                             Err(e) => {
-                                return Err(Box::new(fail(CommandStatus::RunFailed, e.to_string())));
+                                return Err(Box::new(fail(
+                                    CommandStatus::RunFailed,
+                                    e.to_string(),
+                                )));
                             }
                         };
                         let tools = match tools::WorkspaceTools::new(wt_root, policy.clone()) {
