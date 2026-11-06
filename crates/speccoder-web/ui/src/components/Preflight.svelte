@@ -9,8 +9,10 @@
   import Code from "./Code.svelte";
   import FixSteps from "./FixSteps.svelte";
 
-  const items = $derived([...app.preflight].sort((a, b) => (a.level === "fail" ? 0 : 1) - (b.level === "fail" ? 0 : 1)));
-  const failing = $derived(app.blockers.length > 0);
+  // The sample replays without a model: its key is nobody's concern there.
+  const shown = $derived(app.preflight.filter((i) => !(app.project?.sample && i.check === "model key")));
+  const items = $derived([...shown].sort((a, b) => (a.level === "fail" ? 0 : 1) - (b.level === "fail" ? 0 : 1)));
+  const failing = $derived(shown.some((i) => i.level === "fail"));
 
   const badge: Record<string, string> = {
     "model key": "key", untracked: "tray", signing: "signature", sandbox: "shield", git: "branch", "spec tool": "terminal",
@@ -23,6 +25,7 @@
     "PLAN-TEST-ONLY-TASKS": "Tasks that only write tests",
     "PLAN-SCENARIO-UNKNOWN": "A task names a scenario its story does not have",
     "PLAN-STORY-UNJUDGED": "No task of a story is judged by its scenarios",
+    "PLAN-OTHER-STACK": "Tasks build in another stack than the project's",
   };
   const title = (i: { check: string; code?: string | null }) =>
     i.check === "lanes" ? "Who does what" : ((i.code && PLAN[i.code]) ?? i.check.charAt(0).toUpperCase() + i.check.slice(1));

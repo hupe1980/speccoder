@@ -13951,6 +13951,11 @@
           "const": "signed"
         },
         {
+          "description": "A statement says it, unsigned (no signing key was configured).",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
           "description": "The commit holds it (git objects, not a signature).",
           "type": "string",
           "const": "committed"

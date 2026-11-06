@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- The sample's **Take the tour**: five stops on the recorded run (the
+  board, a task's tests red then green, its attestation, its evidence
+  tour, the report), each lighting one part of the screen with a
+  caption; ← → step, `Esc` ends it. A 48-second video (MP4) of it on the new
+  [Tour](https://hupe1980.github.io/speccoder/docs/tour/) page, recorded
+  by `scripts/record-tour.cjs` from the same tour.
+
+### Fixed
+
+- The app's evidence tour reads the feature's `speccoder/<feature>`
+  branch: it found no tick while the work was unmerged.
+- The evidence tour says **recorded**, not **signed**, for a statement
+  nobody signed.
+- The sample no longer asks for a model key it does not need.
+
 ## [0.11.0] - 2026-11-05
 
 ### Changed

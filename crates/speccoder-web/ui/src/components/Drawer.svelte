@@ -157,7 +157,7 @@
     {/if}
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected={tab === "evidence"} class:on={tab === "evidence"} onclick={() => (tab = "evidence")}>Evidence</button>
-      <button role="tab" aria-selected={tab === "tour"} class:on={tab === "tour"} disabled={!data.task.commit} title={data.task.commit ? "The evidence, step by step" : "No commit carries this task's evidence"} onclick={() => (tab = "tour")}>Tour</button>
+      <button role="tab" data-tour="tab-tour" aria-selected={tab === "tour"} class:on={tab === "tour"} disabled={!data.task.commit} title={data.task.commit ? "The evidence, step by step" : "No commit carries this task's evidence"} onclick={() => (tab = "tour")}>Tour</button>
       <button role="tab" aria-selected={tab === "diff"} class:on={tab === "diff"} disabled={!source} title={source ? "" : "No code yet: the task has no commit and no attempt"} onclick={() => (tab = "diff")}>{source?.label ?? "Changes"}</button>
     </div>
     {#if tab === "evidence"}
@@ -178,7 +178,7 @@
       {/if}
       <dl class="grouped">
         {#each data.rows as r (r.label + r.text)}
-          <div class="row" class:claim={r.label === "Model says"} {...askable("evidence_row", { task: app.selected, label: r.label }, `${app.selected} · ${r.label}`, `Evidence of ${app.selected}, ${r.label}: ${r.text}`)}>
+          <div class="row" data-tour-row={r.label} class:claim={r.label === "Model says"} {...askable("evidence_row", { task: app.selected, label: r.label }, `${app.selected} · ${r.label}`, `Evidence of ${app.selected}, ${r.label}: ${r.text}`)}>
             <dt><span class="dot s-{r.mark}"><Icon name={symbol(r.mark)} size={11} weight={2.4} /></span>{r.label}</dt>
             {#if r.items?.length}
               <dd class="sandboxed">

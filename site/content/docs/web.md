@@ -139,7 +139,7 @@ The sheet asks *What are you building?* first and fills in the rest: where (besi
 
 ### Try the sample
 
-A small project and a run of it recorded with a real model, copied into speccoder's state directory and replayed strictly: no model is called, no key or network is needed. A banner names the recording (its date and model); **Play** (`Space`) opens each judged task's evidence in turn, at a readable pace (→ one step, `End` to the end); the model's words are labelled as its account. A recording this build cannot reproduce is said so in the banner, and nothing is played. Tasks play in the order the recording ran them. At the end: **Start your own**, **Run the checks yourself** (the sample's own checks, offline in its copy; disabled with the install hint when cargo is missing), **Close the sample**. The sample is not added to your recent projects.
+A small project and a run of it recorded with a real model, copied into speccoder's state directory and replayed strictly: no model is called, no key or network is needed. A banner names the recording (its date and model); **Take the tour** (`Space`) walks five stops of the run — the board, a task's tests red then green, its attestation, its evidence tour, the report — each lighting one part of the screen with a caption; it plays at a reading pace, ← → step, `Esc` ends it, `End` skips to the end, and a click elsewhere pauses it ([the tour](@/docs/tour.md)). A recording this build cannot reproduce is said so in the banner, and nothing is played. At the end: **Start your own**, **Run the checks yourself** (the sample's own checks, offline in its copy; disabled with the install hint when cargo is missing), **Close the sample**. The sample is not added to your recent projects.
 
 ## New… and New Feature
 

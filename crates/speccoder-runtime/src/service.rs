@@ -116,8 +116,8 @@ pub mod tour {
 
     use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
-    /// The tour of `task` of `feature` (default: the selected feature) at
-    /// `HEAD`: [`crate::tour::command`] without trust, so it shows what the
+    /// The tour of `task` of `feature` (default: the selected feature) on
+    /// its `speccoder/<feature>` branch, else at `HEAD`: [`crate::tour::command`] without trust, so it shows what the
     /// statements and the commit say.
     #[must_use]
     pub fn of_task(root: &Path, feature: Option<&str>, task: &str) -> CommandResult {
@@ -134,11 +134,29 @@ pub mod tour {
                 "no feature selected",
             );
         };
+        // The ticks are on the feature's speccoder branch until it merges.
+        let branch = format!("speccoder/{feature}");
+        let head = if crate::git::Git::at(root)
+            .line(&[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("refs/heads/{branch}"),
+            ])
+            .is_ok_and(|l| !l.trim().is_empty())
+        {
+            branch
+        } else {
+            "HEAD".to_owned()
+        };
         crate::tour::command(
             root,
             &feature,
             task,
-            &crate::attest::branch::Options::default(),
+            &crate::attest::branch::Options {
+                head,
+                ..crate::attest::branch::Options::default()
+            },
             "tour",
         )
     }

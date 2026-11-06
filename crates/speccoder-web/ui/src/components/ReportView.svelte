@@ -31,7 +31,7 @@
 </script>
 
 {#if r}
-  <div class="grid">
+  <div class="grid" data-tour="report">
     <section class="card wide">
       <h3>Verdicts</h3>
       <div class="bar" role="img" aria-label={segments.map((s) => `${s.n} ${word(s.k)}`).join(", ")}>

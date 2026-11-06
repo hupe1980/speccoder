@@ -91,7 +91,7 @@ GitHub takes 50 annotations per request (the rest follow in updates) and 65 535 
 
 ## The evidence tour
 
-Each tick reads as six steps, each labelled with its source: **signed** (a signed statement says it), **committed** (git objects) or **not recorded**:
+Each tick reads as six steps, each labelled with its source: **signed** (a signed statement says it), **recorded** (a statement says it, unsigned), **committed** (git objects) or **not recorded**:
 
 1. **Requirement**: the passage the task cites, as the tick's commit holds it;
 2. **Frozen tests**: the acceptance tests, and where they were decided;

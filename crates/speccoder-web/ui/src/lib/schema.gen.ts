@@ -5544,7 +5544,7 @@ export interface SkippedTask {
 }
 
 /** Where a step's content comes from. */
-export type Source = "signed" | "committed" | "not_recorded";
+export type Source = "signed" | "recorded" | "committed" | "not_recorded";
 
 /**
  * A stretch of text and its origin; the stretches of one text, in order,

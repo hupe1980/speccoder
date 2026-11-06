@@ -412,6 +412,13 @@ pub fn of(repo: &Path, prefix: &str, r: &TickReport) -> EvidenceTour {
         return tour;
     };
     let statements = crate::evidence::statements(repo, commit);
+    // Whether the note's envelopes carry signatures at all, trusted or not.
+    let signed = crate::attest::notes::read(repo, commit).is_some_and(|note| {
+        crate::attest::dsse::decode(&note)
+            .0
+            .iter()
+            .any(|e| !e.signatures.is_empty())
+    });
     let tv: Option<TaskVerificationV0> = statements
         .iter()
         .find(|s| s["predicateType"] == statement::TASK_VERIFICATION)
@@ -451,9 +458,18 @@ pub fn of(repo: &Path, prefix: &str, r: &TickReport) -> EvidenceTour {
             };
             if let (Some(v), Some(last)) = (value, tour.steps.last_mut()) {
                 last.body_markdown.push_str(&format!(
-                    "\nsigned `{name}` (shown as recorded): `{}`",
+                    "\n{} `{name}` (shown as recorded): `{}`",
+                    if signed { "signed" } else { "recorded" },
                     v.to_string().chars().take(300).collect::<String>()
                 ));
+            }
+        }
+    }
+    // A statement nobody signed says it, but is not signed: said so.
+    if !signed {
+        for s in &mut tour.steps {
+            if s.source == Source::Signed {
+                s.source = Source::Recorded;
             }
         }
     }

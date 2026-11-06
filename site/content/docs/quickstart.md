@@ -46,7 +46,7 @@ speccoder writes none of the stack's or the format's files itself; `speccoder.to
 
 `speccoder new --undo` moves a folder speccoder created to the Trash — only while nothing but its commit exists there — or, in an existing repository, reverts speccoder's commit (files that were ignored before it ran don't count). It never trashes a folder speccoder did not make. A new project's first checks run on the untouched code; an empty test suite reads *no tests yet*.
 
-`speccoder sample` copies a recorded run of a small project into speccoder's state directory and replays it strictly — no model, no key, no network — then `speccoder ui -C <its path>` plays it back. A build without the recording answers `SAMPLE-MISSING`.
+`speccoder sample` copies a recorded run of a small project into speccoder's state directory and replays it strictly — no model, no key, no network — then `speccoder ui -C <its path>` opens it with **Take the tour** ([watch it](@/docs/tour.md)). A build without the recording answers `SAMPLE-MISSING`.
 
 In the app, a host started outside a project shows **Welcome to speccoder**: New Project, Open Project…, Clone from GitHub…, Try the Sample and the recent projects ([the app](@/docs/web.md#welcome)).
 

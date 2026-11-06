@@ -26,6 +26,8 @@
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="site/static/screenshots/drawer-dark.webp"><img alt="The speccoder app: a feature's tasks by verdict, and one task's evidence — acceptance tests red to green, checks, diff audit, attestation" src="site/static/screenshots/drawer-light.webp"></picture>
 
+**See it run:** [the 48-second tour](https://hupe1980.github.io/speccoder/docs/tour/) · [a real pull request with its evidence](https://github.com/hupe1980/speccoder-example-md2csv/pull/1) · `speccoder sample` (no key needed)
+
 ## 💡 Why
 
 Coding agents are good at writing code and too good at declaring victory. speccoder separates the two: a model proposes, and code decides.

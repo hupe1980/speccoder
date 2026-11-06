@@ -2,7 +2,7 @@
 // playback, as a person meets them.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { flushSync, mount, unmount } from "svelte";
+import { flushSync, mount, tick, unmount } from "svelte";
 import { button, settle, type, violations } from "../test/dom";
 import type { SampleInfo, WelcomeView } from "../lib/types";
 
@@ -118,29 +118,49 @@ describe("Welcome", () => {
 describe("SamplePlayback", () => {
   const sample = (over: Partial<SampleInfo> = {}): SampleInfo => ({ path: "/s/sample/0.2.0/wordcount", recorded: { model: "claude-sonnet-5-5", recorded_at: "2026-11-02", agentplane: "0.54.0" }, runs: [{ id: "r1", result: "reproduced" }], ...over });
 
-  it("plays the tasks in the order the recording ran them", () => {
-    c = mount(SamplePlayback, { target: document.body, props: { sample: sample({ runs: [{ id: "r1", result: "reproduced" }, { id: "r2", result: "reproduced" }] }) } });
-    flushSync();
-    button(/^Play/).click();
-    flushSync();
-    expect(host.app.selectTask).toHaveBeenLastCalledWith("T002");
-  });
+  const caption = () => document.querySelector(".caption")?.textContent ?? "";
 
-  it("names the recording and plays its judged tasks in order at a readable pace", async () => {
-    vi.useFakeTimers();
+  it("takes the tour: five stops on the sample's own run, one part of the screen each", async () => {
     c = mount(SamplePlayback, { target: document.body, props: { sample: sample() } });
     flushSync();
     const banner = document.querySelector('[role="status"]')!;
     expect(banner.textContent).toContain("A recorded run of wordcount, replayed strictly — no model was called. Recorded 2026-11-02 with claude-sonnet-5-5.");
-    button(/^Play/).click();
+    button(/^Take the tour/).click();
     flushSync();
-    // r1 is T002's run: it ran first.
-    expect(host.app.selectTask).toHaveBeenLastCalledWith("T002");
-    await vi.advanceTimersByTimeAsync(599);
-    expect(host.app.selectTask).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1000);
+    expect(caption()).toContain("Tour · 1 of 5");
+    expect(caption()).toContain("One feature, every task");
+    expect(host.app.selectTask).toHaveBeenLastCalledWith(null);
+    // → steps (and pauses): the first verified task's tests, red then green.
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    await tick();
     flushSync();
+    expect(caption()).toContain("2 of 5");
+    expect(caption()).toContain("Red first, then green");
     expect(host.app.selectTask).toHaveBeenLastCalledWith("T001");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+    await tick();
+    flushSync();
+    expect(caption()).toContain("1 of 5");
+    expect(await violations(document.querySelector(".caption")!)).toEqual([]);
+    // Esc ends it where it is.
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    flushSync();
+    expect(document.querySelector(".caption")).toBeNull();
+  });
+
+  it("plays at a reading pace and ends at the end card", async () => {
+    vi.useFakeTimers();
+    c = mount(SamplePlayback, { target: document.body, props: { sample: sample() } });
+    flushSync();
+    button(/^Take the tour/).click();
+    flushSync();
+    await vi.advanceTimersByTimeAsync(6999);
+    flushSync();
+    expect(caption()).toContain("1 of 5");
+    // Each stop waits up to 3s for its part of the screen (none here), then reads for 7s.
+    await vi.advanceTimersByTimeAsync(10_000 * 5);
+    flushSync();
+    expect(document.querySelector(".caption")).toBeNull();
     expect(document.body.textContent).toContain("Start your own");
   });
 
@@ -160,19 +180,28 @@ describe("SamplePlayback", () => {
     expect(document.body.textContent).toContain("cargo is not installed");
   });
 
-  it("skips to the end with End, and a divergence is said, never played", () => {
+  it("skips to the end with End; a divergence is never played; no verified task, no stop about one", () => {
     c = mount(SamplePlayback, { target: document.body, props: { sample: sample() } });
     flushSync();
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "End" }));
     flushSync();
-    expect(host.app.selectTask).toHaveBeenLastCalledWith("T001");
+    expect(document.body.textContent).toContain("Start your own");
     unmount(c);
     host.app.selectTask.mockClear();
     c = mount(SamplePlayback, { target: document.body, props: { sample: sample({ runs: [{ id: "r1", result: "diverged", finding: "diverged: an effect differs" }] }) } });
     flushSync();
     expect(document.body.textContent).toContain("This build cannot reproduce the recorded run — please report it.");
-    expect(document.body.textContent).not.toContain("Play");
+    expect(document.body.textContent).not.toContain("Take the tour");
     window.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
     expect(host.app.selectTask).not.toHaveBeenCalled();
+    unmount(c);
+    const report = host.app.report;
+    host.app.report = { data: { tasks: [{ id: "T003", commit: null, state: "ready", run_id: null }] } };
+    c = mount(SamplePlayback, { target: document.body, props: { sample: sample() } });
+    flushSync();
+    button(/^Take the tour/).click();
+    flushSync();
+    expect(caption()).toContain("1 of 2");
+    host.app.report = report;
   });
 });

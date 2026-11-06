@@ -54,6 +54,8 @@ impl StepKind {
 pub enum Source {
     /// A signed statement says it (and what is shown hashes to it).
     Signed,
+    /// A statement says it, unsigned (no signing key was configured).
+    Recorded,
     /// The commit holds it (git objects, not a signature).
     Committed,
     /// Nothing recorded it.
@@ -66,6 +68,7 @@ impl Source {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Signed => "signed",
+            Self::Recorded => "recorded",
             Self::Committed => "committed",
             Self::NotRecorded => "not recorded",
         }

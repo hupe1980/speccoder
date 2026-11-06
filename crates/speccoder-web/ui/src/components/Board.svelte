@@ -96,7 +96,7 @@
       {/each}
     </ul>
   {/if}
-  <div class="board">
+  <div class="board" data-tour="board">
     {#each grouped as lane (lane.key)}
       <section class="lane" aria-label={lane.title}>
         <h3 class="s-{lane.key}"><Icon name={symbol(lane.key)} size={14} weight={2} /><span class="title">{lane.title}</span><span class="count">{lane.tasks.length}</span></h3>

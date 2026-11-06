@@ -1,89 +1,147 @@
 <script lang="ts">
   // The sample, replayed: a banner that says what it is — a recorded run,
-  // replayed strictly, no model called — and a playback of its tasks in
-  // the order they were judged: each task's evidence opens in turn, the
-  // model's words labelled as its account. A divergence is said, never
-  // shown as if it had worked. Nothing here runs anything.
+  // replayed strictly, no model called — and a tour of it: a few stops on
+  // the real recorded run, each lighting one part of the screen with what
+  // it is and why it matters. A divergence is said, never shown as if it
+  // had worked. Nothing here runs anything.
   import { app } from "../lib/app.svelte";
-  import { pace } from "../lib/start";
   import { offer } from "../lib/actions";
   import type { SampleInfo } from "../lib/types";
+  import TourSpot from "./TourSpot.svelte";
 
   let { sample }: { sample: SampleInfo } = $props();
   const diverged = $derived(sample.runs.find((r) => r.result !== "reproduced") ?? null);
   const name = $derived(sample.path.split("/").filter(Boolean).at(-1) ?? "the sample");
-  // The tasks the recording judged, in the order it ran them (its runs, as
-  // the manifest lists them); a judged task no run names comes after.
-  const order = $derived.by(() => {
-    const tasks = (app.report?.data?.tasks ?? []).filter((t) => t.commit || t.state !== "ready");
-    const at = (id: string | null | undefined) => {
-      const i = sample.runs.findIndex((r) => r.id === id);
-      return i < 0 ? Number.MAX_SAFE_INTEGER : i;
-    };
-    return [...tasks].sort((a, b) => at(a.run_id) - at(b.run_id)).map((t) => t.id);
-  });
+
+  type Stop = { view: "board" | "report"; task: string | null; tab?: "tour"; anchor: string; title: string; text: string };
+  // The stops, from the sample's own report: what it shows, never more
+  // (no verified task, no stop about one).
+  const verified = $derived((app.report?.data?.tasks ?? []).find((t) => t.state === "verified")?.id ?? null);
+  const stops = $derived<Stop[]>([
+    { view: "board", task: null, anchor: '[data-tour="board"]', title: "One feature, every task", text: "The sample's spec became these tasks. A task is ticked only on evidence: ✓ verified means its tests went from red to green and nothing else broke." },
+    ...(verified
+      ? [
+          { view: "board" as const, task: verified, anchor: '[data-tour-row="Acceptance"]', title: "Red first, then green", text: `speccoder wrote ${verified}'s tests from the spec before any code existed. They failed; the model's change made them pass. That is the tick.` },
+          { view: "board" as const, task: verified, anchor: '[data-tour-row="Attestation"]', title: "Recorded, and checkable by anyone", text: "Every row comes from the attestation the tick left in git, signed when a key is configured. `speccoder attest verify`, or a pull request's evidence check, re-checks it without trusting the agent." },
+          { view: "board" as const, task: verified, tab: "tour" as const, anchor: "ol.tour", title: "One task's whole story", text: "Requirement, frozen tests, red, the change, green, strength: the evidence as six steps, each saying where it comes from." },
+        ]
+      : []),
+    { view: "report", task: null, anchor: '[data-tour="report"]', title: "The report", text: "Every task and the evidence behind its tick — the same as `speccoder report` in a terminal." },
+  ]);
+
   let at = $state(-1);
   let playing = $state(false);
   let hidden = $state(false);
-  const ended = $derived(order.length > 0 && at >= order.length - 1 && !playing);
+  let ended = $state(false);
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Long enough to read a caption twice.
+  const READ_MS = 7000;
 
   let timer: ReturnType<typeof setTimeout> | null = null;
-  function step() {
-    if (at >= order.length - 1) {
-      playing = false;
-      return;
+  function clear() {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  }
+  // Opens what stop `i` is about, the way a person would.
+  async function show(i: number) {
+    const s = stops[i];
+    if (!s) return;
+    at = i;
+    ended = false;
+    app.view = s.view;
+    await app.selectTask(s.task);
+    // The drawer renders after the task is chosen: its tab, once there.
+    for (let i = 0; s.tab && i < 40; i++) {
+      const tab = document.querySelector<HTMLButtonElement>('[data-tour="tab-tour"]');
+      if (tab && !tab.disabled) {
+        tab.click();
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 50));
     }
-    at += 1;
+    // Its part of the screen, once loaded (the evidence is fetched): the
+    // reading time starts when there is something to read.
+    for (let i = 0; i < 60 && !document.querySelector(s.anchor); i++) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+  function finish() {
+    clear();
+    playing = false;
+    at = -1;
+    ended = true;
+    void app.selectTask(null);
     app.view = "board";
-    void app.selectTask(order[at] ?? null);
+  }
+  function next() {
+    if (at >= stops.length - 1) finish();
+    else void show(at + 1);
+  }
+  function prev() {
+    if (at > 0) void show(at - 1);
   }
   function tick() {
+    clear();
     if (!playing) return;
-    step();
-    if (playing && at < order.length - 1) timer = setTimeout(tick, pace(order.length));
-    else playing = false;
+    timer = setTimeout(async () => {
+      if (at >= stops.length - 1) return finish();
+      await show(at + 1);
+      tick();
+    }, READ_MS);
   }
-  function play() {
-    if (diverged || !order.length) return;
-    if (at >= order.length - 1) at = -1;
+  async function play() {
+    if (diverged || !stops.length) return;
     playing = true;
+    if (at < 0) await show(0);
     tick();
   }
   function pause() {
     playing = false;
-    if (timer) clearTimeout(timer);
+    clear();
+  }
+  function end() {
+    pause();
+    at = -1;
   }
   function skip() {
     pause();
-    at = order.length - 1;
-    app.view = "board";
-    void app.selectTask(order[at] ?? null);
+    finish();
   }
-  $effect(() => () => {
-    if (timer) clearTimeout(timer);
-  });
+  $effect(() => () => clear());
 
   function key(e: KeyboardEvent) {
     const el = e.target as HTMLElement | null;
-    if (typeof el?.closest === "function" && el.closest("input, textarea, select, button")) return;
+    if (typeof el?.closest === "function" && el.closest("input, textarea, select")) return;
     if (hidden) return;
-    if (e.key === " ") {
+    const touring = at >= 0;
+    if (e.key === " " && !el?.closest?.("button")) {
       e.preventDefault();
       if (playing) pause();
       else play();
-    } else if (e.key === "ArrowRight") {
+    } else if (e.key === "ArrowRight" && touring) {
       e.preventDefault();
       pause();
-      step();
+      next();
+    } else if (e.key === "ArrowLeft" && touring) {
+      e.preventDefault();
+      pause();
+      prev();
+    } else if (e.key === "Escape" && touring) {
+      e.preventDefault();
+      end();
     } else if (e.key === "End") {
       e.preventDefault();
       skip();
     }
   }
+  // A click outside the caption is the person taking over: the tour waits.
+  function pointer(e: PointerEvent) {
+    const el = e.target as HTMLElement | null;
+    if (playing && !el?.closest?.(".caption")) pause();
+  }
 </script>
 
-<svelte:window onkeydown={key} />
+<svelte:window onkeydown={key} onpointerdown={pointer} />
 
 {#if !hidden}
   <div class="banner" class:danger={!!diverged} role="status">
@@ -95,18 +153,22 @@
         {#if playing}
           <button class="btn small" onclick={pause}>Pause <kbd>Space</kbd></button>
         {:else}
-          <button class="btn small primary" onclick={play} disabled={!order.length}>Play ▶ <kbd>Space</kbd></button>
+          <button class="btn small primary" onclick={play} disabled={!stops.length}>{at >= 0 ? "Resume" : "Take the tour"} ▶ <kbd>Space</kbd></button>
         {/if}
-        <button class="btn small" onclick={skip} disabled={!order.length}>Skip to the end <kbd>End</kbd></button>
+        <button class="btn small" onclick={skip} disabled={!stops.length}>Skip to the end <kbd>End</kbd></button>
       </span>
     {/if}
     <button class="btn small ghost" onclick={() => (hidden = true)}>Close the sample</button>
   </div>
-  <div class="sr-only" aria-live="polite">{at >= 0 && order[at] ? `${order[at]}: step ${at + 1} of ${order.length}` : ""}</div>
+{/if}
+
+{#if at >= 0 && !hidden && stops[at]}
+  {@const s = stops[at]!}
+  <TourSpot anchor={s.anchor} title={s.title} text={s.text} n={at + 1} of={stops.length} {playing} onprev={() => { pause(); prev(); }} onnext={() => { pause(); next(); }} ontoggle={() => (playing ? pause() : play())} onend={end} />
 {/if}
 
 {#if ended && !hidden && !diverged}
-  <aside class="end glass" aria-label="The sample ended" class:still={reduced}>
+  <aside class="end glass" aria-label="The tour ended" class:still={reduced}>
     <p><strong>That was speccoder.</strong> Every tick above is a commit with its evidence.</p>
     <div class="row">
       <button class="btn primary" onclick={() => (app.newProject = {})}>Start your own</button>

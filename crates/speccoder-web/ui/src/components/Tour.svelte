@@ -25,7 +25,7 @@
     );
   });
 
-  const sources: Record<string, string> = { signed: "signed", committed: "committed", not_recorded: "not recorded" };
+  const sources: Record<string, string> = { signed: "signed", recorded: "recorded", committed: "committed", not_recorded: "not recorded" };
   // The first line is the step's statement; the rest is quoted text or a
   // fenced block, shown as written.
   const split = (md: string) => {

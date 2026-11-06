@@ -341,6 +341,16 @@ fn without_a_key_the_tick_stands_and_the_statements_are_unsigned() {
     let strict = verify_at(r.path(), None, None, &Trust::default(), true);
     assert_eq!(strict.status(), CommandStatus::AttestationFailed);
     assert_eq!(strict.exit_code().code(), 26);
+
+    // The app's evidence tour finds the tick on the feature's branch (the
+    // checkout is not on it), and says its statements are recorded, never
+    // signed (the sample's tour, 2026-11-05).
+    let tour = speccoder_runtime::service::tour::of_task(r.path(), Some(&rep.feature), &rep.task);
+    assert_eq!(tour.status(), CommandStatus::Ok, "{}", tour.message());
+    let data = serde_json::to_value(tour.data()).unwrap();
+    let text = data.to_string();
+    assert!(text.contains("\"source\":\"recorded\""), "{text}");
+    assert!(!text.contains("\"source\":\"signed\""), "{text}");
 }
 
 #[test]
