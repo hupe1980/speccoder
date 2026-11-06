@@ -94,6 +94,8 @@ pub static PLANNING: Planning = Planning {
     explores: None,
     explore_paths: crate::format::writes_nothing,
     explore_commands: &[],
+    // Kiro specs are written in Kiro (or with cc-sdd), not here.
+    commands: &[],
 };
 
 fn toward_tasks(_has_plan: bool) -> &'static [&'static str] {

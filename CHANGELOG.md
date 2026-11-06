@@ -31,6 +31,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - A run stopped by one problem in the spec names it and its fix, instead
   of counting problems.
+- An editor's slash menu (ACP) offers the planning commands of the
+  project's format: Spec Kit's five, OpenSpec's `/propose`, none for Kiro.
+- `speccoder sample` replays a new recording: a Rust word counter whose
+  stories' tests are written and frozen before any code, then three tasks
+  verified red to green.
 
 ### Fixed
 
@@ -38,8 +43,6 @@ adheres to [Semantic Versioning](https://semver.org/).
   not only its task list.
 - A new project's plan no longer reads as changed (`NEW-PLAN-CHANGED`)
   when a tool's version check is slow: the versions are shown, not bound.
-- A Kiro task's `**Validates: Requirements 1.2**` line cites those
-  criteria.
 
 ## [0.12.0] - 2026-11-06
 

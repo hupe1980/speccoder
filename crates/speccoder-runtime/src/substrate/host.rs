@@ -49,50 +49,13 @@ pub const EXPLORE_FALLBACK: &str = "Explore the idea below with the person. Read
 /// run (`explore::validate_fallback`), never trusted to the schema.
 #[must_use]
 pub fn explore_schema() -> Value {
-    let strings = json!({ "type": "array", "items": { "type": "string" } });
-    let some = strings.clone();
-    json!({
-        "type": "object",
-        "properties": {
-            "summary": { "type": "string" },
-            "status": { "type": "string", "enum": ["done", "incomplete"] },
-            "approaches": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "title": { "type": "string" },
-                        "summary": { "type": "string" },
-                        "tradeoffs": some,
-                        "risks": some,
-                    },
-                    "required": ["title", "summary", "tradeoffs", "risks"],
-                    "additionalProperties": false,
-                },
-            },
-            "constraints": strings,
-            "open_questions": strings,
-        },
-        "required": ["summary", "status", "approaches", "constraints", "open_questions"],
-        "additionalProperties": false,
-    })
+    super::answers::schema::<super::answers::Explored>()
 }
 
 /// The closing report's schema.
 #[must_use]
 pub fn schema() -> Value {
-    let strings = json!({ "type": "array", "items": { "type": "string" } });
-    json!({
-        "type": "object",
-        "properties": {
-            "summary": { "type": "string" },
-            "status": { "type": "string", "enum": ["done", "incomplete"] },
-            "files_written": strings,
-            "questions": strings,
-        },
-        "required": ["summary", "status", "files_written", "questions"],
-        "additionalProperties": false,
-    })
+    super::answers::schema::<super::answers::Hosted>()
 }
 
 /// The run input.

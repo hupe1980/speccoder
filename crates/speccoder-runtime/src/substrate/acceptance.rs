@@ -100,29 +100,7 @@ pub fn reproduce_held_out_policy(w: &Wording) -> String {
 /// command.
 #[must_use]
 pub fn reproduce_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "files": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "path": { "type": "string" },
-                        "content": { "type": "string" },
-                        "statement": { "type": "string" },
-                        "test": { "type": "string" },
-                        "argv": { "type": "array", "items": { "type": "string" } },
-                    },
-                    "required": ["path", "content", "statement", "test", "argv"],
-                    "additionalProperties": false,
-                },
-            },
-            "notes": { "type": "array", "items": { "type": "string" } },
-        },
-        "required": ["files", "notes"],
-        "additionalProperties": false,
-    })
+    super::answers::schema::<super::answers::Reproductions>()
 }
 
 /// What a bug's reproduction (or held-out) author is given. The statements
@@ -256,29 +234,7 @@ pub fn strengthen_input(
 /// The held-out answer's schema: per file its scenarios and command.
 #[must_use]
 pub fn held_out_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "files": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "path": { "type": "string" },
-                        "content": { "type": "string" },
-                        "scenarios": { "type": "array", "items": { "type": "string" } },
-                        "argv": { "type": "array", "items": { "type": "string" } },
-                        "composition": { "type": "boolean" },
-                    },
-                    "required": ["path", "content", "scenarios", "argv", "composition"],
-                    "additionalProperties": false,
-                },
-            },
-            "notes": { "type": "array", "items": { "type": "string" } },
-        },
-        "required": ["files", "notes"],
-        "additionalProperties": false,
-    })
+    super::answers::schema::<super::answers::HeldOut>()
 }
 
 /// The held-out author's input: the visible run's, plus the scenarios, the
@@ -381,54 +337,7 @@ notes, when given, are their review of earlier tests: follow them.",
 /// and `untestable`, both required (contracts/author-schema.md).
 #[must_use]
 pub fn review_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "files": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "path": { "type": "string" },
-                        "content": { "type": "string" },
-                        "scenarios": { "type": "array", "items": { "type": "string" } },
-                        "argv": { "type": "array", "items": { "type": "string" } },
-                    },
-                    "required": ["path", "content", "scenarios", "argv"],
-                    "additionalProperties": false,
-                },
-            },
-            "argv": { "type": "array", "items": { "type": "string" } },
-            "notes": { "type": "array", "items": { "type": "string" } },
-            "expectations": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "scenario": { "type": "string" },
-                        "given": { "type": "string" },
-                        "expect": { "type": "string" },
-                    },
-                    "required": ["scenario", "given", "expect"],
-                    "additionalProperties": false,
-                },
-            },
-            "untestable": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "scenario": { "type": "string" },
-                        "why": { "type": "string" },
-                    },
-                    "required": ["scenario", "why"],
-                    "additionalProperties": false,
-                },
-            },
-        },
-        "required": ["files", "argv", "notes", "expectations", "untestable"],
-        "additionalProperties": false,
-    })
+    super::answers::schema::<super::answers::Review>()
 }
 
 /// What a review-time author call is given. The requirement,
@@ -537,28 +446,7 @@ pub fn review_input(p: &ReviewParts<'_>) -> Tainted<Value> {
 /// The answer's schema.
 #[must_use]
 pub fn schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "files": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "path": { "type": "string" },
-                        "content": { "type": "string" },
-                        "scenarios": { "type": "array", "items": { "type": "string" } },
-                    },
-                    "required": ["path", "content", "scenarios"],
-                    "additionalProperties": false,
-                },
-            },
-            "argv": { "type": "array", "items": { "type": "string" } },
-            "notes": { "type": "array", "items": { "type": "string" } },
-        },
-        "required": ["files", "argv", "notes"],
-        "additionalProperties": false,
-    })
+    super::answers::schema::<super::answers::Acceptance>()
 }
 
 /// The run input: `{ bundle, scenarios, project: { files, manifest } }`.

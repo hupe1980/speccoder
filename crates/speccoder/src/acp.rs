@@ -2,9 +2,10 @@
 //! an editor (Zed, JetBrains, …) drives it over stdio.
 //!
 //! Prompts are speccoder's commands — `/run`, `/run T005`, `/run --converge`,
-//! `/converge`, `/report`, `/status`, `/cost` and the hosted planning skills
-//! (`/specify …`, `/clarify`, `/plan`, `/tasks`, `/analyze`) — so a person
-//! types what they would type at the terminal. Tasks and the model's tool
+//! `/converge`, `/report`, `/status`, `/cost` and the planning skills of the
+//! project's format (Spec Kit's `/specify …`, `/plan`, …; OpenSpec's
+//! `/propose`; none for Kiro) — so a person types what they would type at
+//! the terminal. Tasks and the model's tool
 //! calls appear as the editor's tool calls; a call that needs a person is
 //! the editor's permission request (allow once, allow for the task,
 //! reject). Results are the same text the CLI prints.
@@ -22,7 +23,8 @@ use serde_json::{Value, json};
 use speccoder_runtime::approvals::{Answer, Approver, Presentation, Scope, Who};
 use speccoder_runtime::progress::{Event, Progress};
 
-/// The commands an editor offers (ACP `available_commands_update`).
+/// speccoder's own commands, offered in every project; the format adds its
+/// planning skills (ACP `available_commands_update`).
 const COMMANDS: &[(&str, &str, Option<&str>)] = &[
     (
         "run",
@@ -47,20 +49,12 @@ const COMMANDS: &[(&str, &str, Option<&str>)] = &[
     ("report", "Each task's evidence", None),
     ("status", "The current or last run", None),
     ("cost", "Tokens and money per task", None),
-    (
-        "specify",
-        "Write the feature's spec.md from a description (Spec Kit's skill)",
-        Some("what to build"),
-    ),
-    ("clarify", "Ask about what is unclear in the spec", None),
-    ("plan", "Write plan.md and the design artifacts", None),
-    ("tasks", "Write tasks.md", None),
-    (
-        "analyze",
-        "Check spec, plan and tasks for consistency (read-only)",
-        None,
-    ),
 ];
+
+/// The planning skills `cwd`'s format offers as slash commands.
+fn planning(cwd: &std::path::Path) -> &'static [speccoder_runtime::format::SlashCommand] {
+    speccoder_runtime::format::at(cwd).planning().commands
+}
 
 /// The connection: one writer, and the agent's own requests awaiting answers.
 struct Conn {
@@ -572,11 +566,20 @@ fn prompt(
         "report" => speccoder_runtime::status::report(cwd, None),
         "status" => speccoder_runtime::progress::status(cwd),
         "cost" => speccoder_runtime::controls::cost(cwd, None),
-        skill if COMMANDS.iter().any(|(n, ..)| *n == skill) => {
+        skill if planning(cwd).iter().any(|c| c.name == skill) => {
             speccoder_runtime::hosting::run(cwd, None, skill, args, &options)
         }
         other => {
-            say(&format!("`/{other}` is not a speccoder command."));
+            let names: Vec<String> = COMMANDS
+                .iter()
+                .map(|(n, ..)| *n)
+                .chain(planning(cwd).iter().map(|c| c.name))
+                .map(|n| format!("`/{n}`"))
+                .collect();
+            say(&format!(
+                "`/{other}` is not a command of this project. It has {}.",
+                speccoder_core::words::listed(&names)
+            ));
             return;
         }
     };
@@ -848,14 +851,25 @@ pub fn serve(input: impl BufRead, output: Box<dyn Write + Send>) {
                     .as_str()
                     .map_or_else(|| PathBuf::from("."), PathBuf::from);
                 let session = c.id("session");
-                sessions.insert(session.clone(), (cwd, Arc::new(AtomicBool::new(false))));
+                sessions.insert(
+                    session.clone(),
+                    (cwd.clone(), Arc::new(AtomicBool::new(false))),
+                );
                 c.respond(&id, json!({ "sessionId": session }));
+                let command = |name: &str, description: &str, hint: Option<&str>| match hint {
+                    Some(h) => {
+                        json!({ "name": name, "description": description, "input": { "hint": h } })
+                    }
+                    None => json!({ "name": name, "description": description }),
+                };
                 let commands: Vec<Value> = COMMANDS
                     .iter()
-                    .map(|(name, description, hint)| match hint {
-                        Some(h) => json!({ "name": name, "description": description, "input": { "hint": h } }),
-                        None => json!({ "name": name, "description": description }),
-                    })
+                    .map(|(name, description, hint)| command(name, description, *hint))
+                    .chain(
+                        planning(&cwd)
+                            .iter()
+                            .map(|c| command(c.name, c.about, c.hint)),
+                    )
                     .collect();
                 c.update(&session, json!({ "sessionUpdate": "available_commands_update", "availableCommands": commands }));
             }

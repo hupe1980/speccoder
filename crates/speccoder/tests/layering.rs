@@ -300,6 +300,36 @@ fn scan(text: &str) -> Vec<(usize, &'static str)> {
     found
 }
 
+/// The files of `files` declared `#[cfg(test)] mod name;`: test code, as
+/// an inline `#[cfg(test)]` module is.
+fn test_modules(files: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    for f in files {
+        let text = std::fs::read_to_string(f).unwrap();
+        let dir = if f
+            .file_name()
+            .is_some_and(|n| n == "mod.rs" || n == "lib.rs")
+        {
+            f.parent().unwrap().to_path_buf()
+        } else {
+            f.with_extension("")
+        };
+        let lines: Vec<&str> = text.lines().collect();
+        for w in lines.windows(2) {
+            if w[0].trim() == "#[cfg(test)]"
+                && let Some(name) = w[1]
+                    .trim()
+                    .strip_prefix("mod ")
+                    .and_then(|r| r.strip_suffix(';'))
+            {
+                out.push(dir.join(format!("{name}.rs")));
+                out.push(dir.join(name).join("mod.rs"));
+            }
+        }
+    }
+    out
+}
+
 fn rust_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
     for e in std::fs::read_dir(dir).unwrap().flatten() {
         let p = e.path();
@@ -323,10 +353,11 @@ fn runtime_has_no_speckit_literals_outside_the_adapter() {
     let mut files = Vec::new();
     rust_files(&src, &mut files);
     files.sort();
+    let tests = test_modules(&files);
     let mut errors = Vec::new();
     for f in files
         .iter()
-        .filter(|f| !adapters.iter().any(|a| f.starts_with(a)))
+        .filter(|f| !adapters.iter().any(|a| f.starts_with(a)) && !tests.contains(f))
     {
         let text = std::fs::read_to_string(f).unwrap();
         let rel = f.strip_prefix(&src).unwrap().display();

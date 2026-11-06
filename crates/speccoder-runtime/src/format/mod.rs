@@ -703,6 +703,19 @@ pub struct Planning {
     pub explore_paths: fn(&str) -> bool,
     /// The read-only commands it may run (argv prefixes).
     pub explore_commands: &'static [&'static [&'static str]],
+    /// The planning skills an editor offers as slash commands.
+    pub commands: &'static [SlashCommand],
+}
+
+/// A slash command an editor offers (ACP `available_commands_update`).
+#[derive(Debug, Clone, Copy)]
+pub struct SlashCommand {
+    /// Its name, without the slash.
+    pub name: &'static str,
+    /// What it does, one line.
+    pub about: &'static str,
+    /// What to type after it, if it takes input.
+    pub hint: Option<&'static str>,
 }
 
 /// No exploration artifacts.

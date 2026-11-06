@@ -4,7 +4,7 @@ The application services of [speccoder](https://github.com/hupe1980/speccoder), 
 
 Entry points:
 
-- `inspect`, `format::open` — the project in its spec format (Spec Kit or OpenSpec), behind one adapter.
+- `inspect`, `format::open` — the project in its spec format (Spec Kit, OpenSpec or Kiro), behind one adapter.
 - `run_with`, `run_feature_with` — one attempt at a task, or a feature worked through, judged and ticked only on evidence.
 - `verify::run_checks` — the configured checks.
 - `convergence::converge_with` — a finished feature assessed against its spec, gaps appended as tasks.

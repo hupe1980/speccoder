@@ -262,3 +262,82 @@ fn a_question_is_an_ask_turn_and_only_record_records() {
     let _ = mock.kill();
     let _ = mock.wait();
 }
+
+/// The slash menu: speccoder's commands, and the planning skills of the
+/// project's own format — a planning command of another format runs nothing.
+#[test]
+fn the_slash_menu_follows_the_projects_format() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    for (fixture, planning) in [
+        (
+            "speccoder-speckit/tests/fixtures/graph",
+            &["specify", "clarify", "plan", "tasks", "analyze"][..],
+        ),
+        (
+            "speccoder-openspec/tests/fixtures/1.14.3/sample",
+            &["propose"][..],
+        ),
+        ("speccoder-kiro/tests/fixtures/issue-triage", &[][..]),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(
+            Command::new("cp")
+                .arg("-R")
+                .arg(root.join(fixture).join("."))
+                .arg(dir.path())
+                .status()
+                .unwrap()
+                .success()
+        );
+        let state = tempfile::tempdir().unwrap();
+        let mut child = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+            .arg("acp")
+            .env("SPECCODER_STATE_DIR", state.path())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stdin = child.stdin.take().unwrap();
+        let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+        let mut send = move |v: Value| writeln!(stdin, "{v}").unwrap();
+        let mut next =
+            || -> Value { serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap() };
+        send(
+            json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": 1, "clientCapabilities": {} } }),
+        );
+        next();
+        send(
+            json!({ "jsonrpc": "2.0", "id": 2, "method": "session/new", "params": { "cwd": dir.path(), "mcpServers": [] } }),
+        );
+        let session = next()["result"]["sessionId"].as_str().unwrap().to_owned();
+        let commands = next();
+        let names: Vec<String> = commands["params"]["update"]["availableCommands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["name"].as_str().unwrap().to_owned())
+            .collect();
+        let common = [
+            "run", "converge", "inbox", "ask", "report", "status", "cost",
+        ];
+        let expected: Vec<&str> = common.iter().chain(planning).copied().collect();
+        assert_eq!(names, expected, "{fixture}");
+
+        if planning.is_empty() {
+            send(
+                json!({ "jsonrpc": "2.0", "id": 3, "method": "session/prompt", "params": { "sessionId": session, "prompt": [{ "type": "text", "text": "/specify a thing" }] } }),
+            );
+            let text = next()["params"]["update"]["content"]["text"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            assert!(
+                text.starts_with("`/specify` is not a command of this project. It has `/run`"),
+                "{text}"
+            );
+            assert_eq!(next()["id"], 3);
+        }
+        drop(send);
+        assert!(child.wait().unwrap().success());
+    }
+}

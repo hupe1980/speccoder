@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use crate::format::{Assess, Messages, Planning, Rules, Wording};
+use crate::format::{Assess, Messages, Planning, Rules, SlashCommand, Wording};
 
 /// The marker directory of a Spec Kit project.
 pub const MARKER: &str = ".specify";
@@ -160,6 +160,33 @@ pub static PLANNING: Planning = Planning {
     explores: None,
     explore_paths: crate::format::writes_nothing,
     explore_commands: &[],
+    commands: &[
+        SlashCommand {
+            name: "specify",
+            about: "Write the feature's spec.md from a description (Spec Kit's skill)",
+            hint: Some("what to build"),
+        },
+        SlashCommand {
+            name: "clarify",
+            about: "Ask about what is unclear in the spec",
+            hint: None,
+        },
+        SlashCommand {
+            name: "plan",
+            about: "Write plan.md and the design artifacts",
+            hint: None,
+        },
+        SlashCommand {
+            name: "tasks",
+            about: "Write tasks.md",
+            hint: None,
+        },
+        SlashCommand {
+            name: "analyze",
+            about: "Check spec, plan and tasks for consistency (read-only)",
+            hint: None,
+        },
+    ],
 };
 
 fn toward_tasks(has_plan: bool) -> &'static [&'static str] {

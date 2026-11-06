@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use crate::format::{Assess, Messages, Planning, Rules, Wording};
+use crate::format::{Assess, Messages, Planning, Rules, SlashCommand, Wording};
 
 /// OpenSpec's intent and planning rules.
 pub static RULES: Rules = Rules {
@@ -169,6 +169,12 @@ pub static PLANNING: Planning = Planning {
         &["openspec", "schemas"],
         &["openspec", "context"],
     ],
+    // Exploring has its own read-only flow (`speccoder spec explore`).
+    commands: &[SlashCommand {
+        name: "propose",
+        about: "Propose a change: its proposal, deltas and tasks (OpenSpec's skill)",
+        hint: Some("what to change"),
+    }],
 };
 
 fn toward_tasks(_has_plan: bool) -> &'static [&'static str] {

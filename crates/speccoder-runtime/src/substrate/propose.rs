@@ -27,19 +27,7 @@ what is unclear or risky instead of guessing. Answer only in the requested struc
 /// The proposal's JSON schema.
 #[must_use]
 pub fn schema() -> Value {
-    let strings = json!({ "type": "array", "items": { "type": "string" } });
-    json!({
-        "type": "object",
-        "properties": {
-            "summary": { "type": "string" },
-            "steps": strings,
-            "files": strings,
-            "checks": strings,
-            "risks": strings,
-        },
-        "required": ["summary", "steps", "files", "checks", "risks"],
-        "additionalProperties": false,
-    })
+    super::answers::schema::<super::answers::Proposal>()
 }
 
 fn breakpoint(ttl: CacheTtl) -> Value {

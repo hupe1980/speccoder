@@ -6,6 +6,7 @@
 //! recorded run can be replayed strictly, without the model.
 
 pub mod acceptance;
+pub mod answers;
 pub mod ask;
 pub mod attempt;
 pub mod converge;

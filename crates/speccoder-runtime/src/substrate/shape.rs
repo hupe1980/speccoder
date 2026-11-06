@@ -87,30 +87,7 @@ to three sentences."
 /// The answer's schema.
 #[must_use]
 pub fn schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "proposal": { "type": "string" },
-            "assumptions": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "words": { "type": "string" },
-                        "from": { "type": "string" },
-                        "question": { "type": "string" },
-                    },
-                    "required": ["words", "from", "question"],
-                    "additionalProperties": false,
-                },
-            },
-            "questions": { "type": "array", "items": { "type": "string" } },
-            "language": { "type": "string" },
-            "back_translation": { "type": "string" },
-        },
-        "required": ["proposal", "assumptions", "questions", "language", "back_translation"],
-        "additionalProperties": false,
-    })
+    super::answers::schema::<super::answers::Shaped>()
 }
 
 /// The run input: the field, the format, a sample of the spec (for its

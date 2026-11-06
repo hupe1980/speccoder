@@ -25,7 +25,7 @@ group = "Use"
 | `/converge` | Assess the finished feature against its spec and append what remains |
 | `/inbox` | What waits for your decision, in every feature |
 | `/report`, `/status`, `/cost` | The evidence, the current or last run, tokens and money |
-| `/specify <what to build>`, `/clarify`, `/plan`, `/tasks`, `/analyze` | Spec Kit's planning skills |
+| Spec Kit: `/specify <what to build>`, `/clarify`, `/plan`, `/tasks`, `/analyze`; OpenSpec: `/propose <what to change>` | The planning skills of the project's format; a Kiro project offers none (its specs are written in Kiro) |
 | any words without `/`, or `/ask <question>` | [Ask](@/docs/web.md#ask) about the project, in the session's conversation |
 
 - Tasks and the model's tool calls appear as the editor's tool calls; during `/run` the feature's tasks are the editor's plan.

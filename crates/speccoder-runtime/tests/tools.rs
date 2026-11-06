@@ -667,18 +667,33 @@ fn declarations_cover_every_tool_with_a_schema() {
 #[test]
 fn every_tool_and_answer_schema_is_strict_for_both_providers() {
     use agentplane::model::StrictSubset;
-    use speccoder_runtime::substrate::{acceptance, attempt, converge, host, monitor, propose};
+    use speccoder_runtime::substrate::answers::{self as a, schema};
     let mut schemas: Vec<(String, serde_json::Value)> = speccoder_runtime::tools::catalog()
         .iter()
         .map(|t| (t.name.to_owned(), (t.parameters)()))
         .collect();
     schemas.extend([
-        ("attempt report".to_owned(), attempt::report_schema()),
-        ("propose".to_owned(), propose::schema()),
-        ("acceptance".to_owned(), acceptance::schema()),
-        ("converge".to_owned(), converge::schema()),
-        ("monitor".to_owned(), monitor::schema()),
-        ("host".to_owned(), host::schema()),
+        ("attempt report".to_owned(), schema::<a::AttemptReport>()),
+        ("report_blocked".to_owned(), schema::<a::Blocked>()),
+        ("ask_person".to_owned(), schema::<a::Question>()),
+        ("propose".to_owned(), schema::<a::Proposal>()),
+        ("converge".to_owned(), schema::<a::Assessment>()),
+        ("monitor".to_owned(), schema::<a::Monitoring>()),
+        ("shape".to_owned(), schema::<a::Shaped>()),
+        (
+            "near miss".to_owned(),
+            schema::<a::Variants<a::NearMissKind>>(),
+        ),
+        (
+            "special case".to_owned(),
+            schema::<a::Variants<a::SpecialCaseKind>>(),
+        ),
+        ("host".to_owned(), schema::<a::Hosted>()),
+        ("explore".to_owned(), schema::<a::Explored>()),
+        ("acceptance".to_owned(), schema::<a::Acceptance>()),
+        ("reproduce".to_owned(), schema::<a::Reproductions>()),
+        ("held out".to_owned(), schema::<a::HeldOut>()),
+        ("review".to_owned(), schema::<a::Review>()),
     ]);
     for (name, schema) in &schemas {
         for subset in [StrictSubset::OpenAi, StrictSubset::Anthropic] {

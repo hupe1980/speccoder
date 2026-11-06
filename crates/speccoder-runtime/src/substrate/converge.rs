@@ -60,30 +60,7 @@ requested structured answer.",
 /// The answer's schema.
 #[must_use]
 pub fn schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "findings": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "source_ref": { "type": "string" },
-                        "gap_type": { "type": "string", "enum": ["missing", "partial", "contradicts", "unrequested"] },
-                        "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
-                        "description": { "type": "string" },
-                        "evidence": { "type": "string" },
-                        "task": { "type": "string" },
-                    },
-                    "required": ["source_ref", "gap_type", "severity", "description", "evidence", "task"],
-                    "additionalProperties": false,
-                },
-            },
-            "checked": { "type": "array", "items": { "type": "string" } },
-        },
-        "required": ["findings", "checked"],
-        "additionalProperties": false,
-    })
+    super::answers::schema::<super::answers::Assessment>()
 }
 
 /// The run input: the feature's artifacts and limits — everything the

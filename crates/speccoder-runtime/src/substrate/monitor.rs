@@ -38,31 +38,7 @@ explanation. Answer only in the requested structure.",
 /// The answer's schema.
 #[must_use]
 pub fn schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "suspected": { "type": "boolean" },
-            "findings": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "kind": { "type": "string", "enum": [
-                            "hardcoded_output", "special_cased_input", "weakened_test",
-                            "test_environment_detection", "swallowed_error",
-                            "contradicts_spec", "other"
-                        ] },
-                        "evidence": { "type": "string" },
-                        "explanation": { "type": "string" },
-                    },
-                    "required": ["kind", "evidence", "explanation"],
-                    "additionalProperties": false,
-                },
-            },
-        },
-        "required": ["suspected", "findings"],
-        "additionalProperties": false,
-    })
+    super::answers::schema::<super::answers::Monitoring>()
 }
 
 /// The run input: the task's spec context, the diff (capped), the tool

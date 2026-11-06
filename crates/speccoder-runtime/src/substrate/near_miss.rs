@@ -81,44 +81,14 @@ pub fn special_case_input(
 /// The answer's schema.
 #[must_use]
 pub fn schema() -> Value {
-    schema_of(&["wrong", "permitted"])
+    use super::answers::{NearMissKind, Variants, schema};
+    schema::<Variants<NearMissKind>>()
 }
 
-/// The schema with the kinds `kinds`.
-fn schema_of(kinds: &[&str]) -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "variants": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "kind": { "type": "string", "enum": kinds },
-                        "scenario": { "type": "string" },
-                        "rationale": { "type": "string" },
-                        "files": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "path": { "type": "string" },
-                                    "content": { "type": "string" },
-                                },
-                                "required": ["path", "content"],
-                                "additionalProperties": false,
-                            },
-                        },
-                    },
-                    "required": ["kind", "scenario", "rationale", "files"],
-                    "additionalProperties": false,
-                },
-            },
-            "notes": { "type": "array", "items": { "type": "string" } },
-        },
-        "required": ["variants", "notes"],
-        "additionalProperties": false,
-    })
+/// The answer's schema when only special-case variants are asked for.
+fn special_case_schema() -> Value {
+    use super::answers::{SpecialCaseKind, Variants, schema};
+    schema::<Variants<SpecialCaseKind>>()
 }
 
 /// The run input: the task's spec context (the person's), the changed
@@ -283,7 +253,7 @@ impl Skill for NearMiss {
             &super::provenance::from(super::provenance::WORKTREE),
         );
         let expecting = if input.peek()["set"] == "special_case" {
-            schema_of(&["special_case"])
+            special_case_schema()
         } else {
             schema()
         };
@@ -325,8 +295,12 @@ mod tests {
         assert!(text.contains("pub fn ok()") && text.contains("Users log in."));
         assert!(!text.contains("acceptance test file"));
         assert_eq!(
-            schema()["properties"]["variants"]["items"]["properties"]["kind"]["enum"],
+            schema()["$defs"]["NearMissKind"]["enum"],
             json!(["wrong", "permitted"])
+        );
+        assert_eq!(
+            special_case_schema()["$defs"]["SpecialCaseKind"]["enum"],
+            json!(["special_case"])
         );
     }
 }

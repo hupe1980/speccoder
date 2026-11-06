@@ -1,6 +1,6 @@
 +++
 title = "speccoder"
-description = "speccoder implements Spec Kit features and OpenSpec changes task by task, in an isolated git worktree and an OS sandbox, and calls a task verified only when tests derived from your spec go from red to green."
+description = "speccoder implements Spec Kit features, OpenSpec changes and Kiro specs task by task, in an isolated git worktree and an OS sandbox, and calls a task verified only when tests derived from your spec go from red to green."
 template = "index.html"
 
 [extra]
