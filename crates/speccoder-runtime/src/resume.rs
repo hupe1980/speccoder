@@ -117,7 +117,7 @@ impl Guard {
 
     /// Leaves the marker in place: the attempt waits for a person and the
     /// next run resumes it.
-    pub fn keep(self) {
+    pub fn keep(&self) {
         self.armed.set(false);
     }
 }
