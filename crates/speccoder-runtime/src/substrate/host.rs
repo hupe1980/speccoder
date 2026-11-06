@@ -221,6 +221,7 @@ impl Skill for Host {
                     schema()
                 }),
                 max_tokens: None,
+                left: None,
                 reads: None,
                 halt: None,
                 routes: Vec::new(),

@@ -796,7 +796,7 @@ fn speccoder(argv: &[String], constant: bool) -> How {
             let mut plain = true;
             while let Some(w) = rest.next() {
                 match w.as_str() {
-                    "--task" | "--feature" | "--agent" => plain &= rest.next().is_some(),
+                    "--task" | "--feature" | "--agent" | "--cap" => plain &= rest.next().is_some(),
                     "-v" => {}
                     _ => plain = false,
                 }
@@ -808,6 +808,7 @@ fn speccoder(argv: &[String], constant: bool) -> How {
                     Runnable::Run {
                         task: Some(t.to_owned()),
                         agent: flag(a, "--agent").map(str::to_owned),
+                        cap: flag(a, "--cap").map(str::to_owned),
                     },
                     a,
                 ),
@@ -815,6 +816,7 @@ fn speccoder(argv: &[String], constant: bool) -> How {
                     Runnable::Run {
                         task: None,
                         agent: flag(a, "--agent").map(str::to_owned),
+                        cap: flag(a, "--cap").map(str::to_owned),
                     },
                     a,
                 ),
@@ -1106,28 +1108,40 @@ mod tests {
             run_of("speccoder run").0,
             Runnable::Run {
                 task: None,
-                agent: None
+                agent: None,
+                cap: None
             }
         );
         assert_eq!(
             run_of("speccoder run --task T004 --agent opencode").0,
             Runnable::Run {
                 task: Some("T004".to_owned()),
-                agent: Some("opencode".to_owned())
+                agent: Some("opencode".to_owned()),
+                cap: None
             }
         );
         assert_eq!(
             run_of("speccoder run --task {task}").0,
             Runnable::Run {
                 task: Some(t()),
-                agent: None
+                agent: None,
+                cap: None
             }
         );
         assert_eq!(
             run_of("speccoder run --feature {feature} -v").0,
             Runnable::Run {
                 task: None,
-                agent: None
+                agent: None,
+                cap: None
+            }
+        );
+        assert_eq!(
+            run_of("speccoder run --cap 20k --feature {feature}").0,
+            Runnable::Run {
+                task: None,
+                agent: None,
+                cap: Some("20k".to_owned())
             }
         );
         assert_eq!(run_of("speccoder run --converge").0, Runnable::Converge);

@@ -102,8 +102,17 @@ pub fn run_converged_with(
     }
     let mut attempts = Vec::new();
     let mut rounds = Vec::new();
+    let cap = match cap_of(path, options) {
+        Ok(c) => c,
+        Err(stop) => return *stop,
+    };
     loop {
-        let res = run_feature_with(path, feature, state, provider, secret, options);
+        // One cap over every round: a round gets what earlier ones left.
+        let round = RunOptions {
+            cap: cap.map(|c| c.cap.less(spent(&c, &attempts))),
+            ..options.clone()
+        };
+        let res = run_feature_with(path, feature, state, provider, secret, &round);
         let Some(CommandData::Feature(fr)) = res.data() else {
             return res;
         };
@@ -233,6 +242,13 @@ pub fn run_feature_with(
     if let Err(stop) = checklist_gate(path, feature, options.ignore_checklists) {
         return *stop;
     }
+    // What the run may spend, and the prices a dollar cap is counted at.
+    let cap = match cap_of(path, options) {
+        Ok(c) => c,
+        Err(stop) => return *stop,
+    };
+    // An agent that reports no usage is said once: the cap cannot count it.
+    let mut told_uncounted = false;
     // The format's `before_implement` hooks.
     match hosting::run_hooks(
         "before_implement",
@@ -333,6 +349,15 @@ pub fn run_feature_with(
                         })
                         .collect(),
                 });
+                // What the run will likely cost, and what it may.
+                let open = schedule
+                    .tasks
+                    .iter()
+                    .filter(|t| t.state != TaskState::Done && !skipped.contains_key(&t.id))
+                    .count();
+                if let Some(line) = controls::spend_line(path, open, cap.map(|c| c.cap)) {
+                    p.event(&crate::progress::Event::Notice { text: line });
+                }
                 // Who does what, said once: information, not a warning.
                 if let Some(l) = crate::status::lanes(path, Some(&w.feature)) {
                     p.event(&crate::progress::Event::Notice { text: l.line() });
@@ -536,6 +561,16 @@ pub fn run_feature_with(
             }
             continue;
         }
+        // The run's cap: nothing starts once it is spent; what is left is
+        // the next task's, or split evenly across a group's lanes.
+        if let Some(c) = cap
+            && let Some(stop) = capped(&c, &attempts, &schedule, &skipped, &w.feature)
+        {
+            return finish(feature_name, attempts, CommandStatus::NeedsHuman, stop.0)
+                .with_code("RUN-CAP")
+                .with_fix(vec![stop.1]);
+        }
+        let left = cap.map(|c| c.cap.less(spent(&c, &attempts)));
         // ready [P] tasks run at once, each in its own lane.
         let parallel_ids: std::collections::BTreeSet<String> = snap
             .feature
@@ -573,7 +608,11 @@ pub fn run_feature_with(
             budget = budget.saturating_sub(group.len());
             let feature = feature_name.clone().unwrap_or_default();
             let feature_wt = std::path::PathBuf::from(w.path.clone().unwrap_or_default());
-            let lanes = run_lanes(path, &feature, &group, state, provider, secret, options);
+            let shared = RunOptions {
+                left: left.map(|l| l.less(l.amount() - l.amount() / group.len() as u64)),
+                ..options.clone()
+            };
+            let lanes = run_lanes(path, &feature, &group, state, provider, secret, &shared);
             let outcome = merge_lanes(path, &feature_wt, &project, &feature, lanes);
             attempts.extend(outcome.reports);
             parallel_lines.borrow_mut().extend(outcome.lines);
@@ -630,10 +669,35 @@ pub fn run_feature_with(
             state,
             std::sync::Arc::clone(provider),
             secret,
-            options,
+            &RunOptions {
+                left,
+                ..options.clone()
+            },
         );
         if let Some(CommandData::Run(r)) = res.data() {
+            if cap.is_some()
+                && !told_uncounted
+                && !r.run_id.is_empty()
+                && super::commit::all_usage(r).is_none()
+                && let Some(p) = &options.progress
+            {
+                told_uncounted = true;
+                p.event(&crate::progress::Event::Notice {
+                    text: "this run's agent reports no usage: the cap cannot count its attempts"
+                        .to_owned(),
+                });
+            }
             attempts.push((**r).clone());
+        }
+        // The cap ran out in this task: the stop is the cap's, whatever
+        // the attempt's own ending.
+        if let Some(c) = cap
+            && res.status() != CommandStatus::Ok
+            && let Some(stop) = capped(&c, &attempts, &schedule, &skipped, &w.feature)
+        {
+            return finish(feature_name, attempts, CommandStatus::NeedsHuman, stop.0)
+                .with_code("RUN-CAP")
+                .with_fix(vec![stop.1]);
         }
         // An honest stop: the person is asked in place — I did it, a hint
         // and a new attempt, or skip — or it is passed by; the run goes on.
@@ -685,6 +749,96 @@ pub fn run_feature_with(
         CommandStatus::Ok,
         "stopped at --max-tasks".to_owned(),
     )
+}
+
+/// The run's cap (`run --cap` over `[budget] cap`) with the prices a dollar
+/// cap is counted at; a dollar cap without prices stops the run before
+/// anything runs (`RUN-CAP-UNPRICED`).
+fn cap_of(
+    path: &Path,
+    options: &RunOptions,
+) -> Result<Option<substrate::attempt::Left>, Box<CommandResult>> {
+    let text = crate::verify::find_config(path)
+        .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())
+        .unwrap_or_default();
+    let configured = substrate::run_config::parse(&text).ok().and_then(|c| c.cap);
+    let Some(cap) = options.cap.or(configured) else {
+        return Ok(None);
+    };
+    let prices = substrate::model_config::parse(&text)
+        .ok()
+        .flatten()
+        .and_then(|m| m.prices);
+    if matches!(cap, substrate::run_config::Cap::Usd(_)) && prices.is_none() {
+        let fix = speccoder_core::codes::lookup("RUN-CAP-UNPRICED")
+            .map(|e| speccoder_core::codes::fixes(e, "run", None, None))
+            .unwrap_or_default();
+        return Err(Box::new(
+            CommandResult::new(
+                "run",
+                CommandStatus::ConfigError,
+                &format!(
+                    "a cap of {cap} needs the model's prices: set them in [model], or cap tokens"
+                ),
+            )
+            .with_code("RUN-CAP-UNPRICED")
+            .with_fix(fix),
+        ));
+    }
+    Ok(Some(substrate::attempt::Left { cap, prices }))
+}
+
+/// What the run's finished tasks spent — every model call of each — in the
+/// cap's unit.
+fn spent(cap: &substrate::attempt::Left, attempts: &[speccoder_core::RunReport]) -> u64 {
+    attempts
+        .iter()
+        .map(|a| {
+            cap.spent(&substrate::attempt::usage_of(
+                super::commit::all_usage(a).as_ref(),
+            ))
+        })
+        .sum()
+}
+
+/// The stop when the cap is spent: its words, and the command that goes on
+/// with twice the cap.
+fn capped(
+    cap: &substrate::attempt::Left,
+    attempts: &[speccoder_core::RunReport],
+    schedule: &speccoder_core::snapshot::Schedule,
+    skipped: &std::collections::BTreeMap<String, String>,
+    feature: &str,
+) -> Option<(String, String)> {
+    let used = spent(cap, attempts);
+    if used < cap.cap.amount() {
+        return None;
+    }
+    let open: Vec<&str> = schedule
+        .tasks
+        .iter()
+        .filter(|t| {
+            t.state != speccoder_core::snapshot::TaskState::Done && !skipped.contains_key(&t.id)
+        })
+        .map(|t| t.id.as_str())
+        .collect();
+    let used = cap.cap.with(used);
+    Some((
+        format!(
+            "the run spent its cap: {} of {}; {} left — a new run starts its cap over",
+            used.rounded(),
+            cap.cap,
+            if open.is_empty() {
+                "nothing".to_owned()
+            } else {
+                open.join(", ")
+            }
+        ),
+        format!(
+            "speccoder run --cap {} --feature {feature}",
+            cap.cap.doubled()
+        ),
+    ))
 }
 
 /// A task that needs the person, settled: asked ([`ask_at_stop`]) — after

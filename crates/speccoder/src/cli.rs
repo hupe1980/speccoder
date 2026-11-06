@@ -439,6 +439,9 @@ pub enum Command {
         /// At most this many tasks in a feature run.
         #[arg(long, value_name = "N")]
         max_tasks: Option<usize>,
+        /// What this run may spend: tokens (2M, 500k) or dollars ($5, at the `[model]` prices); over `[budget] cap`.
+        #[arg(long, value_name = "CAP", value_parser = speccoder_runtime::substrate::run_config::Cap::parse)]
+        cap: Option<speccoder_runtime::substrate::run_config::Cap>,
         /// After the last task, converge and work through what it appends, until converged.
         #[arg(long, conflicts_with = "task")]
         converge: bool,

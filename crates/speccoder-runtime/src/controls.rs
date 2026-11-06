@@ -952,13 +952,16 @@ pub fn cost(path: &Path, feature: Option<&str>) -> CommandResult {
             add(&mut convergence, &u);
         }
     }
+    let mut not_kept = Usage::default();
     for saved in crate::attempts::list(&root, &feature) {
         if let Some(u) = saved.usage.as_ref() {
             let e = per_task.entry(saved.task.clone()).or_default();
             e.0 += 1;
             add(&mut e.1, u);
+            add(&mut not_kept, u);
         }
     }
+    price(&mut not_kept, prices);
 
     let mut total = Usage::default();
     let mut tasks = Vec::new();
@@ -994,13 +997,34 @@ pub fn cost(path: &Path, feature: Option<&str>) -> CommandResult {
         ..Usage::default()
     };
     price(&mut ask, prices);
+    // What attempts not kept cost, when any were saved.
+    let wasted = match (not_kept.usd, total.usd) {
+        _ if not_kept.input_tokens + not_kept.output_tokens == 0 => String::new(),
+        (Some(n), Some(t)) if t > 0.0 => {
+            format!("; ${n:.4} ({:.0}%) on attempts not kept", n / t * 100.0)
+        }
+        _ => format!(
+            "; {} tokens on attempts not kept",
+            not_kept.input_tokens + not_kept.output_tokens
+        ),
+    };
+    let cap = crate::verify::find_config(&root)
+        .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())
+        .and_then(|t| crate::substrate::run_config::parse(&t).ok())
+        .and_then(|c| c.cap);
+    let skipped = skipped(&root, &feature);
+    let open = open_tasks(&root, &feature)
+        .iter()
+        .filter(|t| !skipped.contains_key(*t))
+        .count();
+    let estimate = estimate(&root, open, prices);
     let message = match total.usd {
         Some(usd) => format!(
-            "{} tokens in, {} out ({} from the cache): ${usd:.4}",
+            "{} tokens in, {} out ({} from the cache): ${usd:.4}{wasted}",
             total.input_tokens, total.output_tokens, total.cache_read_tokens
         ),
         None => format!(
-            "{} tokens in, {} out ({} from the cache); add price_input_per_mtok and price_output_per_mtok to [model] for money",
+            "{} tokens in, {} out ({} from the cache){wasted}; add price_input_per_mtok and price_output_per_mtok to [model] for money",
             total.input_tokens, total.output_tokens, total.cache_read_tokens
         ),
     };
@@ -1012,8 +1036,108 @@ pub fn cost(path: &Path, feature: Option<&str>) -> CommandResult {
             total,
             priced_model: prices.and(model.map(|m| format!("{}/{}", m.provider, m.model))),
             ask,
+            not_kept,
+            estimate,
+            cap: cap.map(|c| c.to_string()),
         },
     )))
+}
+
+/// What `tasks` will likely cost: the average of the project's ticked
+/// tasks (each tick's `Usage` trailer, its retries inside it) on every
+/// branch, times `tasks`. `None` with no tick on record or no task to run.
+#[must_use]
+pub fn estimate(
+    root: &Path,
+    tasks: usize,
+    prices: Option<crate::substrate::model_config::Prices>,
+) -> Option<speccoder_core::Estimate> {
+    if tasks == 0 {
+        return None;
+    }
+    let format = format!(
+        "--format=%(trailers:key=Spec-Task,valueonly){FS}%(trailers:key=Usage,valueonly){RS}"
+    );
+    let log = Git::at(root)
+        .run(&["log", "--branches", &format])
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .unwrap_or_default();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut sum = Usage::default();
+    for record in log.split(RS) {
+        let f: Vec<&str> = record.trim_start_matches('\n').split(FS).collect();
+        let [task, usage] = f[..] else { continue };
+        let (task, usage) = (task.trim(), usage.trim());
+        if task.is_empty() || !seen.insert(task.to_owned()) {
+            continue;
+        }
+        if let Some(u) = crate::attempts::parse_usage(usage) {
+            add(&mut sum, &u);
+        } else {
+            seen.remove(task);
+        }
+    }
+    let ticks = seen.len() as u64;
+    if ticks == 0 {
+        return None;
+    }
+    let times = |u: &Usage, n: u64, d: u64| Usage {
+        input_tokens: u.input_tokens * n / d,
+        output_tokens: u.output_tokens * n / d,
+        cache_read_tokens: u.cache_read_tokens * n / d,
+        cache_write_tokens: u.cache_write_tokens * n / d,
+        usd: None,
+    };
+    let mut per_task = times(&sum, 1, ticks);
+    let mut total = times(&sum, tasks as u64, ticks);
+    price(&mut per_task, prices);
+    price(&mut total, prices);
+    Some(speccoder_core::Estimate {
+        tasks,
+        per_task,
+        ticks: seen.len(),
+        total,
+    })
+}
+
+/// A run's first words about money: the estimate for its `open` tasks and
+/// its cap — `estimate: ~1.2M tokens ($3.40) for 4 tasks — 300k a task here · cap 2M`.
+/// `None` when there is neither.
+#[must_use]
+pub fn spend_line(
+    path: &Path,
+    open: usize,
+    cap: Option<crate::substrate::run_config::Cap>,
+) -> Option<String> {
+    let root = crate::verify::find_config(path).unwrap_or_else(|| path.to_path_buf());
+    let prices = crate::substrate::model_config::parse(
+        &std::fs::read_to_string(root.join(crate::verify::config::FILE)).unwrap_or_default(),
+    )
+    .ok()
+    .flatten()
+    .and_then(|m| m.prices);
+    let short = crate::substrate::run_config::short_tokens;
+    let tokens = |u: &Usage| u.input_tokens + u.output_tokens;
+    let estimate = estimate(&root, open, prices).map(|e| {
+        format!(
+            "estimate: ~{} tokens{} for {} task{} — {} a task here, from {} ticked",
+            short(tokens(&e.total)),
+            e.total
+                .usd
+                .map(|d| format!(" (${d:.2})"))
+                .unwrap_or_default(),
+            e.tasks,
+            if e.tasks == 1 { "" } else { "s" },
+            short(tokens(&e.per_task)),
+            e.ticks
+        )
+    });
+    match (estimate, cap) {
+        (None, None) => None,
+        (Some(e), None) => Some(e),
+        (None, Some(c)) => Some(format!("cap: {c}")),
+        (Some(e), Some(c)) => Some(format!("{e} · cap {c}")),
+    }
 }
 
 #[cfg(test)]

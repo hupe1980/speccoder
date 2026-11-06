@@ -71,7 +71,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 
 | Command | What it does |
 |---|---|
-| `speccoder run [--task T] [--max-tasks N] [--parallel N] [--converge] [--no-prompt] [--ignore-checklists]` | Work through the ready tasks, or one; resumes where it stopped ([running](@/docs/running.md)) |
+| `speccoder run [--task T] [--max-tasks N] [--cap 2M] [--parallel N] [--converge] [--no-prompt] [--ignore-checklists]` | Work through the ready tasks, or one; resumes where it stopped ([running](@/docs/running.md)) |
 | `speccoder run --agent copilot` | This run's attempts by that [agent](@/docs/integrations.md#external-agents) (`native`: speccoder's own); `speccoder.toml` is unchanged |
 | `speccoder run --task T --fresh-acceptance` | Set the task's held attempt aside and write its acceptance tests anew |
 | `speccoder run --allow-failing-baseline` | Attempt although a check cannot run on the untouched code (`CHECK-BROKEN`) |
@@ -105,7 +105,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder report` | Every task and the evidence behind its tick, the requirement trace, and what is open |
 | `speccoder report --live` | What the current or last run is doing, from another terminal |
 | `speccoder report --approvals` | Calls waiting for a person, and the decisions made |
-| `speccoder report --cost` | Tokens per task, and money when `[model]` has prices |
+| `speccoder report --cost` | Tokens per task, what attempts not kept cost, and money when `[model]` has prices |
 | `speccoder report --markdown` | The report as Markdown, for pull requests and CI summaries |
 | `speccoder ui [--port N] [--no-open] [--window]` | The [web interface](@/docs/web.md) on 127.0.0.1 |
 | `speccoder pr [--remote R] [--base B] [--yes] [--dry-run] [--force]` | Push the branch and open a [draft pull request](@/docs/github.md#its-pull-request); `--force` despite failed full-tier checks |

@@ -102,6 +102,7 @@ mod tests {
         .with_run(Runnable::Run {
             task: None,
             agent: None,
+            cap: None,
         });
         run.blocked = Some("commit the planning files first".to_owned());
         let mut pr = Action::new(

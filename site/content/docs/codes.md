@@ -114,6 +114,8 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`ASK-NO-MODEL`](#ask-no-model) | error | 13 | no model is set up to answer a question |
 | [`ASK-BUDGET`](#ask-budget) | stop | 23 | the Ask budget for this turn or today is spent |
 | [`BUDGET-EXHAUSTED`](#budget-exhausted) | stop | 23 | the attempt ran out of turns, calls or tokens |
+| [`RUN-CAP`](#run-cap) | stop | 23 | the run spent its cap |
+| [`RUN-CAP-UNPRICED`](#run-cap-unpriced) | error | 13 | a dollar cap needs the model's prices |
 | [`NOT-DEMONSTRATED`](#not-demonstrated) | stop | 23 | the evidence the task needs could not be produced |
 | [`TESTS-COLLECTION-UNKNOWN`](#tests-collection-unknown) | stop | 23 | speccoder cannot tell whether the runner ran a test file |
 | [`STORY-OPEN`](#story-open) | stop | 23 | the story's last task left scenarios of its oracle red |
@@ -1029,6 +1031,23 @@ The attempt ran out of turns, calls or tokens.
 The attempt reached a limit before finishing: `[budget]` max_turns or max_tool_calls, or `[model]` max_run_tokens. The work so far is saved under the attempt's ref.
 
 - Raise the limit the stop names in speccoder.toml
+
+### RUN-CAP
+
+The run spent its cap.
+
+The run reached what it may spend (`run --cap` or `[budget] cap`): no further task starts, and an attempt under way ended at what was left, its work saved under the attempt's ref. A new run starts its cap over.
+
+- Run again with a higher `--cap`, or raise `[budget] cap` in speccoder.toml
+
+### RUN-CAP-UNPRICED
+
+A dollar cap needs the model's prices.
+
+A cap in dollars is counted at `[model]` price_input_per_mtok and price_output_per_mtok; without them nothing can be counted, so the run does not start.
+
+- Set the prices in [model] (Settings › Model)
+- `speccoder run --cap 2M`
 
 ### NOT-DEMONSTRATED
 

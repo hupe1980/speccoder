@@ -1939,6 +1939,27 @@ pub struct CostReport {
     /// Ask's conversations about the feature, apart from `total`: Ask has
     /// a budget of its own (`[ask]`).
     pub ask: Usage,
+    /// Part of `total`: attempts that were not kept (saved, never ticked).
+    pub not_kept: Usage,
+    /// What running the feature's open tasks will likely cost, from the
+    /// project's ticked tasks; `None` without any.
+    pub estimate: Option<Estimate>,
+    /// `[budget] cap`, as written back (`2M`, `$5`).
+    pub cap: Option<String>,
+}
+
+/// What a run of the open tasks will likely cost: the project's average
+/// per ticked task, times the tasks.
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
+pub struct Estimate {
+    /// The tasks a run would attempt.
+    pub tasks: usize,
+    /// The average per ticked task.
+    pub per_task: Usage,
+    /// The ticked tasks the average rests on.
+    pub ticks: usize,
+    /// `per_task` × `tasks`.
+    pub total: Usage,
 }
 
 /// One task's cost.

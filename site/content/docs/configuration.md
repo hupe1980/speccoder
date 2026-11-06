@@ -99,6 +99,7 @@ Credentials come from the AWS credential chain where you start speccoder: a Bedr
 | `max_tool_calls` | `100` | Tool calls per attempt |
 | `max_attempts` | `2` | Attempts per task run (1–20); a failed verdict is retried with the verifier's facts |
 | `best_of` | `1` | Independent samples per task, the best by evidence kept (1–10) |
+| `cap` | — | What a run may spend: tokens (`"2M"`, `"500k"`) or dollars (`"$5"`, at `[model]`'s prices); [`run --cap`](@/docs/running.md#cost) overrides it |
 
 ## `[commands]`, `[approvals]`, `[tests]`, `[spec]`
 

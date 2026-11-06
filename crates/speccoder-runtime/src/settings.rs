@@ -270,7 +270,7 @@ pub const CATALOGUE: &[Section] = &[
     Section {
         name: "budget",
         title: "Budget",
-        about: "How much an attempt may do, and how often a task is tried.",
+        about: "How much an attempt may do, how often a task is tried, and what a run may spend.",
         named: false,
         keys: &[
             k(
@@ -296,6 +296,12 @@ pub const CATALOGUE: &[Section] = &[
                 Kind::Int(1, 10),
                 Some("1"),
                 "Independent samples per task, the best by evidence kept",
+            ),
+            k(
+                "cap",
+                Kind::Str,
+                None,
+                "What a run may spend: tokens (\"2M\", \"500k\") or dollars (\"$5\", at [model]'s prices); `run --cap` overrides it",
             ),
         ],
     },
@@ -1477,6 +1483,9 @@ mod tests {
             && let Ok(v) = serde_json::from_str::<Value>(d)
         {
             return v;
+        }
+        if k.key == "cap" {
+            return json!("2M");
         }
         match k.kind {
             Kind::Bool => json!(true),

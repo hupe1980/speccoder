@@ -1309,6 +1309,15 @@ export interface CostReport {
    * a budget of its own (`[ask]`).
    */
   ask: Usage;
+  /** Part of `total`: attempts that were not kept (saved, never ticked). */
+  not_kept: Usage;
+  /**
+   * What running the feature's open tasks will likely cost, from the
+   * project's ticked tasks; `None` without any.
+   */
+  estimate: Estimate | null;
+  /** `[budget] cap`, as written back (`2M`, `$5`). */
+  cap: string | null;
 }
 
 /** Rejected of judged, for one source. */
@@ -1605,6 +1614,21 @@ export interface Envelope {
   payload?: string | null;
   /** The command's payload. */
   data?: CommandData | null;
+}
+
+/**
+ * What a run of the open tasks will likely cost: the project's average
+ * per ticked task, times the tasks.
+ */
+export interface Estimate {
+  /** The tasks a run would attempt. */
+  tasks: number;
+  /** The average per ticked task. */
+  per_task: Usage;
+  /** The ticked tasks the average rests on. */
+  ticks: number;
+  /** `per_task` × `tasks`. */
+  total: Usage;
 }
 
 /** One judged case. */
@@ -4714,6 +4738,8 @@ export type Runnable =
      * is the configured executor.
      */
     agent?: string | null;
+    /** What this run may spend (`--cap`): `2M`, `$5`. */
+    cap?: string | null;
   }
   /**
    * `speccoder run --converge`: the ready tasks, then the assessment of

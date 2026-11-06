@@ -4641,3 +4641,205 @@ fn a_conversation_never_changes_a_verdict() {
     };
     assert_eq!(outcome(false), outcome(true));
 }
+
+// ── The run's cap ──────────────────────────────────────────────────────────
+
+/// `will_answer` with `tokens` of input on the call.
+fn costing(f: &FakeProvider, mut c: agentplane::model::Completion, tokens: u64) {
+    c.usage = agentplane::model::Usage {
+        input_tokens: tokens,
+        output_tokens: 100,
+        ..Default::default()
+    };
+    f.will_answer(c);
+}
+
+/// A task's attempt of two calls, `tokens` each: an edit, then done.
+fn costly_task(f: &FakeProvider, id: &str, code: &str, tokens: u64) {
+    let (call, args) = edit(id, code);
+    costing(
+        f,
+        agentplane::model::Completion {
+            tool_calls: vec![agentplane::model::ToolCall {
+                id: call,
+                name: "edit_file".to_owned(),
+                arguments: args,
+            }],
+            stop_reason: Some("tool_use".to_owned()),
+            ..Default::default()
+        },
+        tokens,
+    );
+    costing(
+        f,
+        agentplane::model::Completion {
+            structured: Some(done(id)),
+            stop_reason: Some("end_turn".to_owned()),
+            ..Default::default()
+        },
+        tokens,
+    );
+}
+
+fn capped(cap: &str) -> speccoder_runtime::RunOptions {
+    speccoder_runtime::RunOptions {
+        cap: Some(speccoder_runtime::substrate::run_config::Cap::parse(cap).unwrap()),
+        ..speccoder_runtime::RunOptions::default()
+    }
+}
+
+#[test]
+fn a_run_stops_at_its_cap_and_says_how_to_go_on() {
+    let r = two_task_repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    costly_task(&f, "c1", "pub fn ok() {}\npub fn login() {}", 6_000);
+    costly_task(&f, "c2", "pub fn ok() {}\npub fn logout() {}", 6_000);
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &capped("10k"));
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert_eq!(res.code().map(|c| c.name), Some("RUN-CAP"));
+    let fr = feature(&res);
+    // T002 finished within its share; nothing started after the cap was spent.
+    let tasks: Vec<&str> = fr.attempts.iter().map(|a| a.task.as_str()).collect();
+    assert_eq!(tasks, ["T002"]);
+    assert!(fr.attempts[0].ticked);
+    assert!(
+        fr.stop.contains("12k of 10k") && fr.stop.contains("T003 left"),
+        "{}",
+        fr.stop
+    );
+    assert_eq!(
+        res.fix(),
+        ["speccoder run --cap 20k --feature 001-graph".to_owned()]
+    );
+    // The next run's estimate rests on that tick: its usage, per open task.
+    let e = speccoder_runtime::controls::estimate(r.path(), 1, None).expect("an estimate");
+    assert_eq!((e.ticks, e.tasks), (1, 1));
+    assert_eq!(e.per_task.input_tokens, 12_000);
+    assert_eq!(
+        speccoder_runtime::controls::estimate(r.path(), 3, None).map(|e| e.total.input_tokens),
+        Some(36_000)
+    );
+    let line = speccoder_runtime::controls::spend_line(
+        r.path(),
+        1,
+        speccoder_runtime::substrate::run_config::Cap::parse("20k").ok(),
+    )
+    .unwrap_or_default();
+    assert_eq!(
+        line,
+        "estimate: ~12k tokens for 1 task — 12k a task here, from 1 ticked · cap 20k"
+    );
+}
+
+#[test]
+fn without_a_tick_on_record_there_is_no_estimate() {
+    let r = two_task_repo();
+    assert_eq!(
+        speccoder_runtime::controls::estimate(r.path(), 2, None),
+        None
+    );
+    assert_eq!(
+        speccoder_runtime::controls::spend_line(r.path(), 2, None),
+        None
+    );
+}
+
+#[test]
+fn a_dollar_cap_is_counted_at_the_configured_prices() {
+    let r = two_task_repo();
+    let config = r.path().join("speccoder.toml");
+    let text = fs::read_to_string(&config).unwrap().replacen(
+        "[model]\n",
+        "[model]\nprice_input_per_mtok = 1.0\nprice_output_per_mtok = 4.0\n",
+        1,
+    );
+    fs::write(&config, text).unwrap();
+    git(r.path(), &["commit", "-qam", "prices"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    // $0.0064 a call: T002's two calls pass a cent.
+    costly_task(&f, "c1", "pub fn ok() {}\npub fn login() {}", 6_000);
+    costly_task(&f, "c2", "pub fn ok() {}\npub fn logout() {}", 6_000);
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &capped("$0.01"));
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("RUN-CAP"),
+        "{}",
+        res.message()
+    );
+    let fr = feature(&res);
+    assert_eq!(fr.attempts.len(), 1);
+    assert!(fr.stop.contains("$0.013 of $0.01"), "{}", fr.stop);
+    assert_eq!(
+        res.fix(),
+        ["speccoder run --cap $0.02 --feature 001-graph".to_owned()]
+    );
+}
+
+#[test]
+fn an_attempt_ends_at_what_is_left_of_the_cap() {
+    let r = two_task_repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    costly_task(&f, "c1", "pub fn ok() {}\npub fn login() {}", 6_000);
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &capped("5k"));
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("RUN-CAP"),
+        "{}",
+        res.message()
+    );
+    let fr = feature(&res);
+    assert_eq!(fr.attempts.len(), 1);
+    let a = &fr.attempts[0];
+    assert!(!a.ticked);
+    assert_eq!(a.attempt_status, "budget_exhausted");
+    let reason = a.reason.as_deref().unwrap_or_default();
+    assert!(reason.contains("the run's cap"), "{reason}");
+    assert!(fr.stop.contains("T002, T003 left"), "{}", fr.stop);
+    // The saved attempt is what `report --cost` counts as not kept.
+    let cost = speccoder_runtime::controls::cost(r.path(), None);
+    let Some(CommandData::Cost(c)) = cost.data() else {
+        panic!("{}", cost.message())
+    };
+    assert_eq!(c.not_kept.input_tokens, 6_000);
+    assert_eq!(c.total.input_tokens, 6_000);
+    assert!(
+        cost.message().contains("6100 tokens on attempts not kept"),
+        "{}",
+        cost.message()
+    );
+}
+
+#[test]
+fn a_dollar_cap_without_prices_is_refused_before_any_model_call() {
+    let r = two_task_repo();
+    let config = r.path().join("speccoder.toml");
+    let text = fs::read_to_string(&config).unwrap();
+    fs::write(&config, format!("{text}\n[budget]\ncap = \"$5\"\n")).unwrap();
+    git(r.path(), &["commit", "-qam", "a dollar cap"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let res = run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d,
+        None,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    assert_eq!(
+        res.status(),
+        CommandStatus::ConfigError,
+        "{}",
+        res.message()
+    );
+    assert_eq!(res.code().map(|c| c.name), Some("RUN-CAP-UNPRICED"));
+    assert_eq!(f.calls(), 0);
+    // A run's own cap wins over the project's.
+    costly_task(&f, "c1", "pub fn ok() {}\npub fn login() {}", 100);
+    costly_task(&f, "c2", "pub fn ok() {}\npub fn logout() {}", 100);
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &capped("2M"));
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+}

@@ -1926,6 +1926,20 @@ fn run_task_once(
                     autopilot: options.mode == speccoder_core::oracle::RunMode::Autopilot,
                     planning: planning.as_deref(),
                     contained,
+                    // The task's share of the run's cap, less what the task
+                    // spent so far (its tests' authoring, earlier attempts).
+                    left: options.left.map(|cap| {
+                        let share = substrate::attempt::Left {
+                            cap,
+                            prices: s.model.prices,
+                        };
+                        let so_far = add_usage(usage.as_ref(), oracle_spent.as_ref());
+                        substrate::attempt::Left {
+                            cap: cap
+                                .less(share.spent(&substrate::attempt::usage_of(so_far.as_ref()))),
+                            ..share
+                        }
+                    }),
                 },
                 digest.as_ref(),
                 attempt_instructions,

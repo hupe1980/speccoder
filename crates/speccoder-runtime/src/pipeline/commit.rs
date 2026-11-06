@@ -111,21 +111,20 @@ pub(crate) fn record_inline_approvals(
     d.save(dir)
 }
 
-/// Every model call of a task's run: its attempts, and the judge-side
-/// calls that wrote and kept its tests (visible, held-out).
+/// Every model call of a task's run: its attempts, the judge-side calls
+/// that wrote and kept its tests (visible, held-out), and the monitor.
 pub(crate) fn all_usage(report: &speccoder_core::RunReport) -> Option<serde_json::Value> {
-    add_usage(
-        add_usage(
-            report.usage.as_ref(),
-            report.acceptance.as_ref().and_then(|a| a.get("usage")),
-        )
-        .as_ref(),
+    [
+        report.acceptance.as_ref().and_then(|a| a.get("usage")),
         report
             .acceptance
             .as_ref()
             .and_then(|a| a.get("held_out"))
             .and_then(|h| h.get("usage")),
-    )
+        report.monitor.as_ref().and_then(|m| m.get("usage")),
+    ]
+    .into_iter()
+    .fold(report.usage.clone(), |acc, u| add_usage(acc.as_ref(), u))
 }
 
 /// Sums two token usage objects key by key.

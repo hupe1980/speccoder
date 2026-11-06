@@ -254,7 +254,12 @@ When a call waits for you, a task fails, the feature ends or nothing happens for
 ## Cost
 
 ```sh
+speccoder run --cap 2M      # spend at most 2M tokens (or --cap '$5')
 speccoder report --cost     # tokens per task, every attempt, convergence, and the total
 ```
 
-`report --cost` reads the usage recorded on commits and saved attempts. For money, set your prices in [`[model]`](@/docs/configuration.md#model) (`price_*_per_mtok`); they then also appear in the progress lines. speccoder ships no price list. With Claude Code as the agent, its own reported cost is used.
+A run starts by saying what it will likely cost and what it may: `estimate: ~1.2M tokens ($3.40) for 4 tasks — 300k a task here, from 6 ticked · cap 2M`. The estimate is this project's average per ticked task times the tasks left; with nothing ticked yet there is none. The app shows the same line under **Up next**.
+
+With a cap (`--cap`, or [`[budget] cap`](@/docs/configuration.md#budget)), every model call of the run counts — attempts, test authors, the monitor — and no task starts once it is spent. An attempt gets what is left as its limit and ends there, its work saved like any unfinished attempt; parallel lanes share it evenly. The stop (`RUN-CAP`) names the spend, the tasks left and the command to go on with twice the cap; a new run starts its cap over. A dollar cap needs your prices (`RUN-CAP-UNPRICED`). An agent that reports no usage cannot be capped, and the run says so.
+
+`report --cost` reads the usage recorded on commits and saved attempts, and names what attempts that were not kept cost. For money, set your prices in [`[model]`](@/docs/configuration.md#model) (`price_*_per_mtok`); they then also appear in the progress lines. speccoder ships no price list. With Claude Code as the agent, its own reported cost is used.

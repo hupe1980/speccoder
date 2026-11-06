@@ -603,6 +603,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             again = again.with_run(Runnable::Run {
                 task: Some(t.id.clone()),
                 agent: None,
+                cap: None,
             });
             again.blocked = retry_blocked(r, &waiting);
             let other = try_with(&t.id, a, &flag, crate::acp::agent::on_path);
@@ -1658,6 +1659,7 @@ fn try_with(
         .with_run(Runnable::Run {
             task: Some(task.to_owned()),
             agent: Some(next.id.to_owned()),
+            cap: None,
         }),
     )
 }
@@ -1686,7 +1688,8 @@ mod try_with_tests {
             a.run,
             Some(Runnable::Run {
                 task: Some("T005".to_owned()),
-                agent: Some("opencode".to_owned())
+                agent: Some("opencode".to_owned()),
+                cap: None
             })
         );
         assert!(try_with(t, &last("run_01ABC"), &flag, both).is_none());

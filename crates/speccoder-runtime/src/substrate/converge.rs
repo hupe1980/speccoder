@@ -253,6 +253,7 @@ impl Skill for Converge {
                 max_tool_calls: limit("max_tool_calls", 100),
                 schema: Some(schema()),
                 max_tokens: None,
+                left: None,
                 reads: None,
                 halt: None,
                 ask: None,

@@ -6,6 +6,7 @@
   import { get, latest, q } from "../lib/api";
   import type { CostReport, Reply } from "../lib/types";
   import Icon from "./Icon.svelte";
+  import { tokens as n, usd } from "../lib/spend";
 
   let cost = $state<CostReport | null>(null);
   const costOf = latest();
@@ -18,8 +19,7 @@
   const weight = (u: { input_tokens: number; output_tokens: number; usd: number | null }) => (priced ? (u.usd ?? 0) : u.input_tokens + u.output_tokens);
   const rows = $derived([...(cost?.tasks ?? [])].filter((t) => t.usage.input_tokens || t.usage.output_tokens).sort((a, b) => weight(b.usage) - weight(a.usage)));
   const top = $derived(Math.max(1e-9, ...rows.map((r) => weight(r.usage))));
-  const n = (x: number) => (x >= 1e6 ? `${(x / 1e6).toFixed(1)}M` : x >= 1e3 ? `${(x / 1e3).toFixed(1)}k` : String(x));
-  const usd = (x: number | null) => (x == null ? "—" : x < 0.01 ? `$${x.toFixed(4)}` : `$${x.toFixed(2)}`);
+  const wasted = $derived(cost ? weight(cost.not_kept) : 0);
   const cacheShare = $derived(cost && cost.total.input_tokens ? Math.round((cost.total.cache_read_tokens / cost.total.input_tokens) * 100) : 0);
 </script>
 
@@ -34,6 +34,9 @@
       <div><span class="big">{n(cost.total.output_tokens)}</span><span class="lab">out</span></div>
       <div><span class="big">{cacheShare}%</span><span class="lab">of input from the cache</span></div>
       <div><span class="big">{rows.reduce((a, r) => a + r.attempts, 0)}</span><span class="lab">attempts</span></div>
+      {#if wasted > 0 && cost}
+        <div class="lost" title="Saved attempts that never ticked: part of the total"><span class="big">{priced ? usd(cost.not_kept.usd) : n(cost.not_kept.input_tokens + cost.not_kept.output_tokens)}</span><span class="lab">on attempts not kept · {Math.round((wasted / Math.max(1e-9, weight(cost.total))) * 100)}%</span></div>
+      {/if}
     </div>
     <ul class="rows">
       {#each rows as r (r.task)}
@@ -65,6 +68,7 @@
   .totals div { display: grid; }
   .big { font: 700 1.6rem/1.1 var(--rounded); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .lab { font-size: 0.78rem; color: var(--muted); }
+  .lost .big { color: var(--attention); }
   .rows { list-style: none; margin: 0; padding: 0; display: grid; }
   .rows li { display: grid; grid-template-columns: 4.5rem minmax(4rem, 1fr) auto 4.5rem 6rem; gap: 0.9rem; align-items: center; padding: 0.4rem 0; border-top: 0.5px solid var(--separator); font-size: 0.84rem; }
   .rows li:first-child { border-top: 0; }

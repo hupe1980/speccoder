@@ -334,6 +334,7 @@ pub fn input(
         ("run_id", trusted(json!(settings.run_id))),
         ("asked", trusted(json!(settings.asked))),
         ("budget", trusted(json!(settings.budget))),
+        ("left", trusted(json!(settings.left))),
         ("prompts", trusted(json!(settings.prompts))),
         ("asks", trusted(json!(settings.asks))),
         ("wait_secs", trusted(json!(settings.wait_secs))),
@@ -471,6 +472,8 @@ pub struct Settings<'a> {
     /// The enforced sandbox's mechanism when contained calls run without
     /// asking ([`Policy::contained`]).
     pub contained: Option<&'a str>,
+    /// What is left of the run's cap for this attempt.
+    pub left: Option<Left>,
 }
 
 /// The calls consecutive denials of which end an attempt.
@@ -860,6 +863,7 @@ impl Skill for Attempt {
                 reasoning: settings["reasoning"] == true,
                 schema: Some(report_schema()),
                 max_tokens: None,
+                left: serde_json::from_value(settings["left"].clone()).ok(),
                 reads: None,
                 halt: None,
                 routes,
@@ -1121,6 +1125,8 @@ pub(crate) struct LoopSpec {
     pub stop: StopGate,
     /// Tokens a turn may use (Ask); `None`: the plane's budget alone.
     pub max_tokens: Option<u64>,
+    /// What is left of the run's cap for this attempt.
+    pub left: Option<Left>,
     /// The first read id to issue (`r<n>`), when the answer cites reads.
     pub reads: Option<u32>,
     /// Pressed when a person stops the turn (Ask): the model call streaming
@@ -1153,6 +1159,70 @@ impl Default for Asking {
 
 /// `[approvals] budget` unless configured.
 pub use super::run_config::DEFAULT_BUDGET;
+
+/// What is left of the run's cap for one attempt, and the prices a dollar
+/// cap is counted at (journaled with the attempt's settings).
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Left {
+    /// Tokens or dollars left.
+    pub cap: super::run_config::Cap,
+    /// `[model]`'s prices; a dollar cap is refused without them.
+    pub prices: Option<super::model_config::Prices>,
+}
+
+impl Left {
+    /// What `usage` spent, in the cap's own unit (tokens, or millionths of a dollar).
+    #[must_use]
+    pub fn spent(&self, usage: &agentplane::model::Usage) -> u64 {
+        match self.cap {
+            super::run_config::Cap::Tokens(_) => usage.input_tokens + usage.output_tokens,
+            super::run_config::Cap::Usd(_) => self.prices.map_or(0, |p| {
+                micros(p.usd(
+                    usage.input_tokens,
+                    usage.output_tokens,
+                    usage.cache_read_tokens,
+                    usage.cache_write_tokens,
+                ))
+            }),
+        }
+    }
+
+    /// Whether `usage` used all that is left.
+    #[must_use]
+    pub fn reached(&self, usage: &agentplane::model::Usage) -> bool {
+        self.spent(usage) >= self.cap.amount()
+    }
+
+    /// The stop's words: what the attempt used of what was left.
+    #[must_use]
+    pub fn reason(&self, usage: &agentplane::model::Usage) -> String {
+        format!(
+            "the run's cap: this attempt used {} of the {} left (`run --cap`, `[budget] cap`)",
+            self.cap.with(self.spent(usage)).rounded(),
+            self.cap.rounded()
+        )
+    }
+}
+
+/// A recorded usage object (`input_tokens`, …) as the model's usage.
+#[must_use]
+pub fn usage_of(v: Option<&Value>) -> agentplane::model::Usage {
+    let n = |k: &str| v.and_then(|v| v[k].as_u64()).unwrap_or(0);
+    agentplane::model::Usage {
+        input_tokens: n("input_tokens"),
+        output_tokens: n("output_tokens"),
+        cache_read_tokens: n("cache_read_tokens"),
+        cache_write_tokens: n("cache_write_tokens"),
+        ..agentplane::model::Usage::default()
+    }
+}
+
+/// Dollars as millionths, rounded.
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub fn micros(usd: f64) -> u64 {
+    (usd * 1e6).round().max(0.0) as u64
+}
 
 /// The governed tool loop shared by attempts and convergence: every call is
 /// classified first (deny → refused and told; approval → stop; allow →
@@ -1197,6 +1267,7 @@ pub(crate) async fn tool_turn(
         mcp_digests,
         stop,
         max_tokens,
+        left,
         reads,
         halt,
     } = spec;
@@ -1269,6 +1340,19 @@ pub(crate) async fn tool_turn(
             return end(
                 "budget",
                 json!({ "reason": format!("this turn used {} of its {max} tokens", usage.input_tokens + usage.output_tokens) }),
+                &log,
+                usage,
+                &conversation,
+                prompted,
+            );
+        }
+        // The run's cap: what is left of it, checked before each call.
+        if let Some(l) = left
+            && l.reached(&usage)
+        {
+            return end(
+                "budget_exhausted",
+                json!({ "reason": l.reason(&usage) }),
                 &log,
                 usage,
                 &conversation,

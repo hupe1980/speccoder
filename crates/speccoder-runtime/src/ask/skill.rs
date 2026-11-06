@@ -144,6 +144,7 @@ impl Skill for Ask {
                     mcp_digests: std::collections::BTreeMap::new(),
                     stop: StopGate::default(),
                     max_tokens: m["limit"].as_u64(),
+                    left: None,
                     reads: Some(reads),
                     halt: Some(self.halt.clone()),
                 },

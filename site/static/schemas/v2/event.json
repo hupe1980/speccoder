@@ -2528,6 +2528,13 @@
                 "string",
                 "null"
               ]
+            },
+            "cap": {
+              "description": "What this run may spend (`--cap`): `2M`, `$5`.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -10787,6 +10794,28 @@
         "ask": {
           "description": "Ask's conversations about the feature, apart from `total`: Ask has\na budget of its own (`[ask]`).",
           "$ref": "#/$defs/Usage"
+        },
+        "not_kept": {
+          "description": "Part of `total`: attempts that were not kept (saved, never ticked).",
+          "$ref": "#/$defs/Usage"
+        },
+        "estimate": {
+          "description": "What running the feature's open tasks will likely cost, from the\nproject's ticked tasks; `None` without any.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Estimate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cap": {
+          "description": "`[budget] cap`, as written back (`2M`, `$5`).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -10795,7 +10824,10 @@
         "convergence",
         "total",
         "priced_model",
-        "ask"
+        "ask",
+        "not_kept",
+        "estimate",
+        "cap"
       ]
     },
     "TaskCost": {
@@ -10866,6 +10898,38 @@
         "cache_read_tokens",
         "cache_write_tokens",
         "usd"
+      ]
+    },
+    "Estimate": {
+      "description": "What a run of the open tasks will likely cost: the project's average\nper ticked task, times the tasks.",
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "description": "The tasks a run would attempt.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "per_task": {
+          "description": "The average per ticked task.",
+          "$ref": "#/$defs/Usage"
+        },
+        "ticks": {
+          "description": "The ticked tasks the average rests on.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "total": {
+          "description": "`per_task` × `tasks`.",
+          "$ref": "#/$defs/Usage"
+        }
+      },
+      "required": [
+        "tasks",
+        "per_task",
+        "ticks",
+        "total"
       ]
     },
     "PrReport": {

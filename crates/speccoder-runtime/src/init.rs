@@ -558,8 +558,9 @@ pub fn render(
          # price_input_per_mtok = 0.0       # USD per million tokens, for `speccoder report --cost`\n\
          # price_output_per_mtok = 0.0\n\
          # price_cache_read_per_mtok = 0.0\n\
-         \n# Limits per attempt, and attempts per task (a failed verdict is retried once).\n\
-         # [budget]\n# max_turns = 30\n# max_tool_calls = 100\n# max_attempts = 2\n\
+         \n# Limits per attempt, attempts per task (a failed verdict is retried once), and\n\
+         # what a run may spend: tokens (\"2M\") or dollars (\"$5\", at the prices above).\n\
+         # [budget]\n# max_turns = 30\n# max_tool_calls = 100\n# max_attempts = 2\n# cap = \"2M\"\n\
          \n# Test files that existed before an attempt: \"ask\" before any change (default), or\n\
          # \"additions\" to let new tests be added without asking (changed lines still ask).\n\
          # [tests]\n# frozen = \"additions\"\n\

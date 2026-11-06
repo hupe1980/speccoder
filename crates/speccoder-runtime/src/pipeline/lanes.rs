@@ -44,6 +44,9 @@ pub(crate) fn run_lanes(
                     bug_home: None,
                     mode: options.mode,
                     agent: options.agent.clone(),
+                    cap: options.cap,
+                    // The feature loop's share of what is left, per lane.
+                    left: options.left,
                 };
                 let provider = std::sync::Arc::clone(provider);
                 scope.spawn(move || {

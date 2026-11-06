@@ -8,6 +8,9 @@
   import Code from "./Code.svelte";
   import FixSteps from "./FixSteps.svelte";
   import { ORDER, symbol, word } from "../lib/marks";
+  import { get, latest, q } from "../lib/api";
+  import type { CostReport, Reply } from "../lib/types";
+  import { runLine } from "../lib/spend";
 
   /** Off the board: the title and the next step only, in one strip. */
   let { compact = false }: { compact?: boolean } = $props();
@@ -45,6 +48,15 @@
   const runnable = $derived((app.agents?.cards ?? []).filter((c) => c.installed.state === "yes"));
   const withName = $derived(app.runWith ? (runnable.find((c) => c.id === app.runWith)?.name ?? app.runWith) : null);
   let choosing = $state(false);
+  // What a run will likely cost here, and its cap: read before starting one.
+  let cost = $state<CostReport | null>(null);
+  const costOf = latest();
+  $effect(() => {
+    void app.report;
+    if (!isRun) return;
+    costOf(get<Reply<CostReport>>(`/api/cost${q({ feature: app.feature ?? undefined })}`), (r) => (cost = r.data ?? null), () => (cost = null));
+  });
+  const spend = $derived(isRun ? runLine(cost) : null);
   const number = $derived(report?.feature.match(/^\d+/)?.[0]);
 </script>
 
@@ -105,6 +117,7 @@
         <h2><Code text={headline} /></h2>
         {#if !compact}
           {#if primary.run?.kind !== "skill"}<p class="why"><Code text={cap(primary.why)} /></p>{/if}
+          {#if spend}<p class="spend" title={spend.basis}><Icon name="dollar" size={12} weight={2} /> {spend.text}<span class="sr-only"> — {spend.basis}</span></p>{/if}
           {#if commitPaths.length}
             <ul class="files">
               {#each commitPaths as p}<li class="mono"><span class="plus">+</span>{p}</li>{/each}
@@ -231,6 +244,7 @@
   h2 { margin: 0; font: 650 1.35rem/1.25 var(--display); letter-spacing: -0.018em; }
   .compact h2 { font-size: 1rem; }
   .why { margin: 0; color: var(--text-2); }
+  .spend { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0.15rem 0 0; font-size: 0.85rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
   .small { font-size: 0.85rem; }
   .files { list-style: none; padding: 0.5rem 0.75rem; margin: 0.25rem 0; border-radius: var(--radius-sm); background: var(--add-bg); font-size: 0.84rem; }
   .files li { color: var(--add); }

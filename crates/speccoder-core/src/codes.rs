@@ -1007,6 +1007,25 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "RUN-CAP",
+        P,
+        S::NeedsHuman,
+        "the run spent its cap",
+        "The run reached what it may spend (`run --cap` or `[budget] cap`): no further task starts, and an attempt under way ended at what was left, its work saved under the attempt's ref. A new run starts its cap over.",
+        ["→ run again with a higher `--cap`, or raise `[budget] cap` in speccoder.toml"]
+    ),
+    entry!(
+        "RUN-CAP-UNPRICED",
+        E,
+        S::ConfigError,
+        "a dollar cap needs the model's prices",
+        "A cap in dollars is counted at `[model]` price_input_per_mtok and price_output_per_mtok; without them nothing can be counted, so the run does not start.",
+        [
+            "→ set the prices in [model] (Settings › Model)",
+            "speccoder run --cap 2M --feature {feature}"
+        ]
+    ),
+    entry!(
         "NOT-DEMONSTRATED",
         P,
         S::NeedsHuman,

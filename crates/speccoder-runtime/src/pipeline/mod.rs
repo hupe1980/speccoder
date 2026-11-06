@@ -255,6 +255,10 @@ pub struct RunOptions {
     /// This run's agent (`run --agent <id>`): an ACP preset, or `native`
     /// for speccoder's own loop; `speccoder.toml` is untouched.
     pub agent: Option<String>,
+    /// What this run may spend (`run --cap`); over `[budget] cap`.
+    pub cap: Option<crate::substrate::run_config::Cap>,
+    /// What is left of the run's cap for this task, set by the feature loop.
+    pub left: Option<crate::substrate::run_config::Cap>,
 }
 
 /// Where a task runs, as `worktree` reports it: speccoder's worktree, or in

@@ -14,6 +14,15 @@ adheres to [Semantic Versioning](https://semver.org/).
   caption; ← → step, `Esc` ends it. A 48-second video (MP4) of it on the new
   [Tour](https://hupe1980.github.io/speccoder/docs/tour/) page, recorded
   by `scripts/record-tour.cjs` from the same tour.
+- **A run you can cap**: `speccoder run --cap 2M` (or `'$5'`, at your
+  `[model]` prices), or `[budget] cap`. Every model call counts; no task
+  starts once it is spent, an attempt ends at what is left, and the stop
+  (`RUN-CAP`) gives the command to go on.
+- A run starts with its estimate — this project's average per ticked
+  task times the tasks left — and its cap; the app shows it under
+  **Up next**.
+- `report --cost` and the app's Spend name what attempts that were not
+  kept cost.
 
 ### Fixed
 
@@ -22,6 +31,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 - The evidence tour says **recorded**, not **signed**, for a statement
   nobody signed.
 - The sample no longer asks for a model key it does not need.
+- A task's usage now counts the gaming monitor's call.
 
 ## [0.11.0] - 2026-11-05
 

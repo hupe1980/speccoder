@@ -532,6 +532,13 @@
                 "string",
                 "null"
               ]
+            },
+            "cap": {
+              "description": "What this run may spend (`--cap`): `2M`, `$5`.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [

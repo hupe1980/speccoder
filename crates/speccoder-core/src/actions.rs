@@ -24,6 +24,9 @@ pub enum Runnable {
         /// is the configured executor.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<String>,
+        /// What this run may spend (`--cap`): `2M`, `$5`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cap: Option<String>,
     },
     /// `speccoder run --converge`: the ready tasks, then the assessment of
     /// the code against the spec as it is now, appending what remains.
@@ -768,10 +771,12 @@ impl ActionKind {
             Self::RunTask => Runnable::Run {
                 task: Some(task()),
                 agent: None,
+                cap: None,
             },
             Self::RunFeature => Runnable::Run {
                 task: None,
                 agent: None,
+                cap: None,
             },
             Self::Converge => Runnable::Converge,
             Self::Commit => Runnable::Commit {

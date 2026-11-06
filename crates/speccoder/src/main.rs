@@ -937,6 +937,7 @@ struct RunJob {
     feature: Option<String>,
     task: Option<String>,
     max_tasks: Option<usize>,
+    cap: Option<speccoder_runtime::substrate::run_config::Cap>,
     converge: bool,
     parallel: usize,
     ignore_checklists: bool,
@@ -965,6 +966,7 @@ impl RunJob {
             allow_failing_baseline: self.allow_failing_baseline,
             in_place: self.in_place,
             agent: self.agent.clone(),
+            cap: self.cap,
             ..speccoder_runtime::RunOptions::default()
         };
         let result = match &self.task {
@@ -1118,6 +1120,7 @@ fn main() {
         Command::Run {
             task,
             max_tasks,
+            cap,
             converge,
             no_prompt,
             parallel,
@@ -1133,6 +1136,7 @@ fn main() {
                 feature: feature.map(str::to_owned),
                 task: task.clone(),
                 max_tasks: *max_tasks,
+                cap: *cap,
                 converge: *converge,
                 parallel: usize::from(*parallel),
                 ignore_checklists: *ignore_checklists,

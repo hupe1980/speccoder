@@ -9,6 +9,7 @@ struct RawBudget {
     max_tool_calls: Option<u32>,
     max_attempts: Option<u32>,
     best_of: Option<u32>,
+    cap: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -193,6 +194,123 @@ struct RawCommands {
 /// `[approvals] budget` unless configured: prompts a run shows a person.
 pub const DEFAULT_BUDGET: u32 = 12;
 
+/// What a run may spend: tokens, or dollars at the configured prices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Cap {
+    /// Input and output tokens.
+    Tokens(u64),
+    /// Millionths of a dollar.
+    Usd(u64),
+}
+
+impl Cap {
+    /// `2M`, `500k`, `1500000` (tokens) or `$5`, `$0.50` (dollars).
+    ///
+    /// # Errors
+    /// Anything else, worded with the forms it takes.
+    pub fn parse(text: &str) -> Result<Self, String> {
+        let t = text.trim().replace('_', "");
+        let bad = || format!("\"{text}\" is neither tokens (2M, 500k) nor dollars ($5)");
+        if let Some(d) = t.strip_prefix('$') {
+            let usd: f64 = d.trim().parse().map_err(|_| bad())?;
+            return (usd.is_finite() && usd > 0.0)
+                .then(|| Self::Usd((usd * 1e6).round() as u64))
+                .ok_or_else(bad);
+        }
+        let (n, scale) = match t.char_indices().last() {
+            Some((i, 'k' | 'K')) => (&t[..i], 1e3),
+            Some((i, 'm' | 'M')) => (&t[..i], 1e6),
+            _ => (t.as_str(), 1.0),
+        };
+        let n: f64 = n.trim().parse().map_err(|_| bad())?;
+        (n.is_finite() && n >= 1.0)
+            .then(|| Self::Tokens((n * scale).round() as u64))
+            .ok_or_else(bad)
+    }
+
+    /// This cap less `spent` (in its own unit), never below nothing.
+    #[must_use]
+    pub fn less(self, spent: u64) -> Self {
+        match self {
+            Self::Tokens(n) => Self::Tokens(n.saturating_sub(spent)),
+            Self::Usd(m) => Self::Usd(m.saturating_sub(spent)),
+        }
+    }
+
+    /// The amount, in its own unit (tokens, or millionths of a dollar).
+    #[must_use]
+    pub fn amount(self) -> u64 {
+        match self {
+            Self::Tokens(n) | Self::Usd(n) => n,
+        }
+    }
+
+    /// `n` in this cap's unit.
+    #[must_use]
+    pub fn with(self, n: u64) -> Self {
+        match self {
+            Self::Tokens(_) => Self::Tokens(n),
+            Self::Usd(_) => Self::Usd(n),
+        }
+    }
+
+    /// For people: `2.1M`, `412k`, `$3.41` — rounded, unlike [`Display`].
+    ///
+    /// [`Display`]: std::fmt::Display
+    #[must_use]
+    pub fn rounded(self) -> String {
+        match self {
+            Self::Tokens(n) => short_tokens(n),
+            Self::Usd(m) if m < 1_000_000 => format!("${:.3}", m as f64 / 1e6),
+            Self::Usd(m) => format!("${:.2}", m as f64 / 1e6),
+        }
+    }
+
+    /// Twice this cap: what a stop offers to go on with.
+    #[must_use]
+    pub fn doubled(self) -> Self {
+        match self {
+            Self::Tokens(n) => Self::Tokens(n.saturating_mul(2)),
+            Self::Usd(m) => Self::Usd(m.saturating_mul(2)),
+        }
+    }
+}
+
+/// Tokens for people: `2.1M`, `412k`, `950`.
+#[must_use]
+pub fn short_tokens(n: u64) -> String {
+    #[allow(clippy::cast_precision_loss)]
+    let x = n as f64;
+    if n >= 1_000_000 {
+        format!("{:.1}M", x / 1e6)
+    } else if n >= 1_000 {
+        format!("{:.0}k", x / 1e3)
+    } else {
+        n.to_string()
+    }
+}
+
+impl std::fmt::Display for Cap {
+    /// The form [`Cap::parse`] reads back: `2M`, `500k`, `$5`, `$0.50`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::Tokens(n) if n >= 1_000_000 && n % 100_000 == 0 => {
+                let m = n as f64 / 1e6;
+                if n % 1_000_000 == 0 {
+                    write!(f, "{m:.0}M")
+                } else {
+                    write!(f, "{m:.1}M")
+                }
+            }
+            Self::Tokens(n) if n >= 1_000 && n % 1_000 == 0 => write!(f, "{}k", n / 1_000),
+            Self::Tokens(n) => write!(f, "{n}"),
+            Self::Usd(m) if m % 1_000_000 == 0 => write!(f, "${}", m / 1_000_000),
+            Self::Usd(m) => write!(f, "${:.2}", m as f64 / 1e6),
+        }
+    }
+}
+
 /// Limits and command allowances for an attempt.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunConfig {
@@ -204,6 +322,8 @@ pub struct RunConfig {
     pub max_attempts: u32,
     /// Independent samples per task, the best by evidence kept.
     pub best_of: u32,
+    /// What a run may spend (`[budget] cap`); `None`: no cap.
+    pub cap: Option<Cap>,
     /// Exact argvs `run_command` runs without asking (`[commands] allow`).
     pub allow: Vec<Vec<String>>,
     /// Argv prefixes (two elements or more) it runs without asking
@@ -263,6 +383,7 @@ impl Default for RunConfig {
             max_tool_calls: 100,
             max_attempts: 2,
             best_of: 1,
+            cap: None,
             allow: Vec::new(),
             allow_prefix: Vec::new(),
             approval_budget: DEFAULT_BUDGET,
@@ -503,6 +624,12 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
         max_tool_calls: budget.max_tool_calls.unwrap_or(d.max_tool_calls),
         max_attempts: budget.max_attempts.unwrap_or(d.max_attempts).max(1),
         best_of: budget.best_of.unwrap_or(d.best_of).clamp(1, 10),
+        cap: budget
+            .cap
+            .as_deref()
+            .map(Cap::parse)
+            .transpose()
+            .map_err(|e| format!("[budget] cap: {e}"))?,
         allow: commands
             .allow
             .into_iter()
@@ -532,6 +659,32 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_cap_is_read_as_people_write_it_and_written_back_the_same() {
+        for (text, cap) in [
+            ("2M", Cap::Tokens(2_000_000)),
+            ("1.5m", Cap::Tokens(1_500_000)),
+            ("500k", Cap::Tokens(500_000)),
+            ("1_200_000", Cap::Tokens(1_200_000)),
+            ("$5", Cap::Usd(5_000_000)),
+            ("$0.50", Cap::Usd(500_000)),
+        ] {
+            assert_eq!(Cap::parse(text), Ok(cap), "{text}");
+            assert_eq!(Cap::parse(&cap.to_string()), Ok(cap), "{cap}");
+        }
+        assert_eq!(Cap::Tokens(2_000_000).to_string(), "2M");
+        assert_eq!(Cap::Usd(500_000).to_string(), "$0.50");
+        for bad in ["", "lots", "$", "$-1", "0", "5 euro"] {
+            assert!(Cap::parse(bad).is_err(), "{bad}");
+        }
+        assert_eq!(
+            parse("[budget]\ncap = \"$5\"\n").unwrap().cap,
+            Some(Cap::Usd(5_000_000))
+        );
+        let e = parse("[budget]\ncap = \"many\"\n").unwrap_err();
+        assert!(e.contains("[budget] cap") && e.contains("2M"), "{e}");
+    }
 
     #[test]
     fn bug_tries_default_to_three_and_stay_within_five() {
