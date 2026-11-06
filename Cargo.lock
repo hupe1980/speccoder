@@ -5800,6 +5800,7 @@ dependencies = [
 name = "speccoder-kiro"
 version = "0.12.0"
 dependencies = [
+ "serde_json",
  "sha2 0.11.1",
  "speccoder-core",
  "tempfile",

@@ -212,12 +212,19 @@ pub fn available_with(
     let run_blocked = (!uncommitted.is_empty())
         .then(|| "commit the planning files first: speccoder runs from committed files".to_owned());
     if ready > 0 && planning_next.is_empty() {
-        let mut a = action(
-            "next",
-            format!("run the {unit}"),
-            format!("{ready} ready task(s), each judged on evidence"),
-            "speccoder run",
-        );
+        // A unit that is a bug runs as one: its tasks close with the fix.
+        let (label, why) = if crate::pipeline::bug_spec(path, feature).is_some() {
+            (
+                "run the bug".to_owned(),
+                "reproduced, confirmed by you once, fixed — verified only when the revert is rejected".to_owned(),
+            )
+        } else {
+            (
+                format!("run the {unit}"),
+                format!("{ready} ready task(s), each judged on evidence"),
+            )
+        };
+        let mut a = action("next", label, why, "speccoder run");
         a = a.with_run(Runnable::Run {
             task: None,
             agent: None,

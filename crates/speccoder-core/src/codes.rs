@@ -1201,10 +1201,10 @@ pub const CATALOG: &[Entry] = &[
         "BUG-NO-UNIT",
         E,
         S::UsageError,
-        "this spec format has no place for a bug",
-        "A bug lives in the format's own bug structure (Spec Kit's `bug` extension) or in its standing bug-fix unit (Spec Kit's `NNN-bugfixes`, an OpenSpec standing change). Kiro projects are not supported: nothing is written.",
+        "speccoder cannot record a bug here",
+        "A bug lives in the format's own bug structure (Spec Kit's `bug` extension, a Kiro bugfix spec) or in its standing bug-fix unit (Spec Kit's `NNN-bugfixes`, an OpenSpec standing change). In a Kiro project you write the bugfix spec in Kiro and speccoder runs it; nothing is written.",
         [
-            "→ write a spec for the change and run it",
+            "→ Kiro: write the bugfix spec, then speccoder run --feature <name>",
             "→ a change without a reproduction: speccoder do \"…\""
         ]
     ),

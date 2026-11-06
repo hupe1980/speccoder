@@ -15,8 +15,15 @@ adheres to [Semantic Versioning](https://semver.org/).
   sub-task; optional `[ ]*` tasks are left alone; Kiro's own ticks show as
   ticked without evidence. In the app, Spec & Plan shows the
   requirements as a living spec: each criterion with its state and the
-  task that turned it. Bugfix specs are listed, not run yet
+  task that turned it. Steering is read as Kiro includes it (`fileMatch`
+  and `auto` with their condition stated, `#[[file:…]]` inlined); cc-sdd
+  specs whose tasks are not approved are not run
   ([Kiro specs](https://hupe1980.github.io/speccoder/docs/kiro/)).
+- **Kiro bugfix specs** run as a bug: one reproduction per Expected
+  statement, red on the untouched code, your one confirmation, the
+  Unchanged set held, the revert rejected; the verified fix ticks the
+  spec's `tasks.md` in its commit
+  ([Bugfix specs](https://hupe1980.github.io/speccoder/docs/kiro/#bugfix-specs)).
 
 ### Changed
 
@@ -27,6 +34,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - The app's Spec & Plan shows an OpenSpec change's proposal and design,
   not only its task list.
+- A new project's plan no longer reads as changed (`NEW-PLAN-CHANGED`)
+  when a tool's version check is slow: the versions are shown, not bound.
+- A Kiro task's `**Validates: Requirements 1.2**` line cites those
+  criteria.
 
 ## [0.12.0] - 2026-11-06
 

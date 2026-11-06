@@ -67,6 +67,41 @@ pub fn tick(path: &Path, task_id: &str, expected_line_hash: &str) -> Result<(), 
     replace(path, &bytes, "speccoder-tick")
 }
 
+/// Ticks every open required task and every open parent (never an
+/// optional one): a bugfix spec's task list, closed by the bug's verified
+/// fix. Returns the ids ticked, in file order; nothing else changes.
+///
+/// # Errors
+///
+/// The file cannot be read or written.
+pub fn close_all(path: &Path) -> Result<Vec<String>, String> {
+    let text = read(path)?;
+    let (t, _) = parse::tasks("tasks.md", &text);
+    let mut boxes: Vec<(usize, String)> = t
+        .parsed
+        .tasks
+        .iter()
+        .filter(|x| !x.done)
+        .filter_map(|x| Some((box_at(&text, x.byte_range)?, x.id.clone())))
+        .chain(
+            t.parents
+                .iter()
+                .filter(|p| !p.done)
+                .filter_map(|p| Some((box_at(&text, p.line.as_ref()?.0)?, p.id.clone()))),
+        )
+        .collect();
+    if boxes.is_empty() {
+        return Ok(Vec::new());
+    }
+    boxes.sort();
+    let mut bytes = text.into_bytes();
+    for (at, _) in &boxes {
+        bytes[*at] = b'x';
+    }
+    replace(path, &bytes, "speccoder-tick")?;
+    Ok(boxes.into_iter().map(|(_, id)| id).collect())
+}
+
 /// Appends `- [ ] N. Convergence` with one open sub-task `N.k` per item,
 /// N after the highest top-level number. The file must still hash to
 /// `expected_file_hash`; the old bytes stay an exact prefix.
@@ -170,6 +205,17 @@ mod tests {
             "- [x] 2. Rules\n  - [x] 2.1 One\n  - [x] 2.2 Two\n  - [ ]* 2.3 Optional\n- [ ] 3. Three\n"
         );
         assert!(tick(&p, "2.1", &hash).is_err(), "never twice");
+    }
+
+    #[test]
+    fn a_closed_bugfix_ticks_every_required_box_and_no_optional_one() {
+        let (_d, p) = file(TASKS);
+        assert_eq!(close_all(&p).unwrap(), ["2", "2.1", "3"]);
+        assert_eq!(
+            std::fs::read_to_string(&p).unwrap(),
+            "- [x] 2. Rules\n  - [x] 2.1 One\n  - [x] 2.2 Two\n  - [ ]* 2.3 Optional\n- [x] 3. Three\n"
+        );
+        assert!(close_all(&p).unwrap().is_empty(), "nothing left to close");
     }
 
     #[test]

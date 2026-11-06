@@ -133,7 +133,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`PROVIDER-REFUSED`](#provider-refused) | error | 21 | the model provider refused the request |
 | [`REPLAY-DIVERGED`](#replay-diverged) | error | 22 | the replay did not reproduce the recorded run |
 | [`NOT-REPLAYABLE`](#not-replayable) | error | 25 | this build cannot re-derive the recorded run |
-| [`BUG-NO-UNIT`](#bug-no-unit) | error | 2 | this spec format has no place for a bug |
+| [`BUG-NO-UNIT`](#bug-no-unit) | error | 2 | speccoder cannot record a bug here |
 | [`BUG-EMPTY`](#bug-empty) | error | 2 | the symptom and every statement need words |
 | [`BUG-NO-EXPECTED`](#bug-no-expected) | error | 2 | a bug needs at least one --expected statement |
 | [`BUG-ASSESSMENT-DRIFT`](#bug-assessment-drift) | stop | 23 | the bug's home does not carry exactly your words |
@@ -1195,11 +1195,11 @@ The run was recorded by a build whose skills or effects this one does not have.
 
 ### BUG-NO-UNIT
 
-This spec format has no place for a bug.
+Speccoder cannot record a bug here.
 
-A bug lives in the format's own bug structure (Spec Kit's `bug` extension) or in its standing bug-fix unit (Spec Kit's `NNN-bugfixes`, an OpenSpec standing change). Kiro projects are not supported: nothing is written.
+A bug lives in the format's own bug structure (Spec Kit's `bug` extension, a Kiro bugfix spec) or in its standing bug-fix unit (Spec Kit's `NNN-bugfixes`, an OpenSpec standing change). In a Kiro project you write the bugfix spec in Kiro and speccoder runs it; nothing is written.
 
-- Write a spec for the change and run it
+- Kiro: write the bugfix spec, then speccoder run --feature <name>
 - A change without a reproduction: speccoder do "…"
 
 ### BUG-EMPTY

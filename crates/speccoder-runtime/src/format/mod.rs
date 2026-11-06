@@ -425,6 +425,22 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
         ))
     }
 
+    /// The selected unit, when it is a bug of the format's own bug
+    /// structure: its slug. `speccoder run` runs it as that bug.
+    fn bug_spec(&self, _snapshot: &ProjectSnapshot) -> Option<String> {
+        None
+    }
+
+    /// Closes the task list a native home's verified fix completes, in the
+    /// unit directory `dir`: the ids ticked (none when it keeps none).
+    ///
+    /// # Errors
+    ///
+    /// The list cannot be read or written.
+    fn close_bug(&self, _dir: &Path) -> Result<Vec<String>, String> {
+        Ok(Vec::new())
+    }
+
     /// The format's own bug step, for a native home.
     fn bug_step(&self) -> Option<BugStep> {
         None

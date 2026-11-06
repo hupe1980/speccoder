@@ -1,6 +1,6 @@
 //! Kiro's files, read as written: `requirements.md` (numbered EARS
 //! criteria under `### Requirement N`), `tasks.md` line by line (`[ ]*`
-//! is not a Markdown task) and the steering that is always included.
+//! is not a Markdown task) and the steering with when it applies.
 
 use speccoder_core::snapshot::{
     DependencyMode, Diagnostic, ParsedTasks, Phase, Severity, Task, Totals,
@@ -182,8 +182,9 @@ fn citations(detail: &str) -> Option<Vec<String>> {
         .strip_prefix("_Requirements:")
         .and_then(|r| r.strip_suffix('_'))
         .or_else(|| {
-            d.strip_prefix("**Validates: Requirements")
-                .and_then(|r| r.strip_suffix("**"))
+            // `**Validates: Requirements 1.2**`: its leading `**` went with the marker.
+            d.strip_prefix("Validates: Requirements")
+                .map(|r| r.trim_end().trim_end_matches('*'))
         })?;
     Some(
         inner
@@ -440,12 +441,84 @@ pub fn tasks(path: &str, text: &str) -> (Tasks, Vec<Diagnostic>) {
     )
 }
 
-/// The steering every task reads: `.kiro/steering/*.md` without front
-/// matter or with `inclusion: always`, by file name, front matter removed.
+/// When a steering file applies, as Kiro includes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum When {
+    /// `inclusion: always`, or no front matter.
+    Always,
+    /// `inclusion: fileMatch`: work on files matching these patterns.
+    Files(Vec<String>),
+    /// `inclusion: auto`: work its description is about.
+    About(String),
+}
+
+/// One steering file an attempt reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rule {
+    /// Its file name (`tech.md`).
+    pub name: String,
+    /// When it applies.
+    pub when: When,
+    /// Its text, front matter removed.
+    pub text: String,
+}
+
+/// `.kiro/steering/` read: the rules, and the files left out with why.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Steering {
+    /// What an attempt reads, by file name.
+    pub rules: Vec<Rule>,
+    /// `(file, why)`: `manual` files, a `fileMatch` without a pattern.
+    pub left_out: Vec<(String, String)>,
+}
+
+/// A front-matter value without its quotes.
+fn unquote(v: &str) -> String {
+    v.trim().trim_matches(['"', '\'']).to_owned()
+}
+
+/// `"a"`, `["a", "b"]`, or a `- a` list on the lines after the key.
+fn patterns(front: &str) -> Vec<String> {
+    let mut lines = front.lines();
+    while let Some(l) = lines.next() {
+        let Some(v) = l.trim_start().strip_prefix("fileMatchPattern:") else {
+            continue;
+        };
+        let v = v.trim();
+        if let Some(inner) = v.strip_prefix('[').and_then(|x| x.strip_suffix(']')) {
+            return inner
+                .split(',')
+                .map(unquote)
+                .filter(|p| !p.is_empty())
+                .collect();
+        }
+        if !v.is_empty() {
+            return vec![unquote(v)];
+        }
+        return lines
+            .map_while(|l| l.trim_start().strip_prefix("- "))
+            .map(unquote)
+            .filter(|p| !p.is_empty())
+            .collect();
+    }
+    Vec::new()
+}
+
+/// The value of `key:` in `front`.
+fn value(front: &str, key: &str) -> Option<String> {
+    front
+        .lines()
+        .find_map(|l| l.trim_start().strip_prefix(key)?.strip_prefix(':'))
+        .map(unquote)
+}
+
+/// The steering in `dir` (`.kiro/steering`), by file name: `always` and
+/// unmarked files as rules; `fileMatch` and `auto` with their condition;
+/// `manual` left out, as Kiro leaves it out until a person names it.
 #[must_use]
-pub fn steering(dir: &std::path::Path) -> Vec<(String, String)> {
+pub fn steering(dir: &std::path::Path) -> Steering {
     let Ok(read) = std::fs::read_dir(dir) else {
-        return Vec::new();
+        return Steering::default();
     };
     let mut files: Vec<_> = read
         .flatten()
@@ -453,22 +526,60 @@ pub fn steering(dir: &std::path::Path) -> Vec<(String, String)> {
         .filter(|p| p.extension().is_some_and(|x| x == "md"))
         .collect();
     files.sort();
-    files
-        .into_iter()
-        .filter_map(|p| {
-            let text = std::fs::read_to_string(&p).ok()?;
-            let name = p.file_name()?.to_string_lossy().into_owned();
-            let Some(rest) = text.strip_prefix("---\n") else {
-                return Some((name, text));
-            };
-            let (front, body) = rest.split_once("\n---\n")?;
-            let always = front.lines().all(|l| {
-                !l.trim_start().starts_with("inclusion:")
-                    || l.split_once(':').is_some_and(|(_, v)| v.trim() == "always")
+    let mut out = Steering::default();
+    for p in files {
+        let (Ok(text), Some(name)) = (std::fs::read_to_string(&p), p.file_name()) else {
+            continue;
+        };
+        let name = name.to_string_lossy().into_owned();
+        let Some((front, body)) = text
+            .strip_prefix("---\n")
+            .and_then(|rest| rest.split_once("\n---\n"))
+        else {
+            out.rules.push(Rule {
+                name,
+                when: When::Always,
+                text,
             });
-            always.then(|| (name, body.trim_start().to_owned()))
-        })
-        .collect()
+            continue;
+        };
+        let body = body.trim_start().to_owned();
+        let when = match value(front, "inclusion").as_deref() {
+            None | Some("always") => When::Always,
+            Some("fileMatch") => match patterns(front) {
+                p if p.is_empty() => {
+                    out.left_out
+                        .push((name, "`fileMatch` without a `fileMatchPattern`".to_owned()));
+                    continue;
+                }
+                p => When::Files(p),
+            },
+            Some("auto") => match value(front, "description").filter(|d| !d.is_empty()) {
+                Some(d) => When::About(d),
+                None => {
+                    out.left_out
+                        .push((name, "`auto` without a `description`".to_owned()));
+                    continue;
+                }
+            },
+            Some("manual") => {
+                out.left_out
+                    .push((name, "manual: read only when a person names it".to_owned()));
+                continue;
+            }
+            Some(other) => {
+                out.left_out
+                    .push((name, format!("unknown inclusion `{other}`")));
+                continue;
+            }
+        };
+        out.rules.push(Rule {
+            name,
+            when,
+            text: body,
+        });
+    }
+    out
 }
 
 #[cfg(test)]
@@ -557,6 +668,15 @@ mod tests {
     }
 
     #[test]
+    fn a_validates_line_cites_its_criteria() {
+        let (t, _) = tasks(
+            "tasks.md",
+            "- [ ] 1. Property test\n  - **Property 1: One label**\n  - **Validates: Requirements 1.2, 1.3**\n",
+        );
+        assert_eq!(t.parsed.tasks[0].scenarios, ["1.2", "1.3"]);
+    }
+
+    #[test]
     fn broken_lists_are_named() {
         let (_, diags) = tasks(
             "tasks.md",
@@ -574,11 +694,43 @@ mod tests {
     }
 
     #[test]
-    fn steering_is_the_always_included_files() {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/issue-triage/.kiro/steering");
-        let s = steering(&dir);
-        assert_eq!(s.len(), 1);
-        assert_eq!(s[0].0, "tech.md");
+    fn steering_is_read_with_its_conditions() {
+        let dir = tempfile::tempdir().unwrap();
+        let w = |n: &str, t: &str| std::fs::write(dir.path().join(n), t).unwrap();
+        w("tech.md", "# Tech\n");
+        w("always.md", "---\ninclusion: always\n---\n\nAlways.\n");
+        w(
+            "ui.md",
+            "---\ninclusion: fileMatch\nfileMatchPattern: [\"**/*.ts\", '**/*.tsx']\n---\nUI.\n",
+        );
+        w(
+            "web.md",
+            "---\ninclusion: fileMatch\nfileMatchPattern:\n  - \"web/**\"\n---\nWeb.\n",
+        );
+        w(
+            "api.md",
+            "---\ninclusion: auto\nname: api\ndescription: REST handlers\n---\nAPI.\n",
+        );
+        w("notes.md", "---\ninclusion: manual\n---\nNotes.\n");
+        w("broken.md", "---\ninclusion: fileMatch\n---\nNo pattern.\n");
+        let s = steering(dir.path());
+        let rules: Vec<(&str, &When)> =
+            s.rules.iter().map(|r| (r.name.as_str(), &r.when)).collect();
+        assert_eq!(
+            rules,
+            [
+                ("always.md", &When::Always),
+                ("api.md", &When::About("REST handlers".to_owned())),
+                ("tech.md", &When::Always),
+                (
+                    "ui.md",
+                    &When::Files(vec!["**/*.ts".to_owned(), "**/*.tsx".to_owned()])
+                ),
+                ("web.md", &When::Files(vec!["web/**".to_owned()])),
+            ]
+        );
+        assert_eq!(s.rules[0].text, "Always.\n");
+        let left: Vec<&str> = s.left_out.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(left, ["broken.md", "notes.md"]);
     }
 }

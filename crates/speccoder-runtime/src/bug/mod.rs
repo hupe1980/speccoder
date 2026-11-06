@@ -158,7 +158,7 @@ fn needs_model(path: &Path, req: &Request) -> bool {
     format
         .detect(path)
         .and_then(|root| format.bug_unit(&root).ok())
-        .is_some_and(|h| h.kind.native() && req.slug.is_none())
+        .is_some_and(|h| h.kind.native() && req.slug.is_none() && format.bug_step().is_some())
 }
 
 /// `speccoder bug …` with the configured model.
@@ -378,6 +378,11 @@ pub fn bug_with(
         );
     }
 
+    // A format that writes its bugs itself (Kiro): nothing to record here.
+    if home.kind.native() && format.bug_step().is_none() {
+        return refuse(&writes_its_own(&home));
+    }
+
     // The person's words, checked before anything is written.
     let triad = match Triad::new(&req.symptom, &req.expected, &req.unchanged, sha256_hex) {
         Ok(t) => t,
@@ -531,18 +536,15 @@ pub fn bug_with(
 
     // Record: the format's own step, or the standing unit.
     let (bug, committed) = if home.kind.native() {
+        let Some(step) = format.bug_step() else {
+            return refuse(&writes_its_own(&home));
+        };
         let Some(provider) = provider.clone() else {
             return CommandResult::new(
                 "bug",
                 CommandStatus::ConfigError,
                 "recording in the format's own bug structure runs its skill: a model is needed",
             );
-        };
-        let Some(step) = format.bug_step() else {
-            return refuse(&BugRefusal::new(
-                "BUG-NO-UNIT",
-                "the format has no bug step",
-            ));
         };
         let slug = format.bug_slug(&root, &home, &triad.title());
         let Some((dir, unit)) = format.bug_dir(&home, &slug) else {
@@ -726,6 +728,17 @@ pub fn bug_with(
         .collect();
     finish_record(
         &root, &plane, bug, files, extra, via, state, provider, secret, req.run, options,
+    )
+}
+
+/// A format that writes its bugs itself: where, and the way on.
+fn writes_its_own(home: &BugHome) -> BugRefusal {
+    BugRefusal::new(
+        "BUG-NO-UNIT",
+        format!(
+            "this project keeps each bug in the format's own files: {} in {}/<name>/",
+            home.reason, home.location
+        ),
     )
 }
 

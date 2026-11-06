@@ -38,7 +38,7 @@ The spec format decides; the choice and its reason are shown and recorded:
 | Spec Kit with its `bug` extension installed and enabled | `.specify/bugs/<slug>/` | nothing: the extension's assess skill writes `assessment.md`, given your triad verbatim; speccoder reads it back |
 | Spec Kit without it (or with it disabled) | the standing unit `NNN-bugfixes` | a user story whose acceptance scenarios are the triad, an approved requirement and a task, committed alone as `bug: <title>` |
 | OpenSpec | the standing change `openspec/changes/bugfixes/` | a requirement of the `bugfixes` capability, a line of the proposal, a task group |
-| Kiro | not supported (`BUG-NO-UNIT`) | nothing |
+| Kiro | a bugfix spec, `.kiro/specs/<name>/bugfix.md` | nothing: you write the spec in Kiro; `speccoder run --feature <name>` runs it as the bug, and the verified fix ticks its `tasks.md` ([Kiro specs](@/docs/kiro.md#bugfix-specs)) |
 
 Whether the extension is installed comes from `specify extension list --json` when the CLI is installed, else `.specify/extensions/.registry` and `.specify/extensions.yml`. In the extension's layout:
 
@@ -93,7 +93,7 @@ Whether the extension is installed comes from `specify extension list --json` wh
 
 ```sh
 speccoder bug "<symptom>" --expected "<e>" [--unchanged "<u>"]… [--issue N] [--test PATH::NAME]… [--candidate PATCH|pr:N] [--no-run] [--no-prompt]
-speccoder bug --slug <slug>                          # a bug of Spec Kit's bug extension
+speccoder bug --slug <slug>                          # a bug of Spec Kit's bug extension, or a Kiro bugfix spec
 speccoder bug confirm <unit>/<task> --digest D       # or --reject --reason "…"; --no-run records only
 speccoder bug run --task <unit>/<task>               # or --slug <slug>: reproduce again, or run the confirmed fix
 speccoder bug keep <unit>/<task> --reason "…"        # already satisfied: commit the reproductions, attested

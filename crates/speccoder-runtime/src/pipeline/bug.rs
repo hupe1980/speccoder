@@ -2091,12 +2091,18 @@ impl NativeBug {
     /// The context bundle an attempt at it is given.
     #[must_use]
     pub fn bundle(&self, project: &Path) -> crate::context::Bundle {
-        let [rules, ..] =
+        let [rules, _, design, tasks] =
             crate::format::at(project).convergence_texts(project, &project.join(&self.dir));
+        // The home's own design and task list, when it keeps them (Kiro).
+        let plan = [design, tasks]
+            .into_iter()
+            .filter(|t| !t.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n");
         crate::context::Bundle {
             feature: self.unit.clone(),
             constitution: crate::context::cap(&rules),
-            plan: String::new(),
+            plan: crate::context::cap(&plan),
             story: crate::context::cap(&self.story),
             task: crate::context::TaskContext {
                 id: self.task.clone(),

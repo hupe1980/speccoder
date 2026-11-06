@@ -2,8 +2,9 @@
 //! Each `### Requirement N` is a story and its numbered EARS criteria
 //! (`N.M`) are its scenarios; a task's `_Requirements: 1.2, 1.3_` are the
 //! criteria that judge it. Parent tasks are closed by the engine with their
-//! last required sub-task; optional (`[ ]*`) tasks are left alone.
-//! Reading and the two writes are the `speccoder-kiro` crate's; this
+//! last required sub-task; optional (`[ ]*`) tasks are left alone. A
+//! bugfix spec is a bug of the format's own bug structure.
+//! Reading and the writes are the `speccoder-kiro` crate's; this
 //! adapter is the only runtime code that knows Kiro.
 
 mod texts;
@@ -144,13 +145,27 @@ impl Adapter for Kiro {
         })
     }
 
-    /// Every acceptance criterion of the spec, by its `N.M`.
+    /// Every acceptance criterion of the spec, by its `N.M`; a bugfix
+    /// spec's statements, which its tasks cite the same way.
     fn scenarios(&self, snapshot: &ProjectSnapshot, _task: &str) -> Vec<ScenarioRef> {
         let Some(name) = spec_name(snapshot) else {
             return Vec::new();
         };
-        speccoder_kiro::load(Path::new(&snapshot.root), name)
-            .requirements
+        let root = Path::new(&snapshot.root);
+        let spec = speccoder_kiro::load(root, name);
+        if spec.bugfix
+            && let Ok(b) = speccoder_kiro::read_bugfix(root, name)
+        {
+            return [b.current, b.expected, b.unchanged]
+                .into_iter()
+                .flatten()
+                .map(|s| ScenarioRef {
+                    id: s.id,
+                    text: s.text,
+                })
+                .collect();
+        }
+        spec.requirements
             .iter()
             .flat_map(|r| {
                 r.criteria.iter().map(|c| ScenarioRef {
@@ -233,20 +248,82 @@ impl Adapter for Kiro {
         Vec::new()
     }
 
+    /// Kiro keeps each bug as a bugfix spec: the format's own bug
+    /// structure, written in Kiro (speccoder has no step to record one).
     fn bug_unit(
         &self,
         _root: &Path,
     ) -> Result<speccoder_core::bug::BugHome, crate::format::BugRefusal> {
-        Err(crate::format::BugRefusal::new(
-            "BUG-NO-UNIT",
-            "Kiro keeps a bug in a bugfix spec, which speccoder does not run yet: nothing was written — write the fix as a feature spec, or `speccoder do` for a change without a reproduction",
-        ))
+        Ok(speccoder_core::bug::BugHome {
+            kind: speccoder_core::bug::HomeKind::NativeKiroBugfix,
+            location: speccoder_kiro::SPECS.to_owned(),
+            reason: "a Kiro bugfix spec".to_owned(),
+        })
     }
 
-    /// The requirements as the living spec, the design as the plan.
+    fn bug_dir(&self, home: &speccoder_core::bug::BugHome, slug: &str) -> Option<(String, String)> {
+        (home.kind == speccoder_core::bug::HomeKind::NativeKiroBugfix
+            && speccoder_core::bug::valid_slug(slug))
+        .then(|| (format!("{}/{slug}", speccoder_kiro::SPECS), slug.to_owned()))
+    }
+
+    /// `bugfix.md`'s statements: every Current one, joined, is the symptom.
+    fn read_bug(
+        &self,
+        root: &Path,
+        home: &speccoder_core::bug::BugHome,
+        key: &str,
+    ) -> Result<crate::format::ReadBug, crate::format::BugRefusal> {
+        let refuse = |m: String| crate::format::BugRefusal::new("BUG-ASSESSMENT-UNREADABLE", m);
+        let Some((dir, _)) = self.bug_dir(home, key) else {
+            return Err(refuse(format!("`{key}` is not a bugfix spec's name")));
+        };
+        let mut p = root.to_path_buf();
+        for part in dir.split('/').chain(["bugfix.md"]) {
+            p.push(part);
+            if std::fs::symlink_metadata(&p).is_ok_and(|m| m.file_type().is_symlink()) {
+                return Err(refuse(format!(
+                    "{dir} is reached through a symbolic link: it is not read"
+                )));
+            }
+        }
+        let b = speccoder_kiro::read_bugfix(root, key).map_err(refuse)?;
+        let texts = |s: &[speccoder_kiro::bugfix::Statement]| -> Vec<String> {
+            s.iter().map(|x| x.text.clone()).collect()
+        };
+        Ok(crate::format::ReadBug {
+            current: vec![texts(&b.current).join(" ")],
+            expected: texts(&b.expected),
+            unchanged: texts(&b.unchanged),
+            title: Some(key.replace('-', " ")),
+            file: format!("{dir}/bugfix.md"),
+        })
+    }
+
+    /// The selected spec, when it is a bugfix spec.
+    fn bug_spec(&self, snapshot: &ProjectSnapshot) -> Option<String> {
+        let name = spec_name(snapshot)?;
+        speccoder_kiro::load(Path::new(&snapshot.root), name)
+            .bugfix
+            .then(|| name.to_owned())
+    }
+
+    /// A verified fix closes the bugfix spec's task list.
+    fn close_bug(&self, dir: &Path) -> Result<Vec<String>, String> {
+        let tasks = dir.join("tasks.md");
+        if tasks.is_file() {
+            speccoder_kiro::write::close_all(&tasks)
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    /// The requirements (or the bugfix) as the living spec, the design as
+    /// the plan.
     fn documents(&self) -> &'static [(&'static str, &'static str)] {
         &[
             ("spec", "requirements.md"),
+            ("bugfix", "bugfix.md"),
             ("plan", "design.md"),
             ("tasks", "tasks.md"),
         ]

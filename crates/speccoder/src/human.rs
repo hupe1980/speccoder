@@ -87,12 +87,17 @@ pub fn inspect(w: &mut impl Write, s: &ProjectSnapshot) -> io::Result<()> {
                 }
                 None if kiro => {
                     let mark = |b: bool| if b { "✓" } else { "–" };
+                    let bugfix = s
+                        .diagnostics
+                        .iter()
+                        .any(|d| d.code.starts_with("kiro.bugfix"));
                     writeln!(
                         w,
-                        "Artifacts  steering {}  requirements {}  design {}  tasks {}",
+                        "Artifacts  steering {}  {} {}  design {}  tasks {}",
                         mark(
                             s.constitution == speccoder_core::snapshot::ConstitutionState::Present
                         ),
+                        if bugfix { "bugfix" } else { "requirements" },
                         mark(f.artifacts.spec),
                         mark(f.artifacts.plan),
                         mark(f.artifacts.tasks),
@@ -100,7 +105,20 @@ pub fn inspect(w: &mut impl Write, s: &ProjectSnapshot) -> io::Result<()> {
                 }
                 None => writeln!(w, "Artifacts  {}", artifacts(s.constitution, &f.artifacts))?,
             }
+            let bugfix = kiro && s.diagnostics.iter().any(|d| d.code == "kiro.bugfix");
             match (&f.tasks, &f.schedule) {
+                // A bug's task list is closed by its verified fix, all at once.
+                (Some(t), _) if bugfix => {
+                    writeln!(
+                        w,
+                        "Tasks      {} total · {} done · ticked together when the fix is verified",
+                        t.totals.total, t.totals.done
+                    )?;
+                    for task in &t.tasks {
+                        let mark = if task.done { "x" } else { " " };
+                        writeln!(w, "  [{mark}] {:<14} {}", task.id, task.title)?;
+                    }
+                }
                 (Some(t), Some(sched)) => {
                     writeln!(
                         w,

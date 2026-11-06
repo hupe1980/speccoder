@@ -176,6 +176,18 @@ pub fn run_feature_with(
             run_feature_with(path, feature, state, provider, secret, o)
         });
     }
+    // A unit that is a bug of the format's own structure runs as that bug.
+    if let Some(slug) = bug_spec(path, feature) {
+        return crate::bug::run_with(
+            path,
+            Some(&slug),
+            None,
+            state,
+            Arc::clone(provider),
+            secret,
+            options,
+        );
+    }
     let max_tasks = options.max_tasks;
     use speccoder_core::FeatureReport;
     use speccoder_core::snapshot::TaskState;

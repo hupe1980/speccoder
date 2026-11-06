@@ -348,7 +348,13 @@ pub fn digest(plan: &ProjectPlan) -> String {
         "sandbox": plan.sandbox,
         "identity": plan.identity,
         "refusal": plan.refusal,
-        "observed": plan.observed,
+        // The folder as found; tool versions are shown, not bound (a probe
+        // slowed past its limit would otherwise read as a changed plan —
+        // a version that changes the run changes its steps or refusal).
+        "observed": speccoder_core::new_project::ObservedFolder {
+            tools: std::collections::BTreeMap::new(),
+            ..plan.observed.clone()
+        },
     });
     format!("sha256:{}", sha(bound.to_string().as_bytes()))
 }

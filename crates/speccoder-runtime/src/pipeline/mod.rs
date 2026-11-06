@@ -41,6 +41,13 @@ pub(crate) struct Setup {
     pub(crate) format: &'static dyn crate::format::Adapter,
 }
 
+/// The selected unit, when it is a bug of the format's own bug structure
+/// : its slug.
+pub(crate) fn bug_spec(path: &Path, feature: Option<&str>) -> Option<String> {
+    let format = crate::format::at(path);
+    format.bug_spec(&format.open(path, feature)?)
+}
+
 pub(crate) fn setup(
     path: &Path,
     feature: Option<&str>,

@@ -24,7 +24,7 @@
     const t = app.report?.data?.review;
     return t ? t.open + t.lapsed + t.changes_requested : 0;
   });
-  const names: Record<string, string> = { spec: "Spec", plan: "Plan", tasks: "Tasks", research: "Research", "data-model": "Data model", quickstart: "Quickstart" };
+  const names: Record<string, string> = { spec: "Spec", bugfix: "Bugfix", plan: "Plan", tasks: "Tasks", research: "Research", "data-model": "Data model", quickstart: "Quickstart" };
   // Requirement IDs become chips that say which task cites them (the report's trace).
   const cites = $derived(new Map((app.report?.data?.trace ?? []).map((t) => [t.requirement, t.task])));
   const parsed = $derived(outline(shown?.html ?? ""));

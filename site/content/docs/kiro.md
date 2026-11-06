@@ -1,6 +1,6 @@
 +++
 title = "Kiro specs"
-description = "Run a Kiro or cc-sdd spec task by task under the same judge: each requirement's acceptance criteria become failing tests first, a task is ticked only when the criteria it cites pass, and Kiro's own ticks are labelled for what they are."
+description = "Run a Kiro or cc-sdd spec under the same judge: each requirement's criteria become failing tests first, a task is ticked only when the criteria it cites pass, a bugfix spec is proven fixed, and Kiro's own ticks are labelled for what they are."
 weight = 46
 
 [extra]
@@ -34,12 +34,32 @@ Commit the spec first; the work happens on `speccoder/<name>`.
 - **Parents close themselves.** A task with sub-tasks (`2.` over `2.1`, `2.2`) gets no attempt: speccoder ticks it with its last required sub-task. cc-sdd's unindented sub-tasks and `## 1.` group headings are found by number.
 - **Optional tasks are left alone.** `- [ ]*` tasks (Kiro's optional property tests) are not run and not ticked; the criteria's own tests do that job.
 - **Kiro's ticks are kept, and labelled.** A task already `[x]` is not run again; `report` shows it as ticked without evidence until you check it.
-- **Context.** Each attempt reads the steering that is always included (`.kiro/steering/*.md` without front matter, or with `inclusion: always`) as the project's rules, `design.md` as the plan, and the requirements the task cites.
+- **Context.** Each attempt reads `design.md` as the plan, the requirements the task cites, and the steering as the project's rules — as Kiro includes it: files without front matter or with `inclusion: always` as they are; `fileMatch` files under "when you change files matching `web/**`"; `auto` files under "when the work is about: …" (their `description`). `manual` files are left out, as Kiro leaves them out until named; `inspect` lists them. `#[[file:docs/api.md]]`, `#[[file:docs/api.md:10-20]]` and `#[[folder:…]]` are inlined from inside the repository; one that does not resolve stays as written and `inspect` warns.
+- **Correctness Properties.** The author of a requirement's tests reads `design.md`, its properties included, so a test can check the invariant and not only the example. A task's `**Validates: Requirements 1.2**` cites those criteria.
+- **cc-sdd's approvals.** A spec whose `spec.json` does not approve its tasks is not run (`kiro.unapproved`), as cc-sdd's own `spec-impl` would not run it: approve them (`/kiro:spec-tasks <name> -y`), then run again.
 
 In the app, **Spec & Plan** shows `requirements.md` as a living spec: each requirement a card with how many of its criteria are green, each criterion its state and the task that turned it.
 
 A checkpoint task ("Checkpoint - …") is an ordinary task: its attempt runs the checks, and it is ticked `regression_only` at best.
 
+## Bugfix specs
+
+A bugfix spec (`bugfix.md`: Current, Expected and Unchanged behavior) runs as a [bug](@/docs/bugs.md), not task by task:
+
+```sh
+speccoder inspect --feature empty-title   # Current 1.1, Expected 2.1 (E1), Unchanged 3.1 (U1)
+speccoder run --feature empty-title       # reproduce, then your one confirmation
+speccoder run --feature empty-title       # after `speccoder bug confirm …`: the fix
+```
+
+1. **Reproduce.** One test per Expected statement (`2.1` is E1, `2.2` E2), written by an author that never sees the fix, red on the untouched code by an assertion. Kiro's "this test MUST FAIL on unfixed code", recorded.
+2. **Confirm.** You confirm once that the tests capture the bug.
+3. **Unchanged.** The Unchanged statements' tests are green before the fix and must stay green.
+4. **Fix.** The attempt reads `design.md` and `tasks.md` as its plan. It is verified only when every reproduction turned green, the Unchanged set held and reverting the fix makes them fail again.
+5. **Tick.** The verified fix's commit ticks every required task of `tasks.md` (parents too, optional ones not), each named as `Closes-Task:`; `report` shows them verified by the bug's verdict. A fix that is not verified ticks nothing.
+
+A spec with only `bugfix.md` (before Kiro wrote its design and tasks) runs the same way. `speccoder bug "…"` in a Kiro project asks you to write the bugfix spec in Kiro.
+
 ## Not supported yet
 
-Bugfix specs (`bugfix.md`) are listed and stop before any model call. Also not read: `fileMatch` and `manual` steering, Correctness Properties, cc-sdd's `spec.json` approvals and `_Boundary:_`. Specs are written in Kiro or with cc-sdd; `speccoder spec` hosts no Kiro skills.
+Kiro's task dependency `waves` are not read; tasks run in number order, which is an order of them. Global steering (`~/.kiro/steering/`) is not read: it is not in the repository, so a tick's context could not be checked again. Specs are written in Kiro or with cc-sdd; `speccoder spec` hosts no Kiro skills.

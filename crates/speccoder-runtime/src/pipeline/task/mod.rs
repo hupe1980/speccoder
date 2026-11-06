@@ -187,6 +187,17 @@ pub(crate) fn run_task(
     secret: Option<&str>,
     options: &RunOptions,
 ) -> CommandResult {
+    // A unit that is a bug runs as one bug, never task by task.
+    if options.bug_home.is_none()
+        && let Some(slug) = bug_spec(path, feature)
+    {
+        if let Some(p) = &options.progress {
+            p.event(&progress::Event::Notice {
+                text: format!("{slug} is a bug: it runs as one, not task by task"),
+            });
+        }
+        return crate::bug::run_with(path, Some(&slug), None, state, provider, secret, options);
+    }
     let first = run_task_once(
         path,
         feature,

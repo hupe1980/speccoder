@@ -203,6 +203,16 @@ fn a_sub_task_is_judged_by_the_criteria_it_cites_and_closes_its_parent() {
     let res = run(r.path(), state.path(), "2.1", &f);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     assert_eq!(report(&res).verdict, Some(Verdict::Verified));
+    // The oracle's author reads the design's Correctness Properties.
+    let author = f.asked().into_iter().find(|a| a.tools.is_empty()).unwrap();
+    assert!(
+        author
+            .prompt
+            .to_string()
+            .contains("Property 1: One label per issue"),
+        "{}",
+        author.prompt
+    );
     let tasks = on_branch(r.path(), TASKS);
     assert!(tasks.contains("- [x] 2.1 Label crashes"), "{tasks}");
     assert!(
@@ -275,9 +285,44 @@ fn each_task_reads_the_steering_the_design_and_its_requirements() {
         "{}",
         b.constitution
     );
+    // Kiro's conditions, stated; references inlined from inside the project.
     assert!(
-        !b.constitution.contains("coloured chips"),
-        "fileMatch steering is not always read"
+        b.constitution.contains(
+            "## .kiro/steering/ui.md — when you change files matching `web/**`\n\n# UI\n\n- Labels are shown as coloured chips."
+        ),
+        "{}",
+        b.constitution
+    );
+    assert!(
+        b.constitution
+            .contains("## .kiro/steering/audit.md — when the work is about: the audit log"),
+        "{}",
+        b.constitution
+    );
+    assert!(
+        !b.constitution.contains("Written by hand"),
+        "manual is left out"
+    );
+    assert!(
+        b.constitution
+            .contains("Errors are values, never panics.\nNames are full words."),
+        "{}",
+        b.constitution
+    );
+    assert!(b.constitution.contains("#[[file:../outside.md]]"));
+    let steering: Vec<&str> = opened
+        .snapshot
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "kiro.steering")
+        .map(|d| d.message.as_str())
+        .collect();
+    assert_eq!(
+        steering,
+        [
+            "#[[file:../outside.md]] does not resolve inside the project; the model reads it as written",
+            "release.md is not read (manual: read only when a person names it)",
+        ]
     );
     assert!(
         b.plan.contains("the first rule that matches wins"),
@@ -295,13 +340,301 @@ fn each_task_reads_the_steering_the_design_and_its_requirements() {
     );
 }
 
+/// The bugfix spec over the bug fixture's seeded code (`save` panics on
+/// an empty title; `check.sh` stands in for a test runner).
+fn bugfix_repo() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let r = dir.path();
+    let seeded = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/bug/seeded");
+    for from in [seeded, fixture("bugfix")] {
+        assert!(
+            Command::new("cp")
+                .arg("-R")
+                .arg(from.join("."))
+                .arg(r)
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    // Kiro only.
+    fs::remove_dir_all(r.join(".specify")).unwrap();
+    git(r, &["init", "-q"]);
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-q", "-m", "init"]);
+    dir
+}
+
+const BUGFIX_TASKS: &str = ".kiro/specs/empty-title/tasks.md";
+
+/// An approver who confirms the reproductions shown, and is asked nothing else.
+#[derive(Debug)]
+struct Confirms;
+impl speccoder_runtime::approvals::Approver for Confirms {
+    fn ask(
+        &self,
+        _: &speccoder_runtime::approvals::Presentation,
+    ) -> speccoder_runtime::approvals::Answer {
+        panic!("no call should need approval")
+    }
+    fn confirm(
+        &self,
+        _: &speccoder_runtime::approvals::ConfirmRequest,
+    ) -> Option<speccoder_runtime::approvals::ConfirmAnswer> {
+        Some(speccoder_runtime::approvals::ConfirmAnswer::Confirm)
+    }
+}
+
+fn the_bug(r: &CommandResult) -> &speccoder_core::bug::BugReport {
+    match r.data() {
+        Some(CommandData::Bug(b)) => b,
+        other => panic!("{:?} {} → {other:?}", r.status(), r.message()),
+    }
+}
+
+/// The reproduction author: E1 (Expected 2.1) and U1 (Unchanged 3.1);
+/// a held-out variant of E1.
+fn reproductions(f: &FakeProvider) {
+    let file = |path: &str, statement: &str, pattern: &str| json!({ "path": path, "content": format!("expect: {pattern}\n"), "statement": statement, "test": pattern, "argv": ["./check.sh", "--", path] });
+    f.will_structure(json!({ "files": [
+        file("tests/repro_e1.txt", "E1", "refuses_empty"),
+        file("tests/repro_u1.txt", "U1", "saves_title"),
+    ], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/held_e1.txt", "content": "expect: refuses_blank\n", "scenarios": ["E1"], "argv": ["./check.sh", "--", "tests/held_e1.txt"], "composition": false }], "notes": [] }));
+}
+
+/// The fix, and a special case that knows only the reproduction's literal.
+fn fixes(f: &FakeProvider) {
+    f.will_call_tool(
+        "c1",
+        "write_file",
+        json!({ "path": "src/lib.rs", "content": "// saves_title\n// refuses_empty refuses_blank\npub fn save(title: &str) -> Result<char, String> {\n    title.chars().next().ok_or_else(|| \"a title is needed\".to_owned())\n}\n" }),
+    );
+    f.will_structure(json!({ "summary": "refuse an empty title", "status": "done", "files_changed": ["src/lib.rs"], "checks_run": [], "notes": [] }));
+    f.will_structure(json!({ "variants": [{ "kind": "special_case", "scenario": "E1", "rationale": "recognises the empty string only", "files": [{ "path": "src/lib.rs", "content": "// saves_title\n// refuses_empty\npub fn save(title: &str) -> char { title.chars().next().unwrap_or('?') }\n" }] }], "notes": [] }));
+}
+
 #[test]
-fn a_bugfix_spec_stops_before_any_model_call() {
-    let r = repo("bugfix");
+fn a_bugfix_spec_reads_as_the_bugs_triad() {
+    let r = bugfix_repo();
+    let opened = speccoder_runtime::format::open(r.path(), None).unwrap();
+    let d = opened
+        .snapshot
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "kiro.bugfix")
+        .unwrap_or_else(|| panic!("{:?}", opened.snapshot.diagnostics));
+    assert_eq!(
+        d.message,
+        "a bugfix spec — Current 1.1, Expected 2.1 (E1), Unchanged 3.1 (U1); it runs as a bug: reproduced, confirmed by you, fixed, the revert rejected"
+    );
+    assert!(opened.adapter.blocking(&opened.snapshot).is_empty());
+    let home = opened.adapter.bug_unit(r.path()).unwrap();
+    let read = opened
+        .adapter
+        .read_bug(r.path(), &home, "empty-title")
+        .unwrap();
+    assert_eq!(
+        read.current,
+        ["WHEN a note is saved with an empty title THEN the system panics"],
+        "wrapped lines joined"
+    );
+    assert_eq!(read.unchanged.len(), 1);
+    assert_eq!(
+        opened.adapter.bug_spec(&opened.snapshot).as_deref(),
+        Some("empty-title")
+    );
+
+    // Kiro's analysis phase: only bugfix.md, still a spec to run.
+    for f in ["design.md", "tasks.md"] {
+        fs::remove_file(r.path().join(".kiro/specs/empty-title").join(f)).unwrap();
+    }
+    let opened = speccoder_runtime::format::open(r.path(), None).unwrap();
+    assert_eq!(
+        opened.adapter.bug_spec(&opened.snapshot).as_deref(),
+        Some("empty-title")
+    );
+}
+
+#[test]
+fn a_bugfix_spec_runs_on_the_bug_rung_and_its_fix_closes_kiros_tasks() {
+    let r = bugfix_repo();
     let state = tempfile::tempdir().unwrap();
     let f = FakeProvider::new();
-    let res = run(r.path(), state.path(), "1", &f);
+    reproductions(&f);
+    fixes(&f);
+    let d: Arc<dyn ModelProvider> = f.clone();
+    let options = speccoder_runtime::RunOptions {
+        approver: Some(Arc::new(Confirms)),
+        ..speccoder_runtime::RunOptions::default()
+    };
+    // `speccoder run` with the bugfix spec selected: the bug, not its tasks.
+    let res = speccoder_runtime::run_feature_with(r.path(), None, state.path(), &d, None, &options);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let b = the_bug(&res);
+    assert_eq!(b.home.kind, speccoder_core::bug::HomeKind::NativeKiroBugfix);
+    assert_eq!(
+        (b.unit.as_str(), b.task.as_str()),
+        ("empty-title", "bug:empty-title")
+    );
+    assert_eq!(b.verdict, Some(Verdict::Verified));
+    let commit = b.commit.clone().unwrap();
+    let message = git(r.path(), &["log", "-1", "--format=%B", &commit]);
+    assert!(
+        message.contains("Bug: fixed (native_kiro_bugfix)"),
+        "{message}"
+    );
+    // The verdict commit ticks Kiro's tasks, and nothing else of the spec.
+    let before = fs::read_to_string(r.path().join(BUGFIX_TASKS)).unwrap();
+    let after = git(r.path(), &["show", &format!("{commit}:{BUGFIX_TASKS}")]);
+    let changed: Vec<&str> = before
+        .lines()
+        .zip(after.lines())
+        .filter(|(a, b)| a != b)
+        .map(|(_, b)| b)
+        .collect();
+    assert_eq!(
+        changed,
+        [
+            "- [x] 1. Write bug condition exploration test",
+            "- [x] 2. Write preservation property tests",
+            "- [x] 3. Fix the empty title",
+            "  - [x] 3.1 Refuse an empty title in `src/lib.rs`",
+            "  - [x] 3.2 Verify the exploration test now passes",
+            "- [x] 4. Checkpoint - Ensure all tests pass",
+        ],
+        "{after}"
+    );
+    assert!(after.contains("- [ ]* 3.3"), "an optional task stays open");
+    for f in ["bugfix.md", "design.md"] {
+        let p = format!(".kiro/specs/empty-title/{f}");
+        assert_eq!(
+            git(r.path(), &["show", &format!("{commit}:{p}")]),
+            fs::read_to_string(r.path().join(&p)).unwrap()
+        );
+    }
+    for id in ["1", "3", "3.1", "4"] {
+        assert!(
+            message.contains(&format!("Closes-Task: empty-title/{id}\n")),
+            "{message}"
+        );
+    }
+    // The report reads each closed task as verified by the bug's verdict.
+    let wt = git(r.path(), &["worktree", "list", "--porcelain"]);
+    let wt = wt
+        .split("\n\n")
+        .find(|w| w.contains("branch refs/heads/speccoder/empty-title"))
+        .and_then(|w| w.lines().next()?.strip_prefix("worktree "))
+        .unwrap_or_else(|| panic!("{wt}"))
+        .to_owned();
+    let rep = speccoder_runtime::status::report(Path::new(&wt), Some("empty-title"));
+    let Some(CommandData::Report(rep)) = rep.data() else {
+        panic!("{}", rep.message());
+    };
+    for t in &rep.tasks {
+        assert_eq!(t.state, "verified", "{t:?}");
+    }
+}
+
+#[test]
+fn a_new_bug_in_a_kiro_project_is_a_bugfix_spec_to_write() {
+    let r = bugfix_repo();
+    let state = tempfile::tempdir().unwrap();
+    let res = speccoder_runtime::bug::bug_with(
+        r.path(),
+        &speccoder_runtime::bug::Request {
+            symptom: "the list is empty".to_owned(),
+            expected: vec!["the list shows the notes".to_owned()],
+            ..speccoder_runtime::bug::Request::default()
+        },
+        speccoder_core::actions::Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    assert_eq!(res.code().map(|c| c.name), Some("BUG-NO-UNIT"));
+    assert!(
+        res.message()
+            .ends_with("a Kiro bugfix spec in .kiro/specs/<name>/"),
+        "{}",
+        res.message()
+    );
+}
+
+#[test]
+fn a_cc_sdd_spec_whose_tasks_are_not_approved_does_not_run() {
+    let r = repo("photo-albums");
+    let spec = r.path().join(".kiro/specs/photo-albums/spec.json");
+    let approved = fs::read_to_string(&spec).unwrap();
+    assert!(
+        speccoder_runtime::format::open(r.path(), None)
+            .unwrap()
+            .snapshot
+            .diagnostics
+            .iter()
+            .all(|d| d.code != "kiro.unapproved"),
+        "approved: it runs"
+    );
+    fs::write(
+        &spec,
+        approved.replace(
+            "\"tasks\": { \"approved\": true }",
+            "\"tasks\": { \"approved\": false }",
+        ),
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "tasks not approved"]);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    let res = run(r.path(), state.path(), "1.1", &f);
     assert_ne!(res.status(), CommandStatus::Ok);
-    assert!(res.message().contains("bugfix spec"), "{}", res.message());
-    assert!(f.asked().is_empty());
+    assert!(
+        res.message()
+            .contains("cc-sdd has not approved this spec's tasks (spec.json)"),
+        "{}",
+        res.message()
+    );
+    assert!(f.asked().is_empty(), "no model call");
+}
+
+#[test]
+fn cc_sdd_group_headings_without_a_parent_line_run_and_tick() {
+    let r = repo("photo-albums");
+    let tasks = ".kiro/specs/photo-albums/tasks.md";
+    fs::write(
+        r.path().join(tasks),
+        "# Implementation Plan\n\n## 1. Album store\n\n- [ ] 1.1 Create the album model in `src/lib.rs`\n  - _Requirements: 1.1_\n- [ ] 1.2 Delete empty albums in `src/lib.rs`\n  - _Requirements: 1.2_\n\n## 2. Photos\n\n- [ ] 2.1 List photos in `src/lib.rs`\n  - _Requirements: 2.1_\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "grouped by headings"]);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(json!({
+        "files": [
+            test_file("tests/acceptance_1_1.txt", "1.1", "fn created_on"),
+            test_file("tests/acceptance_1_2.txt", "1.2", "fn delete_empty"),
+        ],
+        "argv": [],
+        "notes": [],
+        "expectations": [
+            { "scenario": "1.1", "given": "a new album", "expect": "its creation date" },
+            { "scenario": "1.2", "given": "an empty album", "expect": "it can be deleted" },
+        ],
+        "untestable": [],
+    }));
+    implements(&f, "pub fn created_on() {}");
+    let res = run(r.path(), state.path(), "1.1", &f);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert_eq!(report(&res).verdict, Some(Verdict::Verified));
+    let after = git(
+        r.path(),
+        &["show", &format!("speccoder/photo-albums:{tasks}")],
+    );
+    let before = fs::read_to_string(r.path().join(tasks)).unwrap();
+    assert_eq!(
+        after,
+        before.replace("- [ ] 1.1 Create", "- [x] 1.1 Create"),
+        "one box, and the heading stays a heading"
+    );
 }

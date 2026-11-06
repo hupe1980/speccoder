@@ -60,7 +60,7 @@ fn read_log(log: &str, feature: &str) -> (BTreeMap<String, Evidence>, Vec<Conver
             continue;
         };
         if let Some(task) = task.trim().strip_prefix(&format!("{feature}/")) {
-            evidence.entry(task.to_owned()).or_insert(Evidence {
+            let e = Evidence {
                 commit: commit.to_owned(),
                 verdict: verdict.trim().to_owned(),
                 run: run.trim().to_owned(),
@@ -69,7 +69,19 @@ fn read_log(log: &str, feature: &str) -> (BTreeMap<String, Evidence>, Vec<Conver
                 intent: intent.trim().trim_start_matches("sha256:").to_owned(),
                 strength: strength.trim().to_owned(),
                 regression: regression.trim().to_owned(),
-            });
+            };
+            // A fixed bug's verdict is the evidence of each task it closed.
+            for closed in body
+                .lines()
+                .filter_map(|l| l.strip_prefix("Closes-Task:"))
+                .filter_map(|v| v.trim().strip_prefix(&format!("{feature}/")))
+            {
+                evidence.entry(closed.to_owned()).or_insert(Evidence {
+                    task_line: String::new(),
+                    ..e.clone()
+                });
+            }
+            evidence.entry(task.to_owned()).or_insert(e);
         } else if let Some(n) = subject
             .strip_prefix("speccoder: converge round ")
             .and_then(|r| r.split(' ').next())

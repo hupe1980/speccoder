@@ -1425,37 +1425,6 @@ fn in_openspec_a_bug_is_appended_to_the_standing_change() {
     );
 }
 
-#[test]
-fn a_kiro_project_has_no_place_for_a_bug_yet() {
-    let dir = tempfile::tempdir().unwrap();
-    let r = dir.path();
-    fs::create_dir_all(r.join(".kiro/specs/login")).unwrap();
-    fs::write(r.join(".kiro/specs/login/tasks.md"), "- [ ] 1. x\n").unwrap();
-    fs::write(r.join(".kiro/specs/login/bugfix.md"), "# Bugfix\n").unwrap();
-    git(r, &["init", "-q"]);
-    let state = tempfile::tempdir().unwrap();
-    let res = bug::bug_with(
-        r,
-        &request(&["x"], &[], false),
-        Via::Terminal,
-        state.path(),
-        None,
-        None,
-        &RunOptions::default(),
-    );
-    assert_eq!(
-        res.code().map(|c| c.name),
-        Some("BUG-NO-UNIT"),
-        "{}",
-        res.message()
-    );
-    assert!(
-        res.message().contains("Kiro keeps a bug in a bugfix spec"),
-        "{}",
-        res.message()
-    );
-}
-
 /// An approver who rejects every set of reproductions, counting.
 #[derive(Debug, Default)]
 struct Rejects(std::sync::atomic::AtomicUsize);

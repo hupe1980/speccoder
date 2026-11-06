@@ -321,6 +321,22 @@ pub(super) fn finish(
             .as_ref()
             .map(super::outcome::verdict_word)
             .unwrap_or_default();
+        // A fixed bug closes the task list its home keeps (Kiro's), in
+        // the verdict commit: each task's evidence is the bug's verdict.
+        let closed = if matches!(verdict.as_str(), "verified" | "attested") {
+            format.close_bug(&project.join(&n.dir)).unwrap_or_else(|e| {
+                report
+                    .integrity
+                    .push(format!("the bug's task list was not closed: {e}"));
+                Vec::new()
+            })
+        } else {
+            Vec::new()
+        };
+        let closes: String = closed
+            .iter()
+            .map(|id| format!("Closes-Task: {feature_name}/{id}\n"))
+            .collect();
         let message = tick_message(&TickFacts {
             feature: feature_name,
             task,
@@ -338,7 +354,8 @@ pub(super) fn finish(
                     super::bug::trailers(f, &verdict, &crate::strength::rulings(&strength_dir))
                 })
                 .unwrap_or_default()
-                + &ruling_trailers(&ruled),
+                + &ruling_trailers(&ruled)
+                + &closes,
         });
         match commit_attempt(wt_root, &message) {
             Ok(id) => report.commit = Some(id),
