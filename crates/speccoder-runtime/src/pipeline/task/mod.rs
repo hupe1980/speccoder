@@ -1,5 +1,5 @@
-//! `speccoder run --task`: one task from baseline to tick, in the phases
-//! [`run_task_once`] reads as.
+//! `speccoder run --task`: one task from baseline to tick, one file per
+//! phase: `open`, `ready`, `tests`, `attempt`, `judge`, `tick`.
 
 use std::path::Path;
 use std::sync::Arc;
