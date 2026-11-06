@@ -41,7 +41,11 @@ pub(super) struct TestsFirst {
 }
 
 /// What a bug task's stages need from the run.
-pub(super) fn bug_ctx<'a>(o: &'a Opened, r: &'a Ready, task: &'a str) -> super::super::bug::Ctx<'a> {
+pub(super) fn bug_ctx<'a>(
+    o: &'a Opened,
+    r: &'a Ready,
+    task: &'a str,
+) -> super::super::bug::Ctx<'a> {
     super::super::bug::Ctx {
         rt: &r.rt,
         plane: &r.plane,
@@ -290,7 +294,10 @@ pub(super) fn first(
                     match verify::run_checks(project, Some(verify::config::Tier::Fast), runner) {
                         Ok(b) => *baseline = b,
                         Err(e) => {
-                            return Err(Box::new(fail(CommandStatus::ConfigError, format!("baseline: {e}"))));
+                            return Err(Box::new(fail(
+                                CommandStatus::ConfigError,
+                                format!("baseline: {e}"),
+                            )));
                         }
                     }
                 }
@@ -366,9 +373,11 @@ pub(super) fn first(
                         usage: oracle.usage.clone(),
                         ..bare_report(feature_name, task, wt_path, "holds")
                     };
-                    return Err(Box::new(CommandResult::new("run", CommandStatus::NeedsHuman, &reason)
-                        .with_code("TASK-HOLDS")
-                        .with_data(CommandData::Run(Box::new(report)))));
+                    return Err(Box::new(
+                        CommandResult::new("run", CommandStatus::NeedsHuman, &reason)
+                            .with_code("TASK-HOLDS")
+                            .with_data(CommandData::Run(Box::new(report))),
+                    ));
                 }
                 // The story's last task waits on a person for every scenario
                 // its author called untestable: no attempt can turn it.
@@ -438,23 +447,21 @@ pub(super) fn first(
                     ..bare_report(feature_name, task, wt_path, "acceptance_failed")
                 };
                 let code = r.code().map_or("ORACLE-UNWRITTEN", |c| c.name);
-                return Err(Box::new(CommandResult::new(
-                    "run",
-                    CommandStatus::NeedsHuman,
-                    &redact(&reason, secret),
-                )
-                .with_code(code)
-                // The oracle's own way on (its story's tests), then the task's.
-                .with_fix(if r.given_fix().is_empty() {
-                    Vec::new()
-                } else {
-                    r.given_fix()
-                        .iter()
-                        .cloned()
-                        .chain([format!("speccoder run --task {task}")])
-                        .collect()
-                })
-                .with_data(CommandData::Run(Box::new(report)))));
+                return Err(Box::new(
+                    CommandResult::new("run", CommandStatus::NeedsHuman, &redact(&reason, secret))
+                        .with_code(code)
+                        // The oracle's own way on (its story's tests), then the task's.
+                        .with_fix(if r.given_fix().is_empty() {
+                            Vec::new()
+                        } else {
+                            r.given_fix()
+                                .iter()
+                                .cloned()
+                                .chain([format!("speccoder run --task {task}")])
+                                .collect()
+                        })
+                        .with_data(CommandData::Run(Box::new(report))),
+                ));
             }
         }
     }
@@ -586,7 +593,10 @@ pub(super) fn first(
             manifest,
         } = reuse
         else {
-            return Err(Box::new(fail(CommandStatus::Error, "no frozen oracle".to_owned())));
+            return Err(Box::new(fail(
+                CommandStatus::Error,
+                "no frozen oracle".to_owned(),
+            )));
         };
         match reuse_pre_frozen(
             project,
@@ -622,7 +632,9 @@ pub(super) fn first(
                     Some(e.clone()),
                     Some(began),
                 );
-                return Err(Box::new(fail(CommandStatus::NeedsHuman, e).with_code("ORACLE-TAMPERED")));
+                return Err(Box::new(
+                    fail(CommandStatus::NeedsHuman, e).with_code("ORACLE-TAMPERED"),
+                ));
             }
         }
     } else if run_config.acceptance
@@ -781,9 +793,11 @@ pub(super) fn first(
             false,
             redact(&reason, secret),
         ));
-        return Err(Box::new(CommandResult::new("run", CommandStatus::NeedsHuman, &redact(&reason, secret))
-            .with_code("ACCEPTANCE-UNWRITTEN")
-            .with_data(CommandData::Run(Box::new(report)))));
+        return Err(Box::new(
+            CommandResult::new("run", CommandStatus::NeedsHuman, &redact(&reason, secret))
+                .with_code("ACCEPTANCE-UNWRITTEN")
+                .with_data(CommandData::Run(Box::new(report))),
+        ));
     }
 
     // A gap judged by its story's oracle is shown by that oracle's red test.
@@ -826,8 +840,10 @@ pub(super) fn first(
             false,
             redact(&reason, secret),
         ));
-        return Err(Box::new(CommandResult::new("run", CommandStatus::NeedsHuman, &redact(&reason, secret))
-            .with_data(CommandData::Run(Box::new(report)))));
+        return Err(Box::new(
+            CommandResult::new("run", CommandStatus::NeedsHuman, &redact(&reason, secret))
+                .with_data(CommandData::Run(Box::new(report))),
+        ));
     }
 
     Ok(TestsFirst {

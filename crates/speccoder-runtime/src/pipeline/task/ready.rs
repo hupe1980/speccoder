@@ -109,11 +109,13 @@ pub(super) fn make(
                 }
             }
             Err(e) => {
-                return Err(Box::new(fail(
-                    CommandStatus::ConfigError,
-                    format!("the files [worktree] include names could not be copied: {e}"),
-                )
-                .with_code("PREPARE-FAILED")));
+                return Err(Box::new(
+                    fail(
+                        CommandStatus::ConfigError,
+                        format!("the files [worktree] include names could not be copied: {e}"),
+                    )
+                    .with_code("PREPARE-FAILED"),
+                ));
             }
         }
     }
@@ -165,10 +167,12 @@ pub(super) fn make(
                     Some(f.message.clone()),
                     Some(began),
                 );
-                return Err(Box::new(fail(CommandStatus::ConfigError, f.message)
-                    .with_code("PREPARE-FAILED")
-                    .with_fix(f.fix)
-                    .with_commands(f.commands)));
+                return Err(Box::new(
+                    fail(CommandStatus::ConfigError, f.message)
+                        .with_code("PREPARE-FAILED")
+                        .with_fix(f.fix)
+                        .with_commands(f.commands),
+                ));
             }
         }
     } else if options.session.is_none() {
@@ -186,8 +190,7 @@ pub(super) fn make(
         None,
         None,
     );
-    let baseline = match verify::run_checks(project, Some(verify::config::Tier::Fast), runner)
-    {
+    let baseline = match verify::run_checks(project, Some(verify::config::Tier::Fast), runner) {
         Ok(b) => b,
         Err(e) => {
             stage(
@@ -198,7 +201,10 @@ pub(super) fn make(
                 None,
                 Some(began),
             );
-            return Err(Box::new(fail(CommandStatus::ConfigError, format!("baseline: {e}"))));
+            return Err(Box::new(fail(
+                CommandStatus::ConfigError,
+                format!("baseline: {e}"),
+            )));
         }
     };
     // A check that cannot run on the untouched code — it failed without
@@ -291,8 +297,10 @@ pub(super) fn make(
     let servers = match mcp::parse(config_text) {
         Ok(s) => s,
         Err(e) => {
-            return Err(Box::new(fail(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
-                .with_code("CONFIG-INVALID")));
+            return Err(Box::new(
+                fail(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                    .with_code("CONFIG-INVALID"),
+            ));
         }
     };
     let mut connected = if servers.is_empty() {

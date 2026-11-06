@@ -319,7 +319,9 @@ pub(super) fn run(
                             format.rules(),
                         ) {
                             Ok(p) => p,
-                            Err(e) => return Err(Box::new(fail(CommandStatus::RunFailed, e.to_string()))),
+                            Err(e) => {
+                                return Err(Box::new(fail(CommandStatus::RunFailed, e.to_string())));
+                            }
                         };
                         let tools = match tools::WorkspaceTools::new(wt_root, policy.clone()) {
                             Ok(t) => t.with_runner(runner.clone()),
@@ -498,8 +500,10 @@ pub(super) fn run(
                         false,
                         redact(&message, secret),
                     ));
-                    return Err(Box::new(CommandResult::new("run", status, &redact(&message, secret))
-                        .with_data(CommandData::Run(Box::new(report)))));
+                    return Err(Box::new(
+                        CommandResult::new("run", status, &redact(&message, secret))
+                            .with_data(CommandData::Run(Box::new(report))),
+                    ));
                 }
                 let succeeded = matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded);
                 refused_account = outcome
@@ -622,9 +626,7 @@ pub(super) fn run(
                                 own_test: None,
                             },
                         )
-                        .and_then(|saved| {
-                            worktree::restore(wt_root, tmp, &before).map(|_| saved)
-                        });
+                        .and_then(|saved| worktree::restore(wt_root, tmp, &before).map(|_| saved));
                         let message = match saved {
                             Ok(saved) => format!(
                                 "{} — the attempt is saved as {} and undone",
@@ -632,10 +634,12 @@ pub(super) fn run(
                             ),
                             Err(e) => format!("{} — saving the attempt failed: {}", f.message, e.0),
                         };
-                        return Err(Box::new(fail(CommandStatus::ConfigError, message)
-                            .with_code("PREPARE-FAILED")
-                            .with_fix(f.fix)
-                            .with_commands(f.commands)));
+                        return Err(Box::new(
+                            fail(CommandStatus::ConfigError, message)
+                                .with_code("PREPARE-FAILED")
+                                .with_fix(f.fix)
+                                .with_commands(f.commands),
+                        ));
                     }
                 }
             }
@@ -804,7 +808,10 @@ pub(super) fn run(
                         None,
                         Some(began),
                     );
-                    return Err(Box::new(fail(CommandStatus::ConfigError, format!("verification: {e}"))));
+                    return Err(Box::new(fail(
+                        CommandStatus::ConfigError,
+                        format!("verification: {e}"),
+                    )));
                 }
                 // 7a. A task of a story: the progress it made on the story's
                 //     oracle decides what its tick claims.

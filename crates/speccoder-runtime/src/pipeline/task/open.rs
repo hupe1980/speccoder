@@ -11,7 +11,10 @@ use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
 use super::Started;
 use crate::pipeline::*;
-use crate::{approvals, external, git, mutation, progress, resume, sandbox, substrate, tools, verify, worktree};
+use crate::{
+    approvals, external, git, mutation, progress, resume, sandbox, substrate, tools, verify,
+    worktree,
+};
 
 /// The opened task: what every later phase reads.
 pub(super) struct Opened {
@@ -110,10 +113,15 @@ pub(super) fn task(
         return Err(Box::new(CommandResult::carried("run", &wt)));
     };
     if wt.status() != CommandStatus::Ok {
-        return Err(Box::new(CommandResult::carried("run", &wt).with_data(CommandData::Worktree(w.clone()))));
+        return Err(Box::new(
+            CommandResult::carried("run", &wt).with_data(CommandData::Worktree(w.clone())),
+        ));
     }
     let (Some(wt_path), Some(project_dir)) = (w.path.clone(), w.project_dir.clone()) else {
-        return Err(Box::new(refuse(CommandStatus::Error, "worktree without a path".to_owned())));
+        return Err(Box::new(refuse(
+            CommandStatus::Error,
+            "worktree without a path".to_owned(),
+        )));
     };
     let (wt_path, project_dir) = match &options.lane {
         None => (wt_path, project_dir),
@@ -281,11 +289,13 @@ pub(super) fn task(
         && crate::bug::state::load(&s.plane_dir, &feature_name, task)
             .is_some_and(|b| b.outcome == speccoder_core::bug::Outcome::Fixed)
     {
-        return Err(Box::new(refuse(
-            CommandStatus::TaskNotReady,
-            format!("{task} is already fixed"),
-        )
-        .with_code("TASK-DONE")));
+        return Err(Box::new(
+            refuse(
+                CommandStatus::TaskNotReady,
+                format!("{task} is already fixed"),
+            )
+            .with_code("TASK-DONE"),
+        ));
     }
     // The task must exist and be ready in the worktree, where progress
     // (ticks committed on speccoder/<feature>) lives.
@@ -303,18 +313,22 @@ pub(super) fn task(
         };
         match st.state {
             TaskState::Done => {
-                return Err(Box::new(refuse(
-                    CommandStatus::TaskNotReady,
-                    format!("{task} is already done"),
-                )
-                .with_code("TASK-DONE")));
+                return Err(Box::new(
+                    refuse(
+                        CommandStatus::TaskNotReady,
+                        format!("{task} is already done"),
+                    )
+                    .with_code("TASK-DONE"),
+                ));
             }
             TaskState::Blocked => {
-                return Err(Box::new(refuse(
-                    CommandStatus::TaskNotReady,
-                    format!("{task} is blocked by {}", st.blocked_by.join(", ")),
-                )
-                .with_code("TASK-BLOCKED")));
+                return Err(Box::new(
+                    refuse(
+                        CommandStatus::TaskNotReady,
+                        format!("{task} is blocked by {}", st.blocked_by.join(", ")),
+                    )
+                    .with_code("TASK-BLOCKED"),
+                ));
             }
             TaskState::Ready => {}
         }
@@ -382,19 +396,23 @@ pub(super) fn task(
         _ => bundle,
     };
     let Some(config_root) = verify::find_config(&project) else {
-        return Err(Box::new(refuse(
-            CommandStatus::ConfigError,
-            "the worktree has no speccoder.toml (is it committed?)".to_owned(),
-        )
-        .with_code("CONFIG-MISSING")));
+        return Err(Box::new(
+            refuse(
+                CommandStatus::ConfigError,
+                "the worktree has no speccoder.toml (is it committed?)".to_owned(),
+            )
+            .with_code("CONFIG-MISSING"),
+        ));
     };
     let config_text =
         std::fs::read_to_string(config_root.join(verify::config::FILE)).unwrap_or_default();
     let run_config = match substrate::run_config::parse(&config_text) {
         Ok(c) => c,
         Err(e) => {
-            return Err(Box::new(refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
-                .with_code("CONFIG-INVALID")));
+            return Err(Box::new(
+                refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                    .with_code("CONFIG-INVALID"),
+            ));
         }
     };
     // `[review] required`: the spec as committed in the worktree must be
@@ -450,8 +468,10 @@ pub(super) fn task(
     let executor = match external::parse(&config_text) {
         Ok(e) => e,
         Err(e) => {
-            return Err(Box::new(refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
-                .with_code("CONFIG-INVALID")));
+            return Err(Box::new(
+                refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                    .with_code("CONFIG-INVALID"),
+            ));
         }
     };
     // `run --agent`: this run's agent, the configuration untouched.
@@ -467,8 +487,10 @@ pub(super) fn task(
     let sandbox_config = match sandbox::parse(&config_text) {
         Ok(c) => c,
         Err(e) => {
-            return Err(Box::new(refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
-                .with_code("CONFIG-INVALID")));
+            return Err(Box::new(
+                refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                    .with_code("CONFIG-INVALID"),
+            ));
         }
     };
     let (runner, sandbox_notice) = match sandbox::runner(&wt_root, &sandbox_config) {
@@ -477,24 +499,31 @@ pub(super) fn task(
     };
     // Autopilot asks nobody: it runs only where the OS sandbox confines it.
     if options.mode == speccoder_core::oracle::RunMode::Autopilot && !runner.is_sandboxed() {
-        return Err(Box::new(refuse(
-            CommandStatus::ConfigError,
-            "autopilot needs the OS sandbox, and commands here would run unsandboxed".to_owned(),
-        )
-        .with_code("SANDBOX-UNAVAILABLE")));
+        return Err(Box::new(
+            refuse(
+                CommandStatus::ConfigError,
+                "autopilot needs the OS sandbox, and commands here would run unsandboxed"
+                    .to_owned(),
+            )
+            .with_code("SANDBOX-UNAVAILABLE"),
+        ));
     }
     let mutation_config = match mutation::parse(&config_text) {
         Ok(c) => c,
         Err(e) => {
-            return Err(Box::new(refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
-                .with_code("CONFIG-INVALID")));
+            return Err(Box::new(
+                refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                    .with_code("CONFIG-INVALID"),
+            ));
         }
     };
     let worktree_config = match crate::prepare::parse(&config_text) {
         Ok(c) => c,
         Err(e) => {
-            return Err(Box::new(refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
-                .with_code("CONFIG-INVALID")));
+            return Err(Box::new(
+                refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                    .with_code("CONFIG-INVALID"),
+            ));
         }
     };
     let check_argvs = verify::check_argvs(&config_root);

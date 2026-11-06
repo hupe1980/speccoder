@@ -8,8 +8,8 @@ use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
 use crate::pipeline::*;
 use crate::{
-    approvals, attempts, external, integrity, mcp, mutation, progress, resume, sandbox,
-    substrate, tools, worktree,
+    approvals, attempts, external, integrity, mcp, mutation, progress, resume, sandbox, substrate,
+    tools, worktree,
 };
 
 /// `speccoder run`: one attempt at a ready task in its worktree, judged by
@@ -108,14 +108,14 @@ pub fn run_native_bug(
     run_task(root, None, &bug.task, state, provider, secret, &options)
 }
 
+mod attempt;
+mod judge;
 /// One task: its attempt, and — when a planning attempt changed code —
 /// the task again as code (the planning attempt saved and undone, its
 /// saved outcome the reason it is code from now on).
 mod open;
 mod ready;
 mod tests;
-mod attempt;
-mod judge;
 mod tick;
 
 /// A phase's result, or the run's end with what a person sees.

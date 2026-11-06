@@ -86,10 +86,7 @@ pub(super) fn finish(
         refused_account,
         ..
     } = attempted;
-    let Carried {
-        marker_guard,
-        ..
-    } = carried;
+    let Carried { marker_guard, .. } = carried;
     let Judged {
         verdict_passed,
         suspected,
@@ -232,14 +229,10 @@ pub(super) fn finish(
                 let digest =
                     crate::in_place::intent_digest(project, policy, format.messages().tasks_file);
                 if let Ok(mut s) = session.lock() {
-                    let done = s.commit_and_tick(
-                        plane_dir,
-                        file,
-                        &t.line_hash,
-                        &message,
-                        &digest,
-                        || format.tick(file, task, &t.line_hash),
-                    );
+                    let done =
+                        s.commit_and_tick(plane_dir, file, &t.line_hash, &message, &digest, || {
+                            format.tick(file, task, &t.line_hash)
+                        });
                     report.ticked = done.ticked;
                     report.commit = done.commit;
                     report.integrity.extend(done.problems);
