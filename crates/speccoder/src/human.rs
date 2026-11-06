@@ -28,13 +28,17 @@ pub fn inspect(w: &mut impl Write, s: &ProjectSnapshot) -> io::Result<()> {
         kit = format!(" ({kit})");
     }
     let version = s.speckit.version.as_deref().unwrap_or("version unknown");
+    let kiro = s.format == speccoder_core::spec::FormatKind::Kiro;
     match &s.openspec {
         Some(o) => writeln!(w, "Project    {name:<24} OpenSpec (schema {})", o.schema)?,
+        None if kiro => writeln!(w, "Project    {name:<24} Kiro")?,
         None => writeln!(w, "Project    {name:<24} Spec Kit {version}{kit}")?,
     }
     writeln!(w, "Root       {}", s.root)?;
     let unit = if s.openspec.is_some() {
         "Change "
+    } else if kiro {
+        "Spec   "
     } else {
         "Feature"
     };
@@ -46,6 +50,7 @@ pub fn inspect(w: &mut impl Write, s: &ProjectSnapshot) -> io::Result<()> {
                 (SelectionReason::Argument, true) => "from --change",
                 (SelectionReason::Environment, _) => "from SPECIFY_FEATURE_DIRECTORY",
                 (SelectionReason::Recorded, _) => "recorded in .specify/feature.json",
+                (SelectionReason::OnlyFeature, false) if kiro => "the only spec",
                 (SelectionReason::OnlyFeature, false) => "the only feature",
                 (SelectionReason::OnlyFeature, true) => "the only active change",
                 (SelectionReason::None, _) => "",
@@ -80,6 +85,19 @@ pub fn inspect(w: &mut impl Write, s: &ProjectSnapshot) -> io::Result<()> {
                         }
                     }
                 }
+                None if kiro => {
+                    let mark = |b: bool| if b { "✓" } else { "–" };
+                    writeln!(
+                        w,
+                        "Artifacts  steering {}  requirements {}  design {}  tasks {}",
+                        mark(
+                            s.constitution == speccoder_core::snapshot::ConstitutionState::Present
+                        ),
+                        mark(f.artifacts.spec),
+                        mark(f.artifacts.plan),
+                        mark(f.artifacts.tasks),
+                    )?;
+                }
                 None => writeln!(w, "Artifacts  {}", artifacts(s.constitution, &f.artifacts))?,
             }
             match (&f.tasks, &f.schedule) {
@@ -95,7 +113,12 @@ pub fn inspect(w: &mut impl Write, s: &ProjectSnapshot) -> io::Result<()> {
                             "           dependencies as declared per task (Format line)"
                         )?;
                     }
-                    if t.dependency_mode == DependencyMode::Chain {
+                    if t.dependency_mode == DependencyMode::Chain && kiro {
+                        writeln!(
+                            w,
+                            "           in number order; a parent closes with its last sub-task"
+                        )?;
+                    } else if t.dependency_mode == DependencyMode::Chain {
                         writeln!(w, "           a chain: groups in order, tasks in order")?;
                     }
                     for (task, st) in t.tasks.iter().zip(&sched.tasks) {

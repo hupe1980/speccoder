@@ -1,6 +1,6 @@
 +++
 title = "Installation"
-description = "Install speccoder with Homebrew, the installer or Cargo, verify what you downloaded, and what it needs: git, a Spec Kit or OpenSpec project, a model and your project's toolchain."
+description = "Install speccoder with Homebrew, the installer or Cargo, verify what you downloaded, and what it needs: git, a Spec Kit, OpenSpec or Kiro project, a model and your project's toolchain."
 weight = 10
 
 [extra]
@@ -12,7 +12,7 @@ group = "Start"
 | You need | Why |
 |---|---|
 | **git** | speccoder works in a git worktree and records every attempt in git. |
-| **A spec project** | A GitHub Spec Kit project (Spec Kit **0.13 to 1.2**) or an [OpenSpec](@/docs/openspec.md) project (OpenSpec 1.0 or newer). Kiro specs are recognised and refused. |
+| **A spec project** | A GitHub Spec Kit project (Spec Kit **0.13 to 1.2**) an [OpenSpec](@/docs/openspec.md) project (OpenSpec 1.0 or newer), or a [Kiro or cc-sdd](@/docs/kiro.md) spec. |
 | **A model** | An Anthropic or OpenAI API key in the environment, AWS credentials for Amazon Bedrock (a Bedrock API key or an `aws login` session), or a local OpenAI-compatible server such as Ollama or vLLM. |
 | **Your toolchain** | Whatever your checks run: `cargo` (ideally with `cargo-nextest`), `pytest`, and so on. |
 | **macOS or Linux** | The OS sandbox uses Seatbelt on macOS and Landlock on Linux 5.13 or newer; [older kernels](@/docs/security.md#older-linux-kernels) confine less, and each run says what. |

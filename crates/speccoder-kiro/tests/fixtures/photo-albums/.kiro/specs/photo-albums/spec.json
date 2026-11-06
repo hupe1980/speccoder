@@ -1,0 +1,6 @@
+{
+  "feature_name": "photo-albums",
+  "phase": "tasks-generated",
+  "approvals": { "requirements": { "approved": true }, "design": { "approved": true }, "tasks": { "approved": true } },
+  "ready_for_implementation": true
+}

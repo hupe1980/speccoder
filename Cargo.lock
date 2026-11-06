@@ -5797,6 +5797,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "speccoder-kiro"
+version = "0.12.0"
+dependencies = [
+ "sha2 0.11.1",
+ "speccoder-core",
+ "tempfile",
+]
+
+[[package]]
 name = "speccoder-openspec"
 version = "0.12.0"
 dependencies = [
@@ -5837,6 +5846,7 @@ dependencies = [
  "sha2 0.11.1",
  "similar",
  "speccoder-core",
+ "speccoder-kiro",
  "speccoder-openspec",
  "speccoder-speckit",
  "tempfile",

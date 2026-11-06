@@ -1,13 +1,16 @@
-// The spec, alive: each user story a card with its priority and how far
-// its oracle is; each acceptance scenario its Given / When / Then steps,
-// its id and its state — green (and the task that turned it), open (red),
-// untested, or not yet written. MUST, SHOULD and MAY stand out.
+// The spec, alive: each user story (a Kiro requirement) a card with its
+// priority and how far its oracle is; each acceptance scenario (a Kiro
+// criterion) its Given / When / Then steps, its id and its state — green
+// (and the task that turned it), open (red), untested, or not yet written.
+// MUST, SHALL, SHOULD and MAY stand out.
 // Headings keep their text and ids: the outline, links and comments still
 // find them.
 
 import type { StoryScenarios } from "./types";
 
 const STORY = /^User Story (\d+)\s*[-–—:]\s*.+?\((Priority:\s*(P\d+))\)/;
+/** Kiro: `Requirement 2: Audit log`, keyed by the whole heading. */
+const REQUIREMENT = /^Requirement (\d+)\b/;
 const KEYWORDS = /\b(MUST NOT|MUST|SHALL NOT|SHALL|SHOULD NOT|SHOULD|MAY)\b/g;
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
@@ -76,15 +79,17 @@ export function living(html: string, stories: StoryScenarios[]): string {
   const root = t.content;
   const by = new Map(stories.map((s) => [s.story, s]));
   for (const h of Array.from(root.querySelectorAll("h3"))) {
-    const m = STORY.exec(h.textContent?.trim() ?? "");
-    if (!m) continue;
-    const key = `US${m[1]}`;
+    const text = h.textContent?.trim() ?? "";
+    const m = STORY.exec(text);
+    const req = m ? null : REQUIREMENT.exec(text);
+    if (!m && !req) continue;
+    const key = m ? `US${m[1]}` : text;
     const st = by.get(key);
     // The priority as a pill; its words stay for screen readers and search.
-    h.innerHTML = h.innerHTML.replace(`(${m[2]})`, `<span class="pri" data-p="${m[3]}">(${m[2]})</span>`);
+    if (m) h.innerHTML = h.innerHTML.replace(`(${m[2]})`, `<span class="pri" data-p="${m[3]}">(${m[2]})</span>`);
     const card = document.createElement("section");
     card.className = `story${st?.proven ? " proven" : ""}`;
-    card.setAttribute("aria-label", `User Story ${m[1]}`);
+    card.setAttribute("aria-label", m ? `User Story ${m[1]}` : text);
     const head = document.createElement("div");
     head.className = "story-head";
     h.before(card);
@@ -122,6 +127,21 @@ export function living(html: string, stories: StoryScenarios[]): string {
           li.insertAdjacentHTML("beforeend", `<span class="sb" title="${esc(b.title)}">${esc(b.text)}</span>`);
         });
       }
+    }
+    // Kiro: the numbered criteria under `#### Acceptance Criteria`, `N.M`.
+    const crit = req && Array.from(card.querySelectorAll(":scope > h4")).find((x) => /acceptance criteria/i.test(x.textContent ?? ""));
+    const list = crit?.nextElementSibling;
+    if (req && list?.tagName === "OL") {
+      list.classList.add("scenarios");
+      Array.from(list.children).forEach((li, i) => {
+        const id = `${req[1]}.${i + 1}`;
+        const b = badge(st?.scenarios.find((s) => s.id === id), !!st?.oracle, !!st?.before_oracle);
+        li.classList.add("scenario", b.state);
+        // One sentence: the row's text cell, as a scenario's steps are.
+        li.innerHTML = `<span class="steps"><span class="step">${li.innerHTML.trim()}</span></span>`;
+        li.insertAdjacentHTML("afterbegin", `<span class="sid">${id}</span>`);
+        li.insertAdjacentHTML("beforeend", `<span class="sb" title="${esc(b.title)}">${esc(b.text)}</span>`);
+      });
     }
   }
   keywords(root);

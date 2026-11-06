@@ -519,7 +519,7 @@ fn a_format_is_chosen_by_flag_or_environment() {
         let v: serde_json::Value = support::result(&out.stdout);
         assert_eq!(v["status"], "not_a_project", "{v}");
         assert!(
-            v["message"].as_str().unwrap().contains("not Kiro specs"),
+            v["message"].as_str().unwrap().starts_with("no Kiro spec"),
             "{v}"
         );
     }

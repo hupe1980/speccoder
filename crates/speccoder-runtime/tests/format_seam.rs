@@ -278,37 +278,22 @@ fn formats_are_detected_chosen_or_refused() {
         "{}",
         r.message
     );
-    // A format this version does not run.
+    // Kiro chosen where there is none: Kiro's own answer.
     let r = open_with(speckit.path(), None, Some(FormatKind::Kiro))
         .err()
         .unwrap();
-    assert_eq!(
-        (r.status, r.message.as_str()),
-        (
-            CommandStatus::NotAProject,
-            "speccoder runs Spec Kit and OpenSpec projects, not Kiro specs"
-        )
-    );
-    let r = open_with(only_kiro.path(), None, None).err().unwrap();
     assert_eq!(r.status, CommandStatus::NotAProject);
-    assert!(
-        r.message.starts_with("found a Kiro project at "),
-        "{}",
-        r.message
-    );
-    assert!(r.message.ends_with("not Kiro specs"));
-    // Kiro beside Spec Kit: Spec Kit, with a warning.
+    assert!(r.message.starts_with("no Kiro spec"), "{}", r.message);
+    // Kiro detected alone.
+    let o = open_with(only_kiro.path(), None, None).ok().unwrap();
+    assert_eq!(o.adapter.kind(), FormatKind::Kiro);
+    assert_eq!(o.snapshot.feature.unwrap().feature.name, "x");
+    // Kiro beside Spec Kit: two formats this version runs, the person chooses.
     let with_kiro = project(kiro);
-    let o = open_with(with_kiro.path(), None, None).ok().unwrap();
-    assert_eq!(o.adapter.kind(), FormatKind::Speckit);
-    let w: Vec<_> = o
-        .snapshot
-        .diagnostics
-        .iter()
-        .filter(|d| d.code == "format.unsupported-marker")
-        .collect();
-    assert_eq!(w.len(), 1, "{:?}", o.snapshot.diagnostics);
-    assert!(w[0].message.ends_with("not Kiro specs"));
+    let r = open_with(with_kiro.path(), None, None).err().unwrap();
+    assert_eq!(r.status, CommandStatus::DiagnosticsError);
+    assert!(r.message.contains("speckit, kiro"), "{}", r.message);
+    assert!(open_with(with_kiro.path(), None, Some(FormatKind::Kiro)).is_ok());
     // Nothing: today's message.
     let r = speccoder_runtime::inspect(nothing.path(), None);
     assert_eq!(r.status(), CommandStatus::NotAProject);
@@ -324,7 +309,7 @@ fn formats_are_detected_chosen_or_refused() {
     )
     .unwrap();
     let r = open_with(speckit.path(), None, None).err().unwrap();
-    assert!(r.message.ends_with("not Kiro specs"));
+    assert!(r.message.starts_with("no Kiro spec"), "{}", r.message);
     assert!(open_with(speckit.path(), None, Some(FormatKind::Speckit)).is_ok());
     fs::write(
         speckit.path().join("speccoder.toml"),

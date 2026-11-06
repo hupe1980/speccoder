@@ -57,7 +57,7 @@ uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
 specify init --here --integration claude
 ```
 
-`--integration claude` installs the planning skills under `.claude/skills/`; speccoder runs them with its own model, so Claude Code is not needed. [OpenSpec](@/docs/openspec.md) projects work too.
+`--integration claude` installs the planning skills under `.claude/skills/`; speccoder runs them with its own model, so Claude Code is not needed. [OpenSpec](@/docs/openspec.md) projects and [Kiro specs](@/docs/kiro.md) work too.
 
 ## 2. Set up speccoder
 

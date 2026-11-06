@@ -1450,7 +1450,7 @@ fn a_kiro_project_has_no_place_for_a_bug_yet() {
         res.message()
     );
     assert!(
-        res.message().contains("does not support Kiro"),
+        res.message().contains("Kiro keeps a bug in a bugfix spec"),
         "{}",
         res.message()
     );

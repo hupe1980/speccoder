@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Kiro specs** (and cc-sdd's): `speccoder run` in a project with
+  `.kiro/specs/<name>/`. Each requirement's acceptance criteria become
+  tests before any code; a task is ticked only when the criteria its
+  `_Requirements:_` cites pass; a parent is ticked with its last required
+  sub-task; optional `[ ]*` tasks are left alone; Kiro's own ticks show as
+  ticked without evidence. In the app, Spec & Plan shows the
+  requirements as a living spec: each criterion with its state and the
+  task that turned it. Bugfix specs are listed, not run yet
+  ([Kiro specs](https://hupe1980.github.io/speccoder/docs/kiro/)).
+
+### Changed
+
+- A run stopped by one problem in the spec names it and its fix, instead
+  of counting problems.
+
+### Fixed
+
+- The app's Spec & Plan shows an OpenSpec change's proposal and design,
+  not only its task list.
+
 ## [0.12.0] - 2026-11-06
 
 ### Added

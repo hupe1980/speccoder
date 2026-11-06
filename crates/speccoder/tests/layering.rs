@@ -13,6 +13,7 @@ use serde_json::Value;
 const CORE: &str = "speccoder-core";
 const SPECKIT: &str = "speccoder-speckit";
 const OPENSPEC: &str = "speccoder-openspec";
+const KIRO: &str = "speccoder-kiro";
 const RUNTIME: &str = "speccoder-runtime";
 const WEB: &str = "speccoder-web";
 const BIN: &str = "speccoder";
@@ -134,23 +135,24 @@ fn closure(g: &Graph, krate: &str) -> BTreeSet<String> {
 fn allowed_workspace_deps(krate: &str) -> &'static [&'static str] {
     match krate {
         CORE => &[],
-        SPECKIT | OPENSPEC => &[CORE],
-        RUNTIME => &[CORE, SPECKIT, OPENSPEC],
+        SPECKIT | OPENSPEC | KIRO => &[CORE],
+        RUNTIME => &[CORE, SPECKIT, OPENSPEC, KIRO],
         // The web host serves the runtime's payloads; it reads no format.
         WEB => &[CORE, RUNTIME],
-        BIN => &[CORE, SPECKIT, OPENSPEC, RUNTIME, WEB],
+        BIN => &[CORE, SPECKIT, OPENSPEC, KIRO, RUNTIME, WEB],
         _ => &[],
     }
 }
 
 fn violations(g: &Graph) -> Vec<String> {
-    let workspace = [CORE, SPECKIT, OPENSPEC, RUNTIME, WEB, BIN];
+    let workspace = [CORE, SPECKIT, OPENSPEC, KIRO, RUNTIME, WEB, BIN];
     let mut errors = Vec::new();
 
     for (rule, krate) in [
         (1, CORE),
         (2, SPECKIT),
         (2, OPENSPEC),
+        (2, KIRO),
         (3, RUNTIME),
         (4, WEB),
         (4, BIN),
@@ -316,7 +318,7 @@ fn runtime_has_no_speckit_literals_outside_the_adapter() {
     let adapters = [
         src.join("format/speckit"),
         src.join("format/openspec"),
-        src.join("format/stubs.rs"),
+        src.join("format/kiro"),
     ];
     let mut files = Vec::new();
     rust_files(&src, &mut files);

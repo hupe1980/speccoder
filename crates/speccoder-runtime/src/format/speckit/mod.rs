@@ -493,6 +493,19 @@ impl Adapter for SpecKit {
             .collect()
     }
 
+    /// The spec as the living spec, then the plan, the tasks and the
+    /// plan's companions.
+    fn documents(&self) -> &'static [(&'static str, &'static str)] {
+        &[
+            ("spec", "spec.md"),
+            ("plan", "plan.md"),
+            ("tasks", "tasks.md"),
+            ("research", "research.md"),
+            ("data-model", "data-model.md"),
+            ("quickstart", "quickstart.md"),
+        ]
+    }
+
     fn tick(&self, tasks_file: &Path, task: &str, line_hash: &str) -> Result<(), String> {
         speccoder_speckit::mark_task_complete(tasks_file, task, line_hash)
     }

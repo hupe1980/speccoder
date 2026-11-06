@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Spec-driven coding, decided by evidence.</b><br>
-  Implements <a href="https://github.com/github/spec-kit">Spec Kit</a> features and <a href="https://github.com/Fission-AI/OpenSpec">OpenSpec</a> changes task by task — and calls a task verified only when tests derived from your spec go from red to green, never on the model's word.
+  Implements <a href="https://github.com/github/spec-kit">Spec Kit</a> features, <a href="https://github.com/Fission-AI/OpenSpec">OpenSpec</a> changes and <a href="https://kiro.dev">Kiro</a> specs task by task — and calls a task verified only when tests derived from your spec go from red to green, never on the model's word.
 </p>
 
 <p align="center">
@@ -41,7 +41,7 @@ Coding agents are good at writing code and too good at declaring victory. specco
 
 ## 🚀 Quickstart
 
-You need git, a Spec Kit project (Spec Kit 0.13 to 1.2) or an OpenSpec project (1.0 or newer), and a model. No project yet: `speccoder new md2csv --idea "a CLI that turns Markdown tables into CSV"` makes one with the stack's and the spec tool's own commands, shown before they run (or **New Project** in `speccoder ui`); `speccoder sample` replays a recorded run, no key needed.
+You need git, a Spec Kit project (Spec Kit 0.13 to 1.2), an OpenSpec project (1.0 or newer) or a [Kiro or cc-sdd spec](https://hupe1980.github.io/speccoder/docs/kiro/), and a model. No project yet: `speccoder new md2csv --idea "a CLI that turns Markdown tables into CSV"` makes one with the stack's and the spec tool's own commands, shown before they run (or **New Project** in `speccoder ui`); `speccoder sample` replays a recorded run, no key needed.
 
 ```sh
 brew install hupe1980/tap/speccoder
@@ -131,6 +131,7 @@ Early (0.x): it works end to end on small projects with OpenAI, Anthropic and lo
 | `speccoder-core` | Pure domain types: no IO, no async |
 | `speccoder-speckit` | Reads Spec Kit projects |
 | `speccoder-openspec` | Reads OpenSpec projects |
+| `speccoder-kiro` | Reads Kiro and cc-sdd specs |
 | `speccoder-runtime` | Everything that executes: checks, tools, sandbox, git, the attestation checks, the embedded [agentplane](https://crates.io/crates/agentplane) runtime |
 | `speccoder-web` | The web interface's host: the embedded UI (Svelte, in `ui/`) and its API, on 127.0.0.1 |
 | `speccoder` | The CLI (and the desktop window, feature `app`) |

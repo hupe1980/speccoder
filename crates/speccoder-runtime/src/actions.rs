@@ -214,7 +214,7 @@ pub fn available_with(
     if ready > 0 && planning_next.is_empty() {
         let mut a = action(
             "next",
-            "run the feature",
+            format!("run the {unit}"),
             format!("{ready} ready task(s), each judged on evidence"),
             "speccoder run",
         );
@@ -391,7 +391,7 @@ pub fn available_with(
         // Tasks exist and planning goes on: running is possible too.
         let mut a = action(
             "work",
-            "run the feature",
+            format!("run the {unit}"),
             format!("{ready} ready task(s)"),
             "speccoder run",
         );

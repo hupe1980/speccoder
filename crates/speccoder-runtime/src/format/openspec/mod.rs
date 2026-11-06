@@ -354,6 +354,15 @@ impl Adapter for OpenSpec {
         bug::read(root, key)
     }
 
+    /// The proposal, the design and the task list (the deltas are per capability).
+    fn documents(&self) -> &'static [(&'static str, &'static str)] {
+        &[
+            ("spec", "proposal.md"),
+            ("plan", "design.md"),
+            ("tasks", "tasks.md"),
+        ]
+    }
+
     fn tick(&self, tasks_file: &Path, task: &str, line_hash: &str) -> Result<(), String> {
         speccoder_openspec::write::tick(tasks_file, task, line_hash)
     }

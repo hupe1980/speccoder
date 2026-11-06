@@ -111,7 +111,7 @@ Credentials come from the AWS credential chain where you start speccoder: a Bedr
 | `[approvals] wait` | `"7d"` | How long a call waits for a person (`m`, `h` or `d`) before it is denied as expired; recorded as an expiry, not as anyone's decision |
 | `[approvals] budget` | `12` | Prompts a run shows you (`0`–`100`); after them, calls wait together in [Needs You](@/docs/approvals.md#the-asking-budget). `0` never prompts |
 | `[tests] frozen` | `"ask"` | Tests that existed before an attempt: `ask` before any change, or `additions` (new lines need no approval; changing or removing lines does) |
-| `[spec] format` | detected | `speckit`, `openspec` or `kiro`; `--format` and `SPECCODER_FORMAT` override it. Kiro is recognised and refused |
+| `[spec] format` | detected | `speckit`, `openspec` or `kiro`; `--format` and `SPECCODER_FORMAT` override it |
 
 ### Prefix lists
 

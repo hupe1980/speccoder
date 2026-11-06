@@ -15,7 +15,7 @@ Every command takes:
 | Option | Meaning |
 |---|---|
 | `-C PATH`, `--project PATH` | A path inside the project (default: the current directory) |
-| `--feature NAME` (`--change`) | The feature: directory name or numeric prefix; an [OpenSpec](@/docs/openspec.md) change's id |
+| `--feature NAME` (`--change`) | The feature: directory name or numeric prefix; an [OpenSpec](@/docs/openspec.md) change's id; a [Kiro](@/docs/kiro.md) spec's name |
 | `--json` | One JSON object on stdout ([JSON output](#json-output)) |
 | `--events` | JSON Lines as it works, ending in that object ([events](#events)) |
 | `-q`, `--quiet` | Only stops, finishes, resumes and what needs you |

@@ -87,7 +87,7 @@ pub enum ColorArg {
     Never,
 }
 
-/// Spec-driven coding agent for GitHub Spec Kit and OpenSpec projects.
+/// Spec-driven coding agent for GitHub Spec Kit, OpenSpec and Kiro projects.
 #[derive(Debug, Parser)]
 #[command(
     name = "speccoder",

@@ -9,7 +9,7 @@ page_template = "doc.html"
 seo_title = "Documentation · speccoder"
 +++
 
-speccoder is a coding agent for [GitHub Spec Kit](https://github.com/github/spec-kit) features and [OpenSpec](@/docs/openspec.md) changes, on the command line, in a [browser or desktop window](@/docs/web.md) and in [editors](@/docs/integrations.md#editors-acp). Kiro specs are recognised and refused. You write the spec, or let the planning skills draft it; speccoder implements it task by task, and evidence, not the model, decides when a task is done.
+speccoder is a coding agent for [GitHub Spec Kit](https://github.com/github/spec-kit) features, [OpenSpec](@/docs/openspec.md) changes and [Kiro](@/docs/kiro.md) specs, on the command line, in a [browser or desktop window](@/docs/web.md) and in [editors](@/docs/integrations.md#editors-acp). Kiro specs are recognised and refused. You write the spec, or let the planning skills draft it; speccoder implements it task by task, and evidence, not the model, decides when a task is done.
 
 ## The idea
 

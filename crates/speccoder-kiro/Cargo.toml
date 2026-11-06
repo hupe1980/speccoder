@@ -1,0 +1,25 @@
+[package]
+name = "speccoder-kiro"
+description = "Kiro adapter for speccoder: spec discovery, requirements with their EARS criteria, tasks.md parsing, the engine's tick."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+# The Kiro fixture corpus is for this repository's tests, not for users.
+exclude = ["tests/fixtures"]
+
+[dependencies]
+speccoder-core.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

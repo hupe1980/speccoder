@@ -130,7 +130,7 @@ pub const CATALOG: &[Entry] = &[
         "NO-PROJECT",
         E,
         S::NotAProject,
-        "speccoder works on a Spec Kit or OpenSpec project, and found none here",
+        "speccoder works on a Spec Kit, OpenSpec or Kiro project, and found none here",
         "No `.specify/` (Spec Kit) or `openspec/` (OpenSpec) directory was found here or above. Spec Kit makes one (`--integration claude` installs the skills speccoder runs); then `speccoder init` and `speccoder spec specify` take it from there.",
         ["specify init --here --integration claude", "openspec init"]
     ),

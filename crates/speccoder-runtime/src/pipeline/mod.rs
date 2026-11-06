@@ -109,16 +109,27 @@ fn preflight(snapshot: &ProjectSnapshot, command: &str) -> Result<(), Box<Comman
         .as_ref()
         .map(|f| f.feature.name.clone())
         .unwrap_or_default();
+    // One problem is said, with its way out; several are counted.
+    let errors: Vec<&Diagnostic> = shown
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == Severity::Error)
+        .collect();
+    let (said, fix) = match (problems, errors.as_slice()) {
+        (1, [only]) => (only.message.clone(), only.hint.clone()),
+        _ => (format!("{problems} problems"), None),
+    };
+    let result = CommandResult::new(
+        command,
+        CommandStatus::DiagnosticsError,
+        &format!("{} {name} cannot run: {said}", format.wording().unit),
+    );
+    let result = match fix {
+        Some(f) => result.with_fix(vec![format!("→ {f}")]),
+        None => result,
+    };
     Err(Box::new(
-        CommandResult::new(
-            command,
-            CommandStatus::DiagnosticsError,
-            &format!(
-                "{} {name} cannot run: {problems} problem(s)",
-                format.wording().unit
-            ),
-        )
-        .with_data(CommandData::Inspect(Box::new(shown))),
+        result.with_data(CommandData::Inspect(Box::new(shown))),
     ))
 }
 

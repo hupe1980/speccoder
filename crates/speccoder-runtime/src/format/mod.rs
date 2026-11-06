@@ -3,13 +3,11 @@
 //! planning skill may write, what the model is told, how a task is ticked.
 //! The judge (verification, evidence, commits) is the same for every format.
 //!
-//! Spec Kit is the reference format; OpenSpec runs too. Kiro is
-//! detected, so a project in it gets a clear answer instead of "not a
-//! project".
+//! Spec Kit is the reference format; OpenSpec and Kiro run too.
 
+pub mod kiro;
 pub mod openspec;
 pub mod speckit;
-mod stubs;
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -139,13 +137,6 @@ pub struct ReadBug {
     pub title: Option<String>,
     /// The file it was read from, project-relative.
     pub file: String,
-}
-
-/// Why a project in a format this build detects but does not run has no
-/// place for a bug (`BUG-NO-UNIT`), if it is one.
-#[must_use]
-pub fn bug_refusal_unsupported(start: &Path) -> Option<BugRefusal> {
-    Detect::root(&stubs::KIRO, start).map(|_| BugRefusal::new("BUG-NO-UNIT", stubs::KIRO_BUGS))
 }
 
 /// A requirement a review writes tests for: the format's
@@ -509,6 +500,10 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
         Err(self.messages().no_current.to_owned())
     }
 
+    /// The unit's documents an interface shows, in reading order: (name,
+    /// file in the unit's directory). `spec` is shown as the living spec.
+    fn documents(&self) -> &'static [(&'static str, &'static str)];
+
     /// Ticks `task` (one byte, under the line-hash guard).
     fn tick(&self, tasks_file: &Path, task: &str, line_hash: &str) -> Result<(), String>;
 
@@ -752,7 +747,7 @@ impl CommitPrecondition {
 
 /// The formats this build knows, in detection order.
 fn all() -> [&'static dyn Detect; 3] {
-    [&speckit::SPECKIT, &openspec::OPENSPEC, &stubs::KIRO]
+    [&speckit::SPECKIT, &openspec::OPENSPEC, &kiro::KIRO]
 }
 
 /// What every known format implements: finding its marker.
@@ -932,12 +927,7 @@ fn resolve(
 }
 
 fn not_yet(kind: FormatKind) -> String {
-    match kind {
-        FormatKind::Kiro => {
-            "speccoder runs Spec Kit and OpenSpec projects, not Kiro specs".to_owned()
-        }
-        k => format!("speccoder does not run {} projects", k.title()),
-    }
+    format!("speccoder does not run {} projects", kind.title())
 }
 
 fn article(kind: FormatKind) -> String {
@@ -1049,7 +1039,7 @@ mod tests {
         let r = resolve(p, Some(FormatKind::Kiro), &[&SK, &KIRO])
             .err()
             .unwrap();
-        assert!(r.message.ends_with("not Kiro specs"));
+        assert_eq!(r.message, "speccoder does not run Kiro projects");
     }
 
     #[test]

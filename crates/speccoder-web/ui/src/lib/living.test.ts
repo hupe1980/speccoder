@@ -44,6 +44,35 @@ describe("the living spec", () => {
     expect(Array.from(div.querySelectorAll(".kw")).map((k) => k.textContent)).toEqual(["MUST", "MAY"]);
   });
 
+  it("makes each Kiro requirement a card and each criterion its state, by N.M", () => {
+    const KIRO = `<h3>Requirement 1: Automatic labels</h3>
+<p><strong>User Story:</strong> As a maintainer, I want labels.</p>
+<h4>Acceptance Criteria</h4>
+<ol><li>WHEN a new issue mentions crash, THE Triage_Bot SHALL add the label bug</li>
+<li>IF no rule matches, THEN THE Triage_Bot SHALL add needs-triage</li></ol>
+<h3>Requirement 2: Audit log</h3>`;
+    const div = document.createElement("div");
+    div.innerHTML = living(KIRO, [
+      {
+        story: "Requirement 1: Automatic labels",
+        oracle: { commit: "abc1234", decided_by: "speccoder run" },
+        scenarios: [
+          { id: "1.1", state: "green", turned_by: "2.1" },
+          { id: "1.2", state: "red" },
+        ],
+      },
+    ]);
+    const [card, second] = Array.from(div.querySelectorAll("section.story"));
+    expect(card?.getAttribute("aria-label")).toBe("Requirement 1: Automatic labels");
+    expect(card?.querySelector(".strip")?.textContent).toBe("1 of 2 green");
+    const [one, two] = Array.from(card?.querySelectorAll("li.scenario") ?? []);
+    expect(one?.querySelector(".sid")?.textContent).toBe("1.1");
+    expect(one?.querySelector(".sb")?.textContent).toBe("✓ 2.1");
+    expect(two?.className).toContain("red");
+    expect(second?.querySelector(".strip")).toBeNull();
+    expect(Array.from(div.querySelectorAll(".kw")).map((k) => k.textContent)).toEqual(["SHALL", "SHALL"]);
+  });
+
   it("says a story's scenarios have no test before its oracle is written", () => {
     const div = document.createElement("div");
     div.innerHTML = living(SPEC, [{ story: "US1", scenarios: [{ id: "US1-1", state: "red" }, { id: "US1-2", state: "red" }] }]);

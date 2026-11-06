@@ -19,7 +19,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`CALL-CHANGED`](#call-changed) | error | 2 | the call waiting now is not the one that was shown |
 | [`FIX-FAILED`](#fix-failed) | error | 1 | your own command, run from the app, did not succeed |
 | [`INTERNAL`](#internal) | error | 1 | speccoder failed in a way it does not expect |
-| [`NO-PROJECT`](#no-project) | error | 10 | speccoder works on a Spec Kit or OpenSpec project, and found none here |
+| [`NO-PROJECT`](#no-project) | error | 10 | speccoder works on a Spec Kit, OpenSpec or Kiro project, and found none here |
 | [`SPEC-DIAGNOSTICS`](#spec-diagnostics) | error | 11 | the spec artifacts have errors speccoder will not guess around |
 | [`FEATURE-SELECTION`](#feature-selection) | error | 12 | more than one feature could be meant |
 | [`CHECK-BROKEN`](#check-broken) | error | 13 | a check cannot run on the untouched code |
@@ -210,7 +210,7 @@ An unexpected failure inside speccoder: an IO error, a broken state file, a bug.
 
 ### NO-PROJECT
 
-Speccoder works on a Spec Kit or OpenSpec project, and found none here.
+Speccoder works on a Spec Kit, OpenSpec or Kiro project, and found none here.
 
 No `.specify/` (Spec Kit) or `openspec/` (OpenSpec) directory was found here or above. Spec Kit makes one (`--integration claude` installs the skills speccoder runs); then `speccoder init` and `speccoder spec specify` take it from there.
 

@@ -47,22 +47,16 @@ pub fn sources(path: &Path, feature: Option<&str>) -> Vec<(String, String, Strin
         return Vec::new();
     };
     let root = Path::new(&snap.root);
-    [
-        "spec",
-        "plan",
-        "tasks",
-        "research",
-        "data-model",
-        "quickstart",
-    ]
-    .iter()
-    .filter_map(|name| {
-        let rel = format!("{}/{name}.md", f.feature.dir);
-        std::fs::read_to_string(root.join(&rel))
-            .ok()
-            .map(|text| ((*name).to_owned(), rel, text))
-    })
-    .collect()
+    format
+        .documents()
+        .iter()
+        .filter_map(|(name, file)| {
+            let rel = format!("{}/{file}", f.feature.dir);
+            std::fs::read_to_string(root.join(&rel))
+                .ok()
+                .map(|text| ((*name).to_owned(), rel, text))
+        })
+        .collect()
 }
 
 /// The current feature's planning documents, rendered.

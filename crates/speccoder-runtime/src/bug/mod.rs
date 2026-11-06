@@ -187,15 +187,12 @@ pub fn bug(
     }
 }
 
-/// The project root at `path`, or why there is none (for Kiro: not yet supported).
+/// The project root at `path`, or why there is none.
 fn root_of(
     path: &Path,
 ) -> Result<(PathBuf, &'static dyn crate::format::Adapter), Box<CommandResult>> {
     match crate::format::open(path, None) {
         Ok(o) => Ok((PathBuf::from(&o.snapshot.root), o.adapter)),
-        Err(_) if let Some(r) = crate::format::bug_refusal_unsupported(path) => {
-            Err(Box::new(refuse(&r)))
-        }
         Err(r) => Err(Box::new(CommandResult::new("bug", r.status, &r.message))),
     }
 }
