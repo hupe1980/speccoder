@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Built on agentplane 0.60.0.
+
 ## [0.13.0] - 2026-11-06
 
 ### Added

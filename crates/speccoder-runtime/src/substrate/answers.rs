@@ -3,8 +3,8 @@
 //! and its description live in one place; the provider enforces the schema
 //! during generation and agentplane validates the answer against it.
 //!
-//! An enum's variants are explained in the enum's doc, not their own:
-//! documented variants become a `oneOf` that strict decoding refuses.
+//! An enum's variants are explained in the enum's doc, so the model reads
+//! them in one description.
 
 use schemars::JsonSchema;
 use serde::Deserialize;
