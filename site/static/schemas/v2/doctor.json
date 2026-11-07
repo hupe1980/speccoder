@@ -653,6 +653,47 @@
           ]
         },
         {
+          "description": "Trust a hook as it was shown: refused when its bytes changed since.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "hook_trust"
+            },
+            "name": {
+              "description": "The hook.",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest the person saw.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "digest"
+          ]
+        },
+        {
+          "description": "Run a gate alone on the checkout, or send an observer a sample event.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "hook_test"
+            },
+            "name": {
+              "description": "The hook.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ]
+        },
+        {
           "description": "Commit the changes set aside before the task's run onto the\nfeature's branch, as the person's own.",
           "type": "object",
           "properties": {

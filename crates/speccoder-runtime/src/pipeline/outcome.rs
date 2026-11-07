@@ -67,6 +67,15 @@ pub(crate) fn status_and_message(
                 task = report.task
             ),
         ),
+        // A gate the person declared stopped the tick: their words, the
+        // verdict kept on the saved attempt.
+        (_, "blocked_by_gate") => (
+            CommandStatus::NeedsHuman,
+            format!(
+                "{}; the checks passed, and the attempt is saved, not ticked",
+                report.reason.clone().unwrap_or_default()
+            ),
+        ),
         (_, "acceptance_weak") => (
             CommandStatus::NeedsHuman,
             format!(
@@ -307,6 +316,7 @@ pub(crate) fn bare_report(
         acceptance: None,
         earlier: Vec::new(),
         retry_stop: None,
+        gates: Vec::new(),
         saved_attempt: None,
         set_aside: None,
         notices: Vec::new(),

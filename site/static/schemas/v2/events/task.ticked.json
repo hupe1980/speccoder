@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "a domain event's public projection: ids, digests and counts",
+  "description": "`task.ticked`: a tick commit on a unit's branch.",
+  "type": "object",
+  "properties": {
+    "feature": {
+      "description": "The unit (feature) it belongs to.",
+      "type": "string"
+    },
+    "task": {
+      "description": "The task id.",
+      "type": "string"
+    },
+    "verdict": {
+      "description": "`verified` or `regression_only`.",
+      "type": "string"
+    },
+    "commit": {
+      "description": "The tick commit.",
+      "type": "string"
+    },
+    "scenarios": {
+      "description": "The scenarios its tests showed green (spec ids).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "held_out": {
+      "description": "The held-out tests that passed, when there were any.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Count"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "acceptance_strength": {
+      "description": "How strong its acceptance tests were (0–1).",
+      "type": [
+        "number",
+        "null"
+      ],
+      "format": "double"
+    },
+    "gates": {
+      "description": "The gates it passed.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/GateMark"
+      }
+    },
+    "executor": {
+      "description": "The external agent that did it, when one did.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run": {
+      "description": "The run.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "summary": {
+      "description": "One sentence, ready for a chat message.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "feature",
+    "task",
+    "verdict",
+    "commit",
+    "scenarios",
+    "gates",
+    "summary"
+  ],
+  "$defs": {
+    "Count": {
+      "description": "`k` of `n`.",
+      "type": "object",
+      "properties": {
+        "passed": {
+          "description": "How many passed.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "total": {
+          "description": "Of how many.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "passed",
+        "total"
+      ]
+    },
+    "GateMark": {
+      "description": "A gate's mark on an event: its name and how it ended.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The hook's name.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "How it ended.",
+          "$ref": "#/$defs/GateState"
+        }
+      },
+      "required": [
+        "name",
+        "outcome"
+      ]
+    },
+    "GateState": {
+      "description": "How one gate ended at its point.",
+      "oneOf": [
+        {
+          "description": "It exited 0.",
+          "type": "string",
+          "const": "passed"
+        },
+        {
+          "description": "It stopped the point.",
+          "type": "string",
+          "const": "blocked"
+        },
+        {
+          "description": "An earlier gate at the point blocked first.",
+          "type": "string",
+          "const": "not_run"
+        }
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/task.ticked.json"
+}

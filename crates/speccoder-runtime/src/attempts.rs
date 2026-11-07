@@ -74,6 +74,8 @@ pub struct Record<'a> {
     pub story_open: &'a [String],
     /// The task's own test that failed or was called wrong (outside a story).
     pub own_test: Option<&'a str>,
+    /// More trailer lines (`Gate: licence blocked`, `Earned-Verdict: verified`).
+    pub extra: &'a str,
 }
 
 /// The `Usage:` trailer speccoder writes on its commits, or nothing.
@@ -138,6 +140,7 @@ pub fn save(
         usage,
         story_open,
         own_test,
+        extra,
     } = *record;
     let git = Git::at(dir);
     let tree = worktree::checkpoint(dir, tmp)?;
@@ -156,8 +159,9 @@ pub fn save(
     };
     let reason = reason.as_str();
     let message = format!(
-        "speccoder attempt: {task} {outcome}\n\n{reason}\n\nSpec-Task: {feature}/{task}\nOutcome: {outcome}\n{}{}{}{}{}",
+        "speccoder attempt: {task} {outcome}\n\n{reason}\n\nSpec-Task: {feature}/{task}\nOutcome: {outcome}\n{}{}{}{}{}{}",
         run.map(|r| format!("Run: {r}\n")).unwrap_or_default(),
+        extra,
         Some(
             story_open
                 .iter()
@@ -362,6 +366,7 @@ mod tests {
                 usage: None,
                 story_open: &[],
                 own_test: None,
+                extra: "",
             },
         )
         .unwrap();

@@ -12,6 +12,7 @@ Entry points:
 - `progress::status_with` — what a running or finished run is doing.
 - `ask::turn_with` — one Ask turn: a read-only answer whose sources are checked against what it read.
 - `explore::explore_in`, `explore::choose` — an idea explored read-only, and the brief chosen from it.
+- `hooks` — the person's gates and observers: trust by digest, gates in the checks' sandbox, events delivered at least once from git.
 
 This is an internal crate of speccoder. Its version follows speccoder's, and its API may change in any minor release; depend on it only together with speccoder.
 

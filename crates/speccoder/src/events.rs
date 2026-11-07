@@ -453,6 +453,20 @@ pub enum Body {
         /// The signals that hold (`S1`…`S4`).
         signals: Vec<String>,
     },
+    /// A tick commit was written.
+    #[serde(rename = "task.ticked")]
+    TaskTicked {
+        /// The public projection.
+        #[serde(flatten)]
+        public: speccoder_core::hooks::TaskTicked,
+    },
+    /// An attempt was saved without a tick.
+    #[serde(rename = "task.stopped")]
+    TaskStopped {
+        /// The public projection.
+        #[serde(flatten)]
+        public: speccoder_core::hooks::TaskStopped,
+    },
     /// A unit was promoted from a quick change or bug fix.
     #[serde(rename = "unit.promoted")]
     UnitPromoted {
@@ -1146,6 +1160,12 @@ pub fn body(event: &Event) -> Body {
                 by: clean(by),
                 via: via.clone(),
             },
+        },
+        Event::TaskTicked(t) => Body::TaskTicked {
+            public: t.as_ref().clone(),
+        },
+        Event::TaskStopped(t) => Body::TaskStopped {
+            public: t.as_ref().clone(),
         },
         Event::Project { step } => project_body(step),
         Event::AskStep {

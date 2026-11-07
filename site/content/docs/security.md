@@ -145,6 +145,12 @@ Two kinds run unsandboxed, and the card says so before **Run**: the few fixes th
 
 Only a command speccoder issued runs: built as exact argvs (a file name stays one argument and one literal path), or one of speccoder's constant fix lines, and signed by the host for this project. The host refuses anything else — argvs the page composed or changed, a model's suggestion, a sign-in that must run in a terminal. speccoder's own commands run as speccoder, never through this path. Output is masked like every other.
 
+## Hooks
+
+A [hook](@/docs/hooks.md) declared in `speccoder.toml` runs only after you trusted its digest: its definition and every repository file it runs. A pulled branch that adds or changes one runs nothing until you trust it. Trust lives in speccoder's state, never in the checkout, and the model cannot write a hook's files.
+
+A gate runs in the checks' sandbox, with speccoder's state and the held-out tests hidden, and only exit 0 passes it. An observer's command runs sandboxed too, with the checkout read-only and the network on. Without an enforced sandbox, gates block and observers are skipped.
+
 ## What it does not protect against
 
 - **Code that runs during checks, within the sandbox's limits:** it can read files outside the hidden paths and use CPU and memory.

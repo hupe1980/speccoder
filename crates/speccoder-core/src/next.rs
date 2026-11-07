@@ -98,6 +98,13 @@ pub enum Outcome {
         /// The task.
         task: String,
     },
+    /// A gate the person declared stopped the tick.
+    BlockedByGate {
+        /// The task.
+        task: String,
+        /// The gate.
+        gate: String,
+    },
     /// The acceptance set stayed below `min_strength`.
     AcceptanceWeak {
         /// The task.
@@ -250,6 +257,16 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
             (
                 format!("speccoder task accept {task} --reason \"…\""),
                 "tick it on your word (attested, not verified)",
+            ),
+        ],
+        O::BlockedByGate { task, gate } => vec![
+            (
+                format!("speccoder run --task {task}"),
+                "run it again once what the gate names is fixed",
+            ),
+            (
+                format!("speccoder hooks test {gate}"),
+                "run the gate alone on the checkout",
             ),
         ],
         O::AcceptanceWeak { task } => vec![

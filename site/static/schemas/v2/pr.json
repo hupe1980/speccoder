@@ -69,6 +69,13 @@
     "evidence_check": {
       "description": "`present`: a workflow under `.github/workflows/` runs\n`speccoder attest verify --branch`; `absent`: none does.",
       "type": "string"
+    },
+    "gates": {
+      "description": "The gates that stood before the push (spec 095).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/GateRecord"
+      }
     }
   },
   "required": [
@@ -86,5 +93,86 @@
     "held_out_withheld",
     "evidence_check"
   ],
+  "$defs": {
+    "GateRecord": {
+      "description": "One gate's run at its point, as a report and the evidence carry it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The hook's name.",
+          "type": "string"
+        },
+        "point": {
+          "description": "Where it stood.",
+          "$ref": "#/$defs/Point"
+        },
+        "outcome": {
+          "description": "How it ended.",
+          "$ref": "#/$defs/GateState"
+        },
+        "reason": {
+          "description": "Why it blocked.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "code": {
+          "description": "`HOOK-BLOCKED`, or `HOOK-UNTRUSTED` for a gate that waits for trust.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "How long it ran.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "name",
+        "point",
+        "outcome",
+        "duration_ms"
+      ]
+    },
+    "Point": {
+      "description": "Where a gate stands.",
+      "oneOf": [
+        {
+          "description": "After the verdict, before the tick commit.",
+          "type": "string",
+          "const": "tick"
+        },
+        {
+          "description": "After the person confirms a pull request, before anything is pushed.",
+          "type": "string",
+          "const": "pr"
+        }
+      ]
+    },
+    "GateState": {
+      "description": "How one gate ended at its point.",
+      "oneOf": [
+        {
+          "description": "It exited 0.",
+          "type": "string",
+          "const": "passed"
+        },
+        {
+          "description": "It stopped the point.",
+          "type": "string",
+          "const": "blocked"
+        },
+        {
+          "description": "An earlier gate at the point blocked first.",
+          "type": "string",
+          "const": "not_run"
+        }
+      ]
+    }
+  },
   "$id": "https://hupe1980.github.io/speccoder/schemas/v2/pr.json"
 }

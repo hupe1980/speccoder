@@ -1295,6 +1295,117 @@
             }
           ],
           "tables": []
+        },
+        {
+          "name": "hooks",
+          "title": "Hooks",
+          "about": "Your own commands around a run: a gate (at) stops a tick or a pull request unless it exits 0; an observer (on) hears ticks and stops. Each runs only after you trusted its exact bytes.",
+          "named": true,
+          "keys": [
+            {
+              "key": "at",
+              "kind": "choice",
+              "about": "A gate: before every tick, or before a pull request is pushed",
+              "default": null,
+              "value": null,
+              "choices": [
+                "tick",
+                "pr"
+              ],
+              "min": null,
+              "max": null,
+              "required": false
+            },
+            {
+              "key": "on",
+              "kind": "string_list",
+              "about": "An observer: task.ticked, task.stopped, or \"*\"",
+              "default": null,
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": false
+            },
+            {
+              "key": "argv",
+              "kind": "argv",
+              "about": "The command; an observer gets the event on stdin",
+              "default": null,
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": false
+            },
+            {
+              "key": "url",
+              "kind": "string",
+              "about": "An observer's webhook: https (http only to localhost)",
+              "default": null,
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": false
+            },
+            {
+              "key": "secret_env",
+              "kind": "string",
+              "about": "The variable with the webhook's signing key (Standard Webhooks)",
+              "default": null,
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": false
+            },
+            {
+              "key": "timeout",
+              "kind": "integer",
+              "about": "Seconds: 60 for a gate, 10 for an observer",
+              "default": null,
+              "value": null,
+              "choices": [],
+              "min": 1.0,
+              "max": 600.0,
+              "required": false
+            },
+            {
+              "key": "env",
+              "kind": "string_list",
+              "about": "Variables passed through, by name",
+              "default": [],
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": false
+            },
+            {
+              "key": "network",
+              "kind": "bool",
+              "about": "Whether a gate may reach the network",
+              "default": false,
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": false
+            },
+            {
+              "key": "files",
+              "kind": "string_list",
+              "about": "More files it depends on (its configuration): trusted with it, never written by the model",
+              "default": [],
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": false
+            }
+          ],
+          "tables": []
         }
       ],
       "diff": "diff --git a/speccoder.toml b/speccoder.toml\nindex <hex>..<hex> 100644\n--- a/speccoder.toml\n+++ b/speccoder.toml\n@@ -7,3 +7,6 @@ argv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n \n [acceptance]\n generate = false\n+\n+[commands]\n+allow_prefix = [[\"npm\", \"run\"]]\n"

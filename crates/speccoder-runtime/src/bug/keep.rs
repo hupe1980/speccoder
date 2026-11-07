@@ -171,9 +171,38 @@ pub fn keep_with(path: &Path, key: &str, reason: &str, state: &Path) -> CommandR
         let _ = crate::git::Git::at(&wt_root).run(&["checkout", "--", "."]);
         return refuse(CommandStatus::Error, &format!("tick refused: {e}"));
     }
+    // A person's word does not pass the person's own gates (spec 095).
+    let gates = match crate::sandbox::runner_at(&project) {
+        Ok((runner, _)) => crate::hooks::gate::run(
+            &project,
+            &runner,
+            state,
+            crate::hooks::gate::Facts {
+                point: speccoder_core::hooks::Point::Tick,
+                feature: &bug.unit,
+                task: Some(&bug.task),
+                branch: None,
+            },
+        ),
+        Err(e) => return refuse(CommandStatus::ConfigError, &e),
+    };
+    if let Some(g) = speccoder_core::hooks::first_block(&gates) {
+        let _ = crate::git::Git::at(&wt_root).run(&["clean", "-fdq"]);
+        let _ = crate::git::Git::at(&wt_root).run(&["checkout", "--", "."]);
+        let code = g.code.clone().unwrap_or_else(|| "HOOK-BLOCKED".to_owned());
+        return refuse(
+            CommandStatus::NeedsHuman,
+            &format!("{}; {} is not kept", g.blocked_line(), bug.task),
+        )
+        .with_code(&code);
+    }
+    let gate_lines: String = gates
+        .iter()
+        .map(|g| format!("Gate: {} {}\n", g.name, g.outcome.as_str()))
+        .collect();
     let by = crate::controls::person(&project);
     let message = format!(
-        "speccoder: {task} kept as a regression test by {by}\n\n{title}\n\n{reason}\n\nSpec-Task: {unit}/{task}\nVerdict: attested\nAccepted-By: {by}\nReason: {reason}\nBug: already_satisfied ({home}) triad={triad}\n",
+        "speccoder: {task} kept as a regression test by {by}\n\n{title}\n\n{reason}\n\nSpec-Task: {unit}/{task}\nVerdict: attested\nAccepted-By: {by}\nReason: {reason}\nBug: already_satisfied ({home}) triad={triad}\n{gate_lines}",
         task = bug.task,
         title = bug.title,
         unit = bug.unit,

@@ -42,6 +42,63 @@ fn warned(name: &str, detail: impl Into<String>, fix: &[&str]) -> DoctorCheck {
     }
 }
 
+/// The `hooks` row: misconfigured hooks fail, a missing program or an
+/// untrusted hook warns, all trusted passes; none: no row.
+fn hooks_check(path: &Path, state: &Path) -> Option<DoctorCheck> {
+    use speccoder_core::hooks::TrustState;
+    let hooks = match crate::hooks::load(path) {
+        Ok(h) => h,
+        Err(e) => {
+            return Some(failed(
+                "hooks",
+                "HOOK-MISCONFIGURED",
+                e,
+                &["→ fix the hook in speccoder.toml", "speccoder hooks"],
+            ));
+        }
+    };
+    if hooks.is_empty() {
+        return None;
+    }
+    let dir = crate::hooks::dir(state, path);
+    let entries: Vec<_> = hooks
+        .iter()
+        .map(|d| crate::hooks::report::entry(&crate::hooks::digest(d, path), path, &dir))
+        .collect();
+    if let Some(e) = entries.iter().find(|e| e.problem.is_some()) {
+        return Some(warned(
+            "hooks",
+            format!("{}: {}", e.name, e.problem.clone().unwrap_or_default()),
+            &["speccoder hooks"],
+        ));
+    }
+    let waiting: Vec<&str> = entries
+        .iter()
+        .filter(|e| e.state != TrustState::Trusted)
+        .map(|e| e.name.as_str())
+        .collect();
+    if waiting.is_empty() {
+        let gates = entries.iter().filter(|e| e.role == "gate").count();
+        return Some(check(
+            "hooks",
+            DoctorLevel::Pass,
+            format!(
+                "{} trusted — {gates} gate(s), {} observer(s)",
+                entries.len(),
+                entries.len() - gates
+            ),
+        ));
+    }
+    Some(warned(
+        "hooks",
+        format!(
+            "{} wait(s) for your trust: a gate blocks every tick until then, an observer hears nothing",
+            waiting.join(", ")
+        ),
+        &["speccoder hooks trust"],
+    ))
+}
+
 /// The plan checks as doctor rows: `check: "plan"`, level `warn`, the
 /// code's catalog entry, the tasks, the fixes and, for behaviour planned
 /// early, the decision speccoder records as the remedy.
@@ -455,6 +512,10 @@ pub fn checks(
         },
         said,
     ));
+    // Hooks: what keeps one from running, or that it waits for trust.
+    if let Some(row) = crate::worktree::state_dir().and_then(|s| hooks_check(path, &s)) {
+        out.push(row);
+    }
     // `[worktree] include` and `.worktreeinclude`: what a run's worktree
     // gets copied — names only, nothing copied.
     let worktree = text

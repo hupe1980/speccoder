@@ -695,6 +695,13 @@ impl Runner {
         matches!(self, Self::Sandboxed(_))
     }
 
+    /// Whether this runner enforces what it hides (speccoder's state,
+    /// held-out tests): sandboxed, with nothing carved left out.
+    #[must_use]
+    pub fn hides(&self) -> bool {
+        matches!(self, Self::Sandboxed(s) if !s.profile.unenforced.carve)
+    }
+
     /// The mechanism that confines a command to the worktree — writes
     /// there, no network beyond loopback, no signal to other processes,
     /// `.git` carved out in place — when this runner does: a call it

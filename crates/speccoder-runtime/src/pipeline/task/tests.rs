@@ -820,6 +820,7 @@ pub(super) fn first(
                 usage: None,
                 story_open: &[],
                 own_test: None,
+                extra: "",
             },
         )
         .ok()

@@ -191,6 +191,8 @@ pub enum CommandData {
     Issues(Box<IssuesReport>),
     /// `inbox`: what waits for a person's decision, across features.
     Inbox(Box<InboxReport>),
+    /// `hooks`: every hook, its trust and its recent runs.
+    Hooks(Box<crate::hooks::HooksReport>),
     /// `shape`: a person's words made into a requirement, and what changed.
     Shape(Box<ShapeReport>),
     /// `ask`: one turn of a read-only conversation.
@@ -1071,6 +1073,7 @@ impl CommandData {
             Self::Config(_) => "config",
             Self::Issues(_) => "issues",
             Self::Inbox(_) => "inbox",
+            Self::Hooks(_) => "hooks",
             Self::Shape(_) => "shape",
             Self::Ask(_) => "ask",
             Self::AskConversations(_) => "ask_conversations",
@@ -1126,6 +1129,7 @@ pub const PAYLOADS: &[&str] = &[
     "config",
     "issues",
     "inbox",
+    "hooks",
     "shape",
     "ask",
     "ask_conversations",
@@ -1667,6 +1671,9 @@ pub struct RunReport {
     pub earlier: Vec<EarlierAttempt>,
     /// Why no further attempt was made after a failed one, if it failed.
     pub retry_stop: Option<String>,
+    /// The gates that stood at the tick, in name order (spec 095).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gates: Vec<crate::hooks::GateRecord>,
     /// The ref this attempt was saved under when it did not pass; the
     /// worktree went back to where it started.
     pub saved_attempt: Option<String>,
@@ -2472,6 +2479,9 @@ pub struct TaskStatus {
     /// For an open task of a story: what will judge it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub judged: Option<crate::story::Judged>,
+    /// The gates a done task's tick passed (spec 095).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gates: Vec<crate::hooks::GateMark>,
     /// Changes found in the worktree when the task's run started (a person's
     /// edits, or an interrupted run's leftovers), saved and set aside.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2604,6 +2614,9 @@ pub struct PrReport {
     /// `present`: a workflow under `.github/workflows/` runs
     /// `speccoder attest verify --branch`; `absent`: none does.
     pub evidence_check: String,
+    /// The gates that stood before the push (spec 095).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gates: Vec<crate::hooks::GateRecord>,
 }
 
 /// Result of `speccoder converge`.

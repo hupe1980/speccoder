@@ -160,6 +160,16 @@ pub struct Cli {
     )]
     pub format: Option<SpecFormat>,
 
+    /// Trust a hook for this command when its digest is this one (CI):
+    /// `name=sha256:…`, as `speccoder hooks` prints it. Repeatable.
+    #[arg(
+        long,
+        global = true,
+        hide_short_help = true,
+        value_name = "NAME=DIGEST"
+    )]
+    pub trust_hook: Vec<String>,
+
     /// Without a command: the dashboard at a terminal, else the report.
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -361,6 +371,12 @@ pub enum Command {
         /// Only the writing check (no model).
         #[arg(long)]
         check: bool,
+    },
+    /// Your hooks: gates that can stop a tick or a pull request, observers that hear ticks and stops; trust and test them.
+    #[command(hide = true)]
+    Hooks {
+        #[command(subcommand)]
+        action: Option<HooksAction>,
     },
     /// GitHub issues: list the open ones; `start 42` specifies a feature from one.
     Issue {
@@ -953,6 +969,23 @@ pub enum PresetAction {
         #[arg(long)]
         yes: bool,
     },
+}
+
+/// `speccoder hooks` actions; without one, the list.
+#[derive(Debug, Subcommand)]
+pub enum HooksAction {
+    /// Trust a hook (every one waiting, without a name) after seeing exactly what it runs; in CI, `--trust-hook name=digest`.
+    Trust {
+        /// The hook.
+        name: Option<String>,
+    },
+    /// Run a gate alone on the checkout, or send an observer a sample event.
+    Test {
+        /// The hook.
+        name: String,
+    },
+    /// Deliver what waits for the observers (CI, cron).
+    Deliver,
 }
 
 /// `speccoder auth` actions; without one, `status`.

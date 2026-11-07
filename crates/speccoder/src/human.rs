@@ -643,6 +643,20 @@ pub fn run(w: &mut impl Write, r: &RunReport, message: &str) -> io::Result<()> {
             writeln!(w, "{line}")?;
         }
     }
+    for g in &r.gates {
+        let why = g
+            .reason
+            .as_deref()
+            .map(|r| format!(" — {r}"))
+            .unwrap_or_default();
+        writeln!(
+            w,
+            "Gate       {} {} ({}){why}",
+            gate_mark(g.outcome),
+            g.name,
+            g.point.words()
+        )?;
+    }
     for f in &r.integrity {
         writeln!(w, "  ! {f}")?;
     }
@@ -1000,6 +1014,14 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         }
         if let Some(st) = &t.strength {
             writeln!(w, "      acceptance strength: {st}")?;
+        }
+        if !t.gates.is_empty() {
+            let marks: Vec<String> = t
+                .gates
+                .iter()
+                .map(|g| format!("{} {}", gate_mark(g.outcome), g.name))
+                .collect();
+            writeln!(w, "      gates: {}", marks.join(", "))?;
         }
         if let Some(a) = &t.last_attempt {
             writeln!(
@@ -2452,6 +2474,146 @@ fn judged_words(j: &speccoder_core::story::Judged) -> String {
         Judged::Checkpoint => {
             "its story's checkpoint — every scenario must be green after it".to_owned()
         }
+    }
+}
+
+/// `speccoder hooks`: one line per hook — its trust, what it guards or
+/// hears, its digest and its last runs as marks — and the way to trust it.
+#[must_use]
+pub fn hooks(r: &speccoder_core::hooks::HooksReport, look: &crate::style::Look) -> Vec<String> {
+    use crate::style::Token;
+    use speccoder_core::hooks::TrustState;
+    let mut out = Vec::new();
+    if let Some(p) = &r.problem {
+        out.push(look.paint(Token::Danger, p));
+        return out;
+    }
+    // A test's verdict is the message: the list would only repeat it.
+    if r.tested.is_some() {
+        return out;
+    }
+    if r.hooks.is_empty() {
+        out.push("A gate the tick waits for, and an observer that hears it:".to_owned());
+        out.push(String::new());
+        for line in STARTERS.lines() {
+            out.push(if line.is_empty() {
+                String::new()
+            } else {
+                format!("  {line}")
+            });
+        }
+        return out;
+    }
+    let width = r.hooks.iter().map(|h| h.name.len()).max().unwrap_or(0);
+    let listens = r.hooks.iter().map(|h| h.listens.len()).max().unwrap_or(0);
+    for h in &r.hooks {
+        let (mark, token) = match h.state {
+            TrustState::Trusted => ("●", Token::Verified),
+            TrustState::Untrusted => ("○", Token::Attention),
+            TrustState::Changed => ("◐", Token::Attention),
+        };
+        let marks: String = h
+            .recent
+            .iter()
+            .rev()
+            .take(8)
+            .rev()
+            .map(|run| match run.outcome.as_str() {
+                "passed" | "delivered" => '✓',
+                "not_run" | "skipped_untrusted" => '–',
+                _ => '✗',
+            })
+            .collect();
+        let tail = match h.state {
+            TrustState::Trusted => {
+                let short: String = h
+                    .digest
+                    .trim_start_matches("sha256:")
+                    .chars()
+                    .take(12)
+                    .collect();
+                let last = h
+                    .recent
+                    .last()
+                    .and_then(|run| {
+                        run.error
+                            .as_ref()
+                            .map(|e| format!("  last: {} — {e}", run.outcome))
+                    })
+                    .unwrap_or_default();
+                format!("{short}  {marks}{last}")
+            }
+            s => s.as_str().to_owned(),
+        };
+        let line = format!(
+            "  {} {:width$}  {:listens$}  {}",
+            look.paint(token, mark),
+            h.name,
+            h.listens,
+            look.paint(Token::Muted, tail.trim_end()),
+        );
+        out.push(line.trim_end().to_owned());
+        if h.state != TrustState::Trusted {
+            out.push(format!("      trust it: speccoder hooks trust {}", h.name));
+            out.push(format!("      in CI:    {}", h.trust_flag));
+        }
+        if let Some(p) = &h.problem {
+            out.push(format!("      {}", look.paint(Token::Danger, p)));
+        }
+    }
+    out
+}
+
+/// Two hooks to copy: a gate and an observer.
+pub const STARTERS: &str = "[hooks.licence]\nat = \"tick\"                    # before a tick; \"pr\": before a pull request\nargv = [\"cargo\", \"deny\", \"check\", \"licenses\"]   # only exit 0 lets it through\nnetwork = true\n\n[hooks.team-chat]\non = [\"task.ticked\", \"task.stopped\"]\nurl = \"https://hooks.example.com/speccoder\"   # a signed CloudEvent; data.summary is one sentence\nsecret_env = \"SPECCODER_HOOK_SECRET\"";
+
+/// What a person sees before trusting a hook: its definition, every file it
+/// runs with its digest, programs outside the repository, and for a
+/// changed hook what it was.
+#[must_use]
+pub fn trust_prompt(e: &speccoder_core::hooks::HookEntry) -> Vec<String> {
+    let mut out = vec![format!(
+        "{} — {} that {}",
+        e.name,
+        if e.role == "gate" {
+            "a gate"
+        } else {
+            "an observer"
+        },
+        if e.role == "gate" {
+            format!("stands {}", e.listens)
+        } else {
+            e.listens.clone()
+        }
+    )];
+    out.push(String::new());
+    if let Some(before) = &e.trusted_definition {
+        out.push("It changed. Trusted before:".to_owned());
+        out.extend(before.lines().map(|l| format!("  - {l}")));
+        out.push("Now:".to_owned());
+        out.extend(e.definition.lines().map(|l| format!("  + {l}")));
+    } else {
+        out.extend(e.definition.lines().map(|l| format!("  {l}")));
+    }
+    for f in &e.files {
+        out.push(format!("  runs {}  {}", f.path, f.digest));
+    }
+    for p in &e.outside {
+        out.push(format!(
+            "  runs {p}  (outside the repository: not digested)"
+        ));
+    }
+    out.push(format!("  digest {}", e.digest));
+    out.push(String::new());
+    out
+}
+
+/// ✓ passed, ✗ blocked, – not run.
+const fn gate_mark(state: speccoder_core::hooks::GateState) -> &'static str {
+    match state {
+        speccoder_core::hooks::GateState::Passed => "✓",
+        speccoder_core::hooks::GateState::Blocked => "✗",
+        speccoder_core::hooks::GateState::NotRun => "–",
     }
 }
 

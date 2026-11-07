@@ -17,6 +17,7 @@ pub mod event;
 pub mod evidence;
 pub mod explore;
 pub mod graph;
+pub mod hooks;
 pub mod inbox;
 pub mod ladder;
 pub mod lane;

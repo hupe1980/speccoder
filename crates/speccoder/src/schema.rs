@@ -66,6 +66,8 @@ fn projection(name: &str) -> &'static str {
         "project.created" => "events/project.created",
         "project.undone" => "events/project.undone",
         "unit.promoted" => "events/unit.promoted",
+        "task.ticked" => "events/task.ticked",
+        "task.stopped" => "events/task.stopped",
         _ => "",
     }
 }
@@ -102,6 +104,7 @@ const fn describe(payload: &str) -> &'static str {
         b"config" => "config: every key of speccoder.toml, its value and its default",
         b"issues" => "issue: the repository's open GitHub issues",
         b"inbox" => "inbox: every decision waiting for a person, across features",
+        b"hooks" => "hooks: every hook, its trust and its recent runs",
         b"shape" => "shape: a person's words made into a requirement, and what code found changed",
         b"ask" => "ask: one turn of a read-only conversation, its reads and checked citations",
         b"ask_conversations" => "ask --list: the conversations, newest first",
@@ -193,6 +196,7 @@ published! {
     "config", "ConfigReport" => core::ConfigReport,
     "issues", "IssuesReport" => core::IssuesReport,
     "inbox", "InboxReport" => core::InboxReport,
+    "hooks", "HooksReport" => core::hooks::HooksReport,
     "shape", "ShapeReport" => core::ShapeReport,
     "ask", "AskReport" => core::ask::AskReport,
     "ask_conversations", "AskConversations" => core::ask::AskConversations,
@@ -213,6 +217,8 @@ published! {
     "events/oracle.lapsed", "PublicOracleLapsed" => crate::events::PublicOracleLapsed,
     "events/collection.checked", "PublicCollectionChecked" => crate::events::PublicCollectionChecked,
     "events/unit.promoted", "PublicUnitPromoted" => crate::events::PublicUnitPromoted,
+    "events/task.ticked", "TaskTicked" => core::hooks::TaskTicked,
+    "events/task.stopped", "TaskStopped" => core::hooks::TaskStopped,
     "comments", "CommentsView" => core::oracle::CommentsView,
     "preset", "PresetReport" => core::PresetReport,
     "events/project.created", "PublicProjectCreated" => crate::events::PublicProjectCreated,

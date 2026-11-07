@@ -89,6 +89,7 @@ pub const SECTIONS: &[&str] = &[
     "context",
     "bug",
     "worktree",
+    "hooks",
 ];
 
 /// Parses the configuration text; checks keep their file order.

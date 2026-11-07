@@ -176,6 +176,15 @@ pub fn run_feature_with(
             run_feature_with(path, feature, state, provider, secret, o)
         });
     }
+    // Observers hear the run's ticks and stops beside it (spec 095).
+    let delivering = crate::hooks::deliver::Deliverer::start(path, state);
+    // An observer nobody trusted hears nothing: said once per run.
+    if delivering.is_some()
+        && let Some(p) = &options.progress
+        && let Some(text) = crate::hooks::report::untrusted_notice(path, state)
+    {
+        p.event(&progress::Event::Notice { text });
+    }
     // A unit that is a bug of the format's own structure runs as that bug.
     if let Some(slug) = bug_spec(path, feature) {
         return crate::bug::run_with(

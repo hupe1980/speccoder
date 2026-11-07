@@ -688,7 +688,7 @@ pub fn run_hooks_in(
     options: &RunOptions,
 ) -> Result<Vec<String>, Box<CommandResult>> {
     let root = root_of(path)?;
-    let plan = crate::hooks::plan(&root, event)
+    let plan = crate::extension_hooks::plan(&root, event)
         .map_err(|e| Box::new(CommandResult::new("hooks", CommandStatus::ConfigError, &e)))?;
     let mut lines: Vec<String> = Vec::new();
     for hook in &plan.run {
@@ -734,7 +734,7 @@ pub fn run_hooks_in(
         ));
     }
     for hook in &plan.offer {
-        let line = crate::hooks::offer_line(event, hook);
+        let line = crate::extension_hooks::offer_line(event, hook);
         if let Some(p) = &options.progress {
             p.event(&progress::Event::Notice { text: line.clone() });
         }

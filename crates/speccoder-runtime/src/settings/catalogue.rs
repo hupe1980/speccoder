@@ -743,4 +743,66 @@ pub const CATALOGUE: &[Section] = &[
             k("deny", Kind::StrList, Some("[]"), "Tools never offered"),
         ],
     },
+    Section {
+        name: "hooks",
+        title: "Hooks",
+        about: "Your own commands around a run: a gate (at) stops a tick or a pull request unless it exits 0; an observer (on) hears ticks and stops. Each runs only after you trusted its exact bytes.",
+        named: true,
+        keys: &[
+            k(
+                "at",
+                Kind::Choice(&["tick", "pr"]),
+                None,
+                "A gate: before every tick, or before a pull request is pushed",
+            ),
+            k(
+                "on",
+                Kind::StrList,
+                None,
+                "An observer: task.ticked, task.stopped, or \"*\"",
+            ),
+            k(
+                "argv",
+                Kind::Argv,
+                None,
+                "The command; an observer gets the event on stdin",
+            ),
+            k(
+                "url",
+                Kind::Str,
+                None,
+                "An observer's webhook: https (http only to localhost)",
+            ),
+            k(
+                "secret_env",
+                Kind::Str,
+                None,
+                "The variable with the webhook's signing key (Standard Webhooks)",
+            ),
+            k(
+                "timeout",
+                Kind::Int(1, 600),
+                None,
+                "Seconds: 60 for a gate, 10 for an observer",
+            ),
+            k(
+                "env",
+                Kind::StrList,
+                Some("[]"),
+                "Variables passed through, by name",
+            ),
+            k(
+                "network",
+                Kind::Bool,
+                Some("false"),
+                "Whether a gate may reach the network",
+            ),
+            k(
+                "files",
+                Kind::StrList,
+                Some("[]"),
+                "More files it depends on (its configuration): trusted with it, never written by the model",
+            ),
+        ],
+    },
 ];

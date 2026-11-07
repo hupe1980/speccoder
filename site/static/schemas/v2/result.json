@@ -735,6 +735,47 @@
           ]
         },
         {
+          "description": "Trust a hook as it was shown: refused when its bytes changed since.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "hook_trust"
+            },
+            "name": {
+              "description": "The hook.",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest the person saw.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "digest"
+          ]
+        },
+        {
+          "description": "Run a gate alone on the checkout, or send an observer a sample event.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "hook_test"
+            },
+            "name": {
+              "description": "The hook.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ]
+        },
+        {
           "description": "Commit the changes set aside before the task's run onto the\nfeature's branch, as the person's own.",
           "type": "object",
           "properties": {
@@ -2558,6 +2599,10 @@
           "$ref": "#/$defs/InboxReport"
         },
         {
+          "description": "`hooks`: every hook, its trust and its recent runs.",
+          "$ref": "#/$defs/HooksReport"
+        },
+        {
           "description": "`shape`: a person's words made into a requirement, and what changed.",
           "$ref": "#/$defs/ShapeReport"
         },
@@ -4013,6 +4058,13 @@
             "null"
           ]
         },
+        "gates": {
+          "description": "The gates that stood at the tick, in name order (spec 095).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GateRecord"
+          }
+        },
         "saved_attempt": {
           "description": "The ref this attempt was saved under when it did not pass; the\nworktree went back to where it started.",
           "type": [
@@ -4366,6 +4418,85 @@
         "status",
         "failing_tests",
         "excerpt"
+      ]
+    },
+    "GateRecord": {
+      "description": "One gate's run at its point, as a report and the evidence carry it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The hook's name.",
+          "type": "string"
+        },
+        "point": {
+          "description": "Where it stood.",
+          "$ref": "#/$defs/Point"
+        },
+        "outcome": {
+          "description": "How it ended.",
+          "$ref": "#/$defs/GateState"
+        },
+        "reason": {
+          "description": "Why it blocked.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "code": {
+          "description": "`HOOK-BLOCKED`, or `HOOK-UNTRUSTED` for a gate that waits for trust.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "How long it ran.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "name",
+        "point",
+        "outcome",
+        "duration_ms"
+      ]
+    },
+    "Point": {
+      "description": "Where a gate stands.",
+      "oneOf": [
+        {
+          "description": "After the verdict, before the tick commit.",
+          "type": "string",
+          "const": "tick"
+        },
+        {
+          "description": "After the person confirms a pull request, before anything is pushed.",
+          "type": "string",
+          "const": "pr"
+        }
+      ]
+    },
+    "GateState": {
+      "description": "How one gate ended at its point.",
+      "oneOf": [
+        {
+          "description": "It exited 0.",
+          "type": "string",
+          "const": "passed"
+        },
+        {
+          "description": "It stopped the point.",
+          "type": "string",
+          "const": "blocked"
+        },
+        {
+          "description": "An earlier gate at the point blocked first.",
+          "type": "string",
+          "const": "not_run"
+        }
       ]
     },
     "AgentAttempt": {
@@ -7900,6 +8031,13 @@
             }
           ]
         },
+        "gates": {
+          "description": "The gates a done task's tick passed (spec 095).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GateMark"
+          }
+        },
         "set_aside": {
           "description": "Changes found in the worktree when the task's run started (a person's\nedits, or an interrupted run's leftovers), saved and set aside.",
           "anyOf": [
@@ -8057,6 +8195,24 @@
         "reason",
         "run_id",
         "reference"
+      ]
+    },
+    "GateMark": {
+      "description": "A gate's mark on an event: its name and how it ended.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The hook's name.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "How it ended.",
+          "$ref": "#/$defs/GateState"
+        }
+      },
+      "required": [
+        "name",
+        "outcome"
       ]
     },
     "SetAside": {
@@ -9261,6 +9417,13 @@
         "evidence_check": {
           "description": "`present`: a workflow under `.github/workflows/` runs\n`speccoder attest verify --branch`; `absent`: none does.",
           "type": "string"
+        },
+        "gates": {
+          "description": "The gates that stood before the push (spec 095).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GateRecord"
+          }
         }
       },
       "required": [
@@ -11228,6 +11391,16 @@
           "const": "quick_change"
         },
         {
+          "description": "[`Runnable::HookTrust`].",
+          "type": "string",
+          "const": "hook_trust"
+        },
+        {
+          "description": "[`Runnable::HookTest`].",
+          "type": "string",
+          "const": "hook_test"
+        },
+        {
           "description": "[`Runnable::KeepSetAside`].",
           "type": "string",
           "const": "keep_set_aside"
@@ -11550,6 +11723,275 @@
         "started",
         "pid",
         "state"
+      ]
+    },
+    "HooksReport": {
+      "description": "`speccoder hooks`: every hook, and what a `trust`, `test` or `deliver`\njust did.",
+      "type": "object",
+      "properties": {
+        "hooks": {
+          "description": "Every hook, by name.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HookEntry"
+          }
+        },
+        "problem": {
+          "description": "Why the hooks could not be read (`HOOK-MISCONFIGURED`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trusted": {
+          "description": "The hooks just trusted.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tested": {
+          "description": "A test just run.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HookTested"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delivered": {
+          "description": "Events just delivered, per observer.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "pending": {
+          "description": "Events still waiting for an observer that failed.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "hooks"
+      ]
+    },
+    "HookEntry": {
+      "description": "One hook as `speccoder hooks` shows it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The table's name.",
+          "type": "string"
+        },
+        "role": {
+          "description": "`gate` or `observer`.",
+          "type": "string"
+        },
+        "listens": {
+          "description": "What it guards or hears, in words.",
+          "type": "string"
+        },
+        "at": {
+          "description": "Where a gate stands.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Point"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "on": {
+          "description": "The events an observer hears.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "runs": {
+          "description": "The command it runs, or the URL it posts to.",
+          "type": "string"
+        },
+        "state": {
+          "description": "Whether it may run here.",
+          "$ref": "#/$defs/TrustState"
+        },
+        "digest": {
+          "description": "`sha256:<hex>` over its definition and files.",
+          "type": "string"
+        },
+        "files": {
+          "description": "The repository files it runs.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HookFile"
+          }
+        },
+        "outside": {
+          "description": "Programs it names outside the repository.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "definition": {
+          "description": "Its definition as TOML, as a trust prompt shows it.",
+          "type": "string"
+        },
+        "trusted_definition": {
+          "description": "The definition last trusted, for a changed hook.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recent": {
+          "description": "Its recent runs, oldest first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HookRun"
+          }
+        },
+        "trust_flag": {
+          "description": "The flag that trusts it in CI: `--trust-hook name=sha256:…`.",
+          "type": "string"
+        },
+        "problem": {
+          "description": "What keeps it from running here, with the fix (a missing program\nor signing variable).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "role",
+        "listens",
+        "runs",
+        "state",
+        "digest",
+        "files",
+        "definition",
+        "recent",
+        "trust_flag"
+      ]
+    },
+    "TrustState": {
+      "description": "Whether a hook may run.",
+      "oneOf": [
+        {
+          "description": "A person trusted these exact bytes.",
+          "type": "string",
+          "const": "trusted"
+        },
+        {
+          "description": "Never trusted here.",
+          "type": "string",
+          "const": "untrusted"
+        },
+        {
+          "description": "Trusted once; the definition or a file it runs changed since.",
+          "type": "string",
+          "const": "changed"
+        }
+      ]
+    },
+    "HookFile": {
+      "description": "A file a hook runs, and its content's digest.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Its path in the repository.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "`sha256:<hex>` of its content.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "digest"
+      ]
+    },
+    "HookRun": {
+      "description": "One run of a hook.",
+      "type": "object",
+      "properties": {
+        "at": {
+          "description": "When it started (RFC 3339).",
+          "type": "string"
+        },
+        "what": {
+          "description": "The event id, `tick T004`, `pr` or `test`.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "`delivered`, `failed`, `passed`, `blocked`, `not_run`, `skipped_untrusted`.",
+          "type": "string"
+        },
+        "duration_ms": {
+          "description": "How long it ran.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "error": {
+          "description": "Why it failed or blocked.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "at",
+        "what",
+        "outcome",
+        "duration_ms"
+      ]
+    },
+    "HookTested": {
+      "description": "How `speccoder hooks test` went.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The hook.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "`passed` or `blocked` (a gate), `delivered` or `failed` (an observer).",
+          "type": "string"
+        },
+        "detail": {
+          "description": "Why it blocked or failed, or what the receiver answered.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "How long it took.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "name",
+        "outcome",
+        "duration_ms"
       ]
     },
     "ShapeReport": {

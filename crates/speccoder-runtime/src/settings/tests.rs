@@ -76,6 +76,34 @@ fn with(section: &Section, key: &Key) -> Vec<ConfigChange> {
             }
         }
     }
+    // A hook is a gate (`at`, `argv`) or an observer (`on`, `url`).
+    if section.name == "hooks" {
+        let set = |key: &str, value: Value| ConfigChange {
+            key: format!("hooks.t.{key}"),
+            value: Some(value),
+            append: None,
+        };
+        let observer = ["on", "url", "secret_env"].contains(&key.key);
+        let base = if observer {
+            [
+                ("on", json!(["*"])),
+                ("url", json!("https://example.com/h")),
+            ]
+        } else {
+            [("at", json!("tick")), ("argv", json!(["true"]))]
+        };
+        changes = base
+            .into_iter()
+            .filter(|(k, _)| *k != key.key)
+            .map(|(k, v)| set(k, v))
+            .collect();
+        let value = match key.key {
+            "url" => json!("https://example.com/h"),
+            "on" => json!(["*"]),
+            _ => sample(key),
+        };
+        changes.push(set(key.key, value));
+    }
     // An executor names its agent; `kind` and `argv` stand without one.
     if section.name == "executor" && !["agent", "kind", "argv"].contains(&key.key) {
         changes.insert(

@@ -279,6 +279,10 @@ pub enum Event {
         /// `S1`…`S4`.
         signals: Vec<String>,
     },
+    /// A tick commit was written (`task.ticked`): its public projection.
+    TaskTicked(Box<speccoder_core::hooks::TaskTicked>),
+    /// An attempt was saved without a tick (`task.stopped`).
+    TaskStopped(Box<speccoder_core::hooks::TaskStopped>),
     /// A unit was promoted from a quick change or bug fix (`unit.promoted`):
     /// ids and digests, never the words.
     UnitPromoted {
@@ -938,6 +942,8 @@ impl Progress for Live {
                 | Event::PlanningStopped { .. }
                 | Event::LadderOffered { .. }
                 | Event::UnitPromoted { .. }
+                | Event::TaskTicked(_)
+                | Event::TaskStopped(_)
                 | Event::Project { .. }
                 | Event::AskStep { .. }
                 | Event::AskText { .. }

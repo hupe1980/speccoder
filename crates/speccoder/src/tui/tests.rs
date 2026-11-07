@@ -13,6 +13,7 @@ use crate::style::{Look, Theme};
 fn task(id: &str, state: &str) -> TaskStatus {
     TaskStatus {
         judged: None,
+        gates: Vec::new(),
         lane: speccoder_core::lane::Lane::default(),
         id: id.to_owned(),
         title: format!("title of {id}"),

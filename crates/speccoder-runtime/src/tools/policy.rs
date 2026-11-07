@@ -758,6 +758,13 @@ impl Policy {
         self
     }
 
+    /// The files the project's hooks run: the model may not write them.
+    #[must_use]
+    pub fn with_hook_files(mut self, files: Vec<String>) -> Self {
+        self.protected = self.protected.with_hook_files(files);
+        self
+    }
+
     /// `[sandbox] network_allow`: exact argvs that get the network.
     #[must_use]
     pub fn with_network(mut self, exact: Vec<Vec<String>>) -> Self {

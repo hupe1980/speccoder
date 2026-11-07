@@ -24,6 +24,8 @@ export const KINDS: Record<ActionKind, { verb: string; icon?: string; holdsWorkt
   review: { verb: "Review", icon: "doc", holdsWorktree: false },
   issue_comment: { verb: "Comment", icon: "branch", holdsWorktree: false },
   quick_change: { verb: "Run", icon: "sparkle", holdsWorktree: true },
+  hook_trust: { verb: "Trust…", icon: "shield", holdsWorktree: false },
+  hook_test: { verb: "Test", icon: "play", holdsWorktree: false },
   keep_set_aside: { verb: "Keep", icon: "check", holdsWorktree: true },
   drop_set_aside: { verb: "Discard", icon: "xmark", holdsWorktree: false },
   fix_setup: { verb: "Fix", icon: "check", holdsWorktree: true },

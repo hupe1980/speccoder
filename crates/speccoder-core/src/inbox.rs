@@ -161,6 +161,10 @@ pub enum Kind {
     /// A step only a person can take: a `[YOU]` task, or one whose attempt
     /// stopped `BLOCKED` — I did it, a hint and a new attempt, or skip.
     Yours,
+    /// A gate the person declared blocked a tick.
+    GateBlocked,
+    /// A gate waits for a person's trust before any tick can pass it.
+    HookUntrusted,
     /// The last attempt did not pass.
     Stuck,
     /// An autopilot run refused calls it would have asked about: listed
@@ -180,7 +184,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, the most urgent first.
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 25] = [
         Self::Unknown,
         Self::Approval,
         Self::ApprovalBatch,
@@ -197,6 +201,8 @@ impl Kind {
         Self::Review,
         Self::Revise,
         Self::Yours,
+        Self::HookUntrusted,
+        Self::GateBlocked,
         Self::Stuck,
         Self::AutopilotDenied,
         Self::BugAlreadySatisfied,
@@ -226,6 +232,8 @@ impl Kind {
             Self::Review => "review",
             Self::Revise => "revise",
             Self::Yours => "yours",
+            Self::GateBlocked => "gate_blocked",
+            Self::HookUntrusted => "hook_untrusted",
             Self::Stuck => "stuck",
             Self::AutopilotDenied => "autopilot_denied",
             Self::BugAlreadySatisfied => "bug_already_satisfied",
@@ -253,6 +261,8 @@ impl Kind {
             | Self::Ambiguous
             | Self::Revise
             | Self::Yours
+            | Self::GateBlocked
+            | Self::HookUntrusted
             | Self::Stuck
             | Self::Commit => Group::BlockedOnYou,
             Self::Unverified
@@ -283,7 +293,7 @@ impl Kind {
 
     /// Every recorded name, the most urgent first.
     #[must_use]
-    pub fn names() -> [&'static str; 23] {
+    pub fn names() -> [&'static str; 25] {
         Self::ALL.map(Self::as_str)
     }
 }
@@ -317,7 +327,13 @@ mod tests {
                 !n.starts_with("bug_")
                     && !matches!(
                         *n,
-                        "ambiguous" | "autopilot_denied" | "unverified" | "yours" | "promote"
+                        "ambiguous"
+                            | "autopilot_denied"
+                            | "unverified"
+                            | "yours"
+                            | "promote"
+                            | "gate_blocked"
+                            | "hook_untrusted"
                     )
             })
             .collect();

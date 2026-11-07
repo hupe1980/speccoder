@@ -134,6 +134,7 @@ const fn outcome_code(outcome: &Outcome) -> Option<&'static str> {
         Outcome::SuspectedGaming { .. } => "SUSPECTED-GAMING",
         Outcome::TestsOverStrict { .. } => "TESTS-OVER-STRICT",
         Outcome::AcceptanceWeak { .. } => "ACCEPTANCE-WEAK",
+        Outcome::BlockedByGate { .. } => "HOOK-BLOCKED",
         Outcome::NotDemonstrated { .. } => "NOT-DEMONSTRATED",
         Outcome::RunFailed { .. } => "RUN-FAILED",
         Outcome::Interrupted { .. } => "INTERRUPTED",
@@ -156,6 +157,7 @@ fn outcome_task(outcome: &Outcome) -> Option<String> {
         | Outcome::SuspectedGaming { task }
         | Outcome::TestsOverStrict { task }
         | Outcome::AcceptanceWeak { task }
+        | Outcome::BlockedByGate { task, .. }
         | Outcome::NotDemonstrated { task }
         | Outcome::Interrupted { task }
         | Outcome::TaskPassed { task, .. } => Some(task.clone()),
@@ -300,6 +302,12 @@ fn of_run(status: CommandStatus, r: &RunReport) -> Outcome {
         _ if suspected => Outcome::SuspectedGaming { task },
         (_, "over_strict") => Outcome::TestsOverStrict { task },
         (_, "acceptance_weak") => Outcome::AcceptanceWeak { task },
+        (_, "blocked_by_gate") => Outcome::BlockedByGate {
+            task,
+            gate: speccoder_core::hooks::first_block(&r.gates)
+                .map(|g| g.name.clone())
+                .unwrap_or_default(),
+        },
         (_, "needs_approval") => Outcome::NeedsApproval { task },
         (_, "blocked") => Outcome::Blocked { task },
         (_, "incomplete") => Outcome::Incomplete { task },

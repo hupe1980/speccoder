@@ -262,6 +262,7 @@ fn a_held_ruling_and_a_suspected_shortcut_are_their_own_decisions() {
             usage: None,
             story_open: &[],
             own_test: None,
+            extra: "",
         },
     )
     .unwrap();

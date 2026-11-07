@@ -115,6 +115,18 @@ pub enum Runnable {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         asked: Option<String>,
     },
+    /// Trust a hook as it was shown: refused when its bytes changed since.
+    HookTrust {
+        /// The hook.
+        name: String,
+        /// The digest the person saw.
+        digest: String,
+    },
+    /// Run a gate alone on the checkout, or send an observer a sample event.
+    HookTest {
+        /// The hook.
+        name: String,
+    },
     /// Commit the changes set aside before the task's run onto the
     /// feature's branch, as the person's own.
     KeepSetAside {
@@ -580,6 +592,10 @@ pub enum ActionKind {
     IssueComment,
     /// [`Runnable::QuickChange`].
     QuickChange,
+    /// [`Runnable::HookTrust`].
+    HookTrust,
+    /// [`Runnable::HookTest`].
+    HookTest,
     /// [`Runnable::KeepSetAside`].
     KeepSetAside,
     /// [`Runnable::DropSetAside`].
@@ -667,6 +683,8 @@ impl ActionKind {
         Self::Review,
         Self::IssueComment,
         Self::QuickChange,
+        Self::HookTrust,
+        Self::HookTest,
         Self::KeepSetAside,
         Self::DropSetAside,
         Self::FixSetup,
@@ -722,6 +740,8 @@ impl ActionKind {
             Self::Review => "review",
             Self::IssueComment => "issue_comment",
             Self::QuickChange => "quick_change",
+            Self::HookTrust => "hook_trust",
+            Self::HookTest => "hook_test",
             Self::KeepSetAside => "keep_set_aside",
             Self::DropSetAside => "drop_set_aside",
             Self::FixSetup => "fix_setup",
@@ -811,6 +831,13 @@ impl ActionKind {
                 checks: Vec::new(),
                 run: false,
                 asked: None,
+            },
+            Self::HookTrust => Runnable::HookTrust {
+                name: "licence".to_owned(),
+                digest: "sha256:00".to_owned(),
+            },
+            Self::HookTest => Runnable::HookTest {
+                name: "licence".to_owned(),
             },
             Self::KeepSetAside => Runnable::KeepSetAside { task: task() },
             Self::DropSetAside => Runnable::DropSetAside { task: task() },
@@ -972,6 +999,8 @@ impl Runnable {
             Self::Review { .. } => ActionKind::Review,
             Self::IssueComment { .. } => ActionKind::IssueComment,
             Self::QuickChange { .. } => ActionKind::QuickChange,
+            Self::HookTrust { .. } => ActionKind::HookTrust,
+            Self::HookTest { .. } => ActionKind::HookTest,
             Self::KeepSetAside { .. } => ActionKind::KeepSetAside,
             Self::DropSetAside { .. } => ActionKind::DropSetAside,
             Self::FixSetup => ActionKind::FixSetup,
@@ -1062,6 +1091,7 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         Runnable::ExploreChoose { session, .. } => Some(session.clone()),
         Runnable::OracleTests { req, .. } => Some(req.clone()),
         Runnable::CheckStory { story } => Some(story.clone()),
+        Runnable::HookTrust { name, .. } | Runnable::HookTest { name } => Some(name.clone()),
         Runnable::AcceptUntestable { scenario } => Some(scenario.clone()),
         Runnable::ApproveAndRun { mode, .. } => Some(mode.as_str().to_owned()),
         Runnable::Comment { id, .. } => id.clone(),

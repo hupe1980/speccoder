@@ -275,6 +275,7 @@ mod tests {
     fn task(id: &str, state: &str, title: &str) -> TaskStatus {
         TaskStatus {
             judged: None,
+            gates: Vec::new(),
             lane: speccoder_core::lane::Lane::default(),
             id: id.to_owned(),
             title: title.to_owned(),

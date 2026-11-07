@@ -488,6 +488,13 @@ async fn documents(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Js
     )
 }
 
+/// `hooks`: every hook, its trust and its recent runs.
+async fn hooks(State(s): State<Shared>) -> Json<Value> {
+    let root = s.root.get();
+    let r = off(move || speccoder_runtime::service::hooks::list(&root)).await;
+    envelope(&s, &r)
+}
+
 async fn doctor(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.get();
     let r = off(move || speccoder_runtime::service::doctor::run(&root, q.feature.as_deref(), None))
@@ -1316,6 +1323,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/diff", get(diff))
         .route("/api/documents", get(documents))
         .route("/api/doctor", get(doctor))
+        .route("/api/hooks", get(hooks))
         .route("/api/agents", get(agents))
         .route("/api/job", get(job))
         .route("/api/live", get(live))

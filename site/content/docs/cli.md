@@ -23,6 +23,7 @@ Every command takes:
 | `--color auto\|always\|never`, `--ascii`, `--screen-reader` | How output looks; also [your settings](@/docs/configuration.md#your-settings) |
 | `--plain` | Lines instead of the dashboard: `run` prints its progress, bare `speccoder` the report |
 | `--format speckit\|openspec\|kiro` | The spec format (also `SPECCODER_FORMAT`; default: `[spec] format`, else detected) |
+| `--trust-hook NAME=DIGEST` | Trust a [hook](@/docs/hooks.md#trust) for this command when its digest is still this one (CI); repeatable |
 | `--copy` | When the command fails, put what went wrong on the clipboard (`pbcopy`, `wl-copy` or `xclip`): the code and message, each fix, the docs link, the version, the OS and the run — secrets masked; the exit code is the command's |
 
 Every stop and finish ends with a `Next:` block of commands to copy (`next` in JSON). Every failure and stop names a [code](@/docs/codes.md): `error[CODE]`, `stopped[CODE]` when the run waits for you, `warning[CODE]` when it worked with less evidence.
@@ -114,6 +115,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 
 | Command | What it does |
 |---|---|
+| `speccoder hooks [trust [NAME] \| test NAME \| deliver]` | Your [hooks](@/docs/hooks.md): each one's trust, what it guards or hears, its last runs; trust one after seeing what it runs; run a gate alone or send an observer a sample; deliver what waits for the observers |
 | `speccoder auth [login [--with-token] \| status \| logout] [--host H]` | Sign in to GitHub (a device code, or a token on stdin), show the account, sign out ([GitHub](@/docs/github.md#sign-in)) |
 | `speccoder suggest TEXT…` | The rung a description suggests — bug fix, quick change, feature or a question — and the cue that decided it (payload `rung_suggestion`); no model |
 | `speccoder preset add [--yes]` | Install or update the [speccoder Spec Kit preset](@/docs/planning.md#the-speccoder-preset) with `specify preset add --dev` |
@@ -193,9 +195,10 @@ With `--events` stdout carries only JSON Lines; stderr stays quiet (an approval 
 | `oracle.frozen`, `oracle.lapsed` | A requirement's tests were frozen by an approval, or lapsed with its wording |
 | `ladder.offered` | A quick change or bug fix that grew is offered as a spec: its unit, task and the signals that hold |
 | `unit.promoted` | A unit was promoted from a quick change or bug fix: ids and digests, never the words |
+| `task.ticked`, `task.stopped` | A tick was committed, or an attempt saved without one: what [observers](@/docs/hooks.md#observers-and-events) hear |
 | `result` | Last line, exactly once |
 
-Record events (`bug.recorded`, `bug.confirmed`, `bug.confirm_rejected`, `bug.outcome`, `oracle.frozen`, `oracle.lapsed`, `unit.promoted`) have published schemas under `events/` (e.g. [`events/bug.outcome.json`](https://hupe1980.github.io/speccoder/schemas/v2/events/bug.outcome.json)).
+Record events (`bug.recorded`, `bug.confirmed`, `bug.confirm_rejected`, `bug.outcome`, `oracle.frozen`, `oracle.lapsed`, `unit.promoted`, `task.ticked`, `task.stopped`) have published schemas under `events/` (e.g. [`events/bug.outcome.json`](https://hupe1980.github.io/speccoder/schemas/v2/events/bug.outcome.json)).
 
 `seq` rises by one per line, so a gap means a lost line; a stream without `result` was interrupted. If the reader goes away, speccoder stops writing and finishes the command. `--events` with `--json` is a usage error (`USAGE-CONFLICT`).
 

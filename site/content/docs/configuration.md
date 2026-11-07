@@ -246,6 +246,22 @@ Who makes the attempts; see [external agents](@/docs/integrations.md#external-ag
 
 Server names are lowercase letters, digits and `-`, and not `fs`, `proc` or `git`. Their tools appear to the model as `mcp__<server>__<tool>`.
 
+## `[hooks.<name>]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `at` | — | A gate: `"tick"` (before every tick) or `"pr"` (before a pull request is pushed) |
+| `on` | — | An observer: `["task.ticked", "task.stopped"]` or `["*"]` |
+| `argv` | — | The command; a gate passes only on exit 0, an observer gets the event on stdin |
+| `url` | — | An observer's webhook: https, plain http only to localhost |
+| `secret_env` | — | The variable holding the webhook's signing key (Standard Webhooks) |
+| `timeout` | `60` gate, `10` observer | Seconds, at most 600 |
+| `env` | `[]` | Variables passed through, by name |
+| `network` | `false` | Whether a gate may reach the network |
+| `files` | `[]` | More files it depends on, such as its configuration: trusted with it, never written by the model |
+
+A table has `at` or `on`, not both. Nothing runs until you trust it (`speccoder hooks trust`); see [Hooks](@/docs/hooks.md).
+
 ## Your settings
 
 How speccoder looks and notifies you is your setting, not the project's. It lives in `$XDG_CONFIG_HOME/speccoder/config.toml` (else `~/.config/speccoder/config.toml`); a `[ui]` table in `speccoder.toml` is refused (exit 13).

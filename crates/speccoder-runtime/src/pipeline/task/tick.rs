@@ -55,6 +55,7 @@ pub(super) fn finish(
         sandbox_config,
         planning,
         policy,
+        runner,
         ..
     } = o;
     let (format, live) = (*format, Arc::clone(live));
@@ -116,7 +117,30 @@ pub(super) fn finish(
         attempt_status = e.code.to_lowercase().replace('-', "_");
         report.attempt_status.clone_from(&attempt_status);
     }
-    let passed = verdict_passed && !suspected && in_place_stop.is_none();
+    // 8. The person's gates (spec 095): only a clean exit 0 of each lets the
+    //    tick through; a block keeps the verdict on the saved attempt.
+    report.gates = if verdict_passed && !suspected && in_place_stop.is_none() {
+        crate::hooks::gate::run(
+            project,
+            runner,
+            state,
+            crate::hooks::gate::Facts {
+                point: speccoder_core::hooks::Point::Tick,
+                feature: feature_name,
+                task: Some(task),
+                branch: None,
+            },
+        )
+    } else {
+        Vec::new()
+    };
+    let gate_block = speccoder_core::hooks::first_block(&report.gates).cloned();
+    if let Some(g) = &gate_block {
+        report.reason = Some(g.blocked_line());
+        attempt_status = "blocked_by_gate".to_owned();
+        report.attempt_status.clone_from(&attempt_status);
+    }
+    let passed = verdict_passed && !suspected && in_place_stop.is_none() && gate_block.is_none();
     // 8a. Why a regression-only tick is one: decided by code from the run's
     //     facts; already-passing tests are searched for the tick that made
     //     them pass (never changing the verdict, never a model call).
@@ -207,7 +231,8 @@ pub(super) fn finish(
                 // A set frozen at review: the one pre-frozen trailer form.
                 .or_else(|| review_frozen.as_ref().map(|(r, m)| r.trailer(m)))
                 .unwrap_or_default()
-                + &ruling_trailers(&ruled),
+                + &ruling_trailers(&ruled)
+                + &gate_trailers(&report.gates),
         });
         match &options.session {
             // Worktree: tick, then commit the tick with the evidence.
@@ -238,6 +263,14 @@ pub(super) fn finish(
                     report.integrity.extend(done.problems);
                 }
             }
+        }
+        // The tick is in git: the stream (and observers) hear it.
+        if let Some(t) = report
+            .commit
+            .as_deref()
+            .and_then(|c| crate::hooks::events::ticked(&crate::git::Git::at(wt_root), c))
+        {
+            live.event(&progress::Event::TaskTicked(Box::new(t)));
         }
         report.instructions = attempt_instructions
             .iter()
@@ -456,6 +489,14 @@ pub(super) fn finish(
     //    undone: the next attempt starts where this one did.
     if !passed && attempt_status != "over_strict" && attempt_status != "repro_weak" {
         let (outcome, reason) = saved_outcome(&report, &attempt_status, suspected);
+        // A gate's own words stay in speccoder's state (its recent runs),
+        // out of git, where a later attempt's model could read them.
+        let reason = match &gate_block {
+            Some(g) if g.code.as_deref() != Some("HOOK-UNTRUSTED") => {
+                format!("Blocked by {}", g.name)
+            }
+            _ => reason,
+        };
         let run = (!report.run_id.is_empty()).then_some(report.run_id.as_str());
         let reason = redact(&reason, secret);
         // The story's last task stopped with scenarios red: each can be
@@ -501,6 +542,17 @@ pub(super) fn finish(
             .or_else(|| own_failed.then(|| own_files.first().cloned()).flatten());
         // Everything the attempt cost, as a tick would count it.
         let spent = super::commit::all_usage(&report);
+        // A gate's block: which gates stood, and the verdict it kept from a tick.
+        let gate_extra = if gate_block.is_some() {
+            let earned = report
+                .verdict
+                .as_ref()
+                .map(super::outcome::verdict_word)
+                .unwrap_or_default();
+            format!("{}Earned-Verdict: {earned}\n", gate_trailers(&report.gates))
+        } else {
+            String::new()
+        };
         let record = attempts::Record {
             run,
             outcome: &outcome,
@@ -509,12 +561,22 @@ pub(super) fn finish(
             usage: spent.as_ref(),
             story_open: &story_open,
             own_test: own_test.as_deref(),
+            extra: &gate_extra,
         };
         conflict.clone_from(&own_test);
         match attempts::save(wt_root, tmp, feature_name, task, &record)
             .and_then(|saved| worktree::restore(wt_root, tmp, start).map(|_| saved))
         {
-            Ok(saved) => report.saved_attempt = Some(saved.reference),
+            Ok(saved) => {
+                if let Some(t) = crate::hooks::events::stopped(
+                    &crate::git::Git::at(wt_root),
+                    &saved.reference,
+                    &saved.commit,
+                ) {
+                    live.event(&progress::Event::TaskStopped(Box::new(t)));
+                }
+                report.saved_attempt = Some(saved.reference);
+            }
             Err(e) => report
                 .integrity
                 .push(format!("saving the attempt failed: {}", e.0)),
@@ -592,13 +654,23 @@ pub(super) fn finish(
         live.event(e);
     }
     // The story's last task left scenarios red: named, with a ruling each.
-    let code = collection_code(&report, &attempt_status).or_else(|| {
-        matches!(
-            report.progress,
-            Some(speccoder_core::story::Progress::StoryOpen { .. })
-        )
-        .then_some("STORY-OPEN")
-    });
+    let code = gate_block
+        .as_ref()
+        .map(|g| {
+            if g.code.as_deref() == Some("HOOK-UNTRUSTED") {
+                "HOOK-UNTRUSTED"
+            } else {
+                "HOOK-BLOCKED"
+            }
+        })
+        .or_else(|| collection_code(&report, &attempt_status))
+        .or_else(|| {
+            matches!(
+                report.progress,
+                Some(speccoder_core::story::Progress::StoryOpen { .. })
+            )
+            .then_some("STORY-OPEN")
+        });
     // A red scenario whose frozen test can never pass, and why.
     let never: Vec<(String, &str)> = match &report.progress {
         Some(
@@ -665,6 +737,19 @@ pub(super) fn finish(
         },
     };
     let result = CommandResult::new("run", status, &redact(&message, secret));
+    // A gate's block: what to fix, then the way back to a tick.
+    let story_open_fix = match &gate_block {
+        Some(g) if g.code.as_deref() == Some("HOOK-UNTRUSTED") => vec![
+            format!("speccoder hooks trust {}", g.name),
+            format!("speccoder run --task {task}"),
+        ],
+        Some(g) => vec![
+            format!("→ fix what {} names, then run the task again", g.name),
+            format!("speccoder run --task {task}"),
+            format!("speccoder hooks test {}", g.name),
+        ],
+        None => story_open_fix,
+    };
     let result = if story_open_fix.is_empty() {
         result
     } else {
@@ -675,4 +760,12 @@ pub(super) fn finish(
         None => refusal(result),
     }
     .with_data(CommandData::Run(Box::new(report)))
+}
+
+/// `Gate: <name> <outcome>` for each gate that stood at the tick.
+fn gate_trailers(gates: &[speccoder_core::hooks::GateRecord]) -> String {
+    gates
+        .iter()
+        .map(|g| format!("Gate: {} {}\n", g.name, g.outcome.as_str()))
+        .collect()
 }

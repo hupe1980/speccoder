@@ -35,6 +35,22 @@ pub mod progress {
     pub use crate::progress::{Event, Progress, read_live};
 }
 
+/// The project's hooks: the list (trust and test go through actions).
+pub mod hooks {
+    /// Every hook of the project at `root`, its trust and its recent runs.
+    #[must_use]
+    pub fn list(root: &std::path::Path) -> speccoder_core::CommandResult {
+        match crate::worktree::state_dir() {
+            Some(state) => crate::hooks::report::list(root, &state),
+            None => speccoder_core::CommandResult::new(
+                "hooks",
+                speccoder_core::CommandStatus::ConfigError,
+                "no state directory",
+            ),
+        }
+    }
+}
+
 /// Read views.
 pub mod status {
     pub use crate::status::report;

@@ -261,6 +261,13 @@
             }
           ]
         },
+        "gates": {
+          "description": "The gates a done task's tick passed (spec 095).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GateMark"
+          }
+        },
         "set_aside": {
           "description": "Changes found in the worktree when the task's run started (a person's\nedits, or an interrupted run's leftovers), saved and set aside.",
           "anyOf": [
@@ -469,6 +476,44 @@
           "required": [
             "kind"
           ]
+        }
+      ]
+    },
+    "GateMark": {
+      "description": "A gate's mark on an event: its name and how it ended.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The hook's name.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "How it ended.",
+          "$ref": "#/$defs/GateState"
+        }
+      },
+      "required": [
+        "name",
+        "outcome"
+      ]
+    },
+    "GateState": {
+      "description": "How one gate ended at its point.",
+      "oneOf": [
+        {
+          "description": "It exited 0.",
+          "type": "string",
+          "const": "passed"
+        },
+        {
+          "description": "It stopped the point.",
+          "type": "string",
+          "const": "blocked"
+        },
+        {
+          "description": "An earlier gate at the point blocked first.",
+          "type": "string",
+          "const": "not_run"
         }
       ]
     },

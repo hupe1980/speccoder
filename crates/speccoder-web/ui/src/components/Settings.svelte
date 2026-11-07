@@ -11,9 +11,17 @@
   import Icon from "./Icon.svelte";
   import Diff from "./Diff.svelte";
   import Agents from "./Agents.svelte";
+  import Hooks from "./Hooks.svelte";
 
   let report = $state<ConfigReport | null>(null);
   let pick = $state("model");
+  // A step that names a section opens it (`speccoder hooks`).
+  $effect(() => {
+    if (app.settingsSection) {
+      pick = app.settingsSection;
+      app.settingsSection = null;
+    }
+  });
   // Opened at a section from elsewhere (an agent that decides alone).
   $effect(() => {
     if (app.settingsPick) {
@@ -40,6 +48,7 @@
     acceptance: ["seal", "#34c759"], converge: ["loop", "#5856d6"], monitor: ["shield", "#ff2d55"], git: ["branch", "#ff3b30"],
     format: ["sparkle", "#af52de"], sandbox: ["lock", "#636366"], attest: ["signature", "#bf5af2"], mutation: ["exclaim", "#ff9500"],
     executor: ["play", "#0a84ff"], mcp: ["grid", "#30b0c7"], worktree: ["copy", "#5ac8fa"], ask: ["bubble", "#bf5af2"],
+    hooks: ["shield", "#ff9f0a"],
   };
   const section = $derived(report?.sections.find((s) => s.name === pick) ?? null);
   const dirty = $derived(Object.keys(draft).length);
@@ -54,6 +63,17 @@
     path === `model.${k.key}` && (bedrock ? SERVER_KEYS.includes(k.key) : k.key === "region");
   // One still in the file stays, with its reset to remove it: Save refuses
   // the file while it is there.
+  // A hook is a gate (`at`) or an observer (`on`): only its own keys show.
+  const GATE_ONLY = ["at", "network"];
+  const OBSERVER_ONLY = ["on", "url", "secret_env"];
+  const tableKeys = (s: ConfigSection, table: string, keys: ConfigKey[]) => {
+    if (s.name !== "hooks") return keys;
+    const set = (key: string) => current(`hooks.${table}.${key}`, keys.find((k) => k.key === key)!) !== undefined;
+    const gate = set("at");
+    const observer = set("on");
+    if (gate === observer) return keys;
+    return keys.filter((k) => !(gate ? OBSERVER_ONLY : GATE_ONLY).includes(k.key));
+  };
   const shown = (s: ConfigSection) =>
     s.name !== "model" ? s.keys : s.keys.filter((k) => !inapplicable(`model.${k.key}`, k) || current(`model.${k.key}`, k) !== undefined);
   const required = (path: string, k: ConfigKey) => (k.required || (bedrock && path === "model.region")) && !inapplicable(path, k);
@@ -361,6 +381,10 @@
         <span class="badge big" style="--c:{icons[section.name]?.[1] ?? '#8e8e93'}"><Icon name={icons[section.name]?.[0] ?? "gear"} size={20} weight={2} /></span>
         <div><h2>{section.title}</h2><p>{section.about}</p></div>
       </header>
+      {#if section.name === "hooks"}
+        <Hooks />
+        <h3 class="sub">Definitions</h3>
+      {/if}
       {#if section.named}
         {#each section.tables as t (t.name)}
           <h3 class="section-title">
@@ -368,7 +392,7 @@
             <button class="btn small ghost" onclick={() => removeTable(section, t.name)}>Remove</button>
           </h3>
           <div class="grouped">
-            {#each t.keys as k (k.key)}{@render row(`${section.name}.${t.name}.${k.key}`, k)}{/each}
+            {#each tableKeys(section, t.name, t.keys) as k (k.key)}{@render row(`${section.name}.${t.name}.${k.key}`, k)}{/each}
           </div>
         {/each}
         {#each Object.keys(draft).filter((p) => p.startsWith(section.name + ".") && !section.tables.some((t) => p.startsWith(`${section.name}.${t.name}.`))).map((p) => p.split(".")[1]).filter((n, i, a) => a.indexOf(n) === i) as fresh (fresh)}

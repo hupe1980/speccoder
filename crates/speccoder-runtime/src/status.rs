@@ -33,6 +33,29 @@ struct Evidence {
     strength: String,
     /// `Regression-Only:`.
     regression: String,
+    /// `Gate: <name> <outcome>` lines.
+    gates: Vec<speccoder_core::hooks::GateMark>,
+}
+
+/// The `Gate:` trailers of a tick's message.
+fn gate_marks(body: &str) -> Vec<speccoder_core::hooks::GateMark> {
+    use speccoder_core::hooks::{GateMark, GateState};
+    body.lines()
+        .filter_map(|l| l.strip_prefix("Gate: "))
+        .filter_map(|v| {
+            let (name, outcome) = v.trim().rsplit_once(' ')?;
+            let outcome = match outcome {
+                "passed" => GateState::Passed,
+                "blocked" => GateState::Blocked,
+                "not_run" => GateState::NotRun,
+                _ => return None,
+            };
+            Some(GateMark {
+                name: name.to_owned(),
+                outcome,
+            })
+        })
+        .collect()
 }
 
 /// Reads the trailers speccoder writes (`Spec-Task`, `Verdict`, `Run`) and
@@ -69,6 +92,7 @@ fn read_log(log: &str, feature: &str) -> (BTreeMap<String, Evidence>, Vec<Conver
                 intent: intent.trim().trim_start_matches("sha256:").to_owned(),
                 strength: strength.trim().to_owned(),
                 regression: regression.trim().to_owned(),
+                gates: gate_marks(body),
             };
             // A fixed bug's verdict is the evidence of each task it closed.
             for closed in body
@@ -182,6 +206,10 @@ fn statuses(
                         own_test: a.own_test.clone(),
                     }),
                 judged: None,
+                gates: found
+                    .filter(|_| t.done)
+                    .map(|e| e.gates.clone())
+                    .unwrap_or_default(),
                 set_aside: None,
                 bug: None,
                 regression: found
@@ -845,6 +873,7 @@ mod tests {
             run_id: None,
             last_attempt: None,
             judged: None,
+            gates: Vec::new(),
             set_aside: None,
             bug: None,
             regression: None,

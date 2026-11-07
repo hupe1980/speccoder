@@ -609,6 +609,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::SampleChecks
             | K::DeclinePromotion
             | K::Explore
+            | K::HookTrust
+            | K::HookTest
             | K::ExploreChoose => Offer::Take,
             K::Command => Offer::Refuse,
         },
@@ -661,6 +663,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::DeclinePromotion
             | K::Explore
             | K::ExploreChoose
+            | K::HookTrust
+            | K::HookTest
             | K::Command => Offer::Refuse,
         },
         // What a proposal may be: a quick change, a bug fix, a nudge, an
@@ -710,6 +714,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::DeclinePromotion
             | K::Explore
             | K::ExploreChoose
+            | K::HookTrust
+            | K::HookTest
             | K::Command => Offer::Refuse,
         },
         // Its keys decide the queue's calls and switch the feature; `n`
@@ -759,6 +765,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::DeclinePromotion
             | K::Explore
             | K::ExploreChoose
+            | K::HookTrust
+            | K::HookTest
             | K::Command => Offer::Refuse,
         },
         Interface::CliRemedy | Interface::AcpRemedy => match kind {
@@ -810,6 +818,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::DeclinePromotion
             | K::Explore
             | K::ExploreChoose
+            | K::HookTrust
+            | K::HookTest
             | K::Command => Offer::Refuse,
         },
     }
@@ -1042,6 +1052,14 @@ pub fn perform_in(
             options,
             asked.as_deref().zip(state),
         ),
+        Runnable::HookTrust { name, digest } => match state {
+            Some(s) => crate::hooks::report::trust_shown(root, s, name, digest, via.as_str()),
+            None => no_state(),
+        },
+        Runnable::HookTest { name } => match state {
+            Some(s) => crate::hooks::report::test(root, s, name),
+            None => no_state(),
+        },
         Runnable::KeepSetAside { task } => crate::controls::restore(root, feature, task),
         Runnable::DropSetAside { task } => crate::controls::drop_set_aside(root, feature, task),
         Runnable::FixSetup => crate::code::fix_setup(root, feature),

@@ -6,9 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Hooks**: your own commands around a run, declared as
+  `[hooks.<name>]` in `speccoder.toml`
+  ([Hooks](https://hupe1980.github.io/speccoder/docs/hooks/)).
+  - A **gate** (`at = "tick"` or `"pr"`) stops a tick or a pull request
+    unless it exits 0. A crash, a timeout or a changed file blocks too.
+    It runs in the checks' sandbox, and its words reach you, never the
+    model.
+  - An **observer** (`on = [...]`) hears `task.ticked` and
+    `task.stopped` as CloudEvents, at least once, read back from git: a
+    signed webhook (Standard Webhooks) or a command with the event on
+    stdin.
+  - A hook runs only after you trusted its exact bytes
+    (`speccoder hooks trust`; `--trust-hook name=digest` in CI).
+  - `speccoder hooks` lists, trusts, tests and delivers them; Settings ›
+    Hooks shows them with **Trust…** and **Test**.
+  - Needs You shows a blocked tick, or a gate that waits for your trust.
+  - `--events` carries `task.ticked` and `task.stopped`.
+
 ### Changed
 
 - Built on agentplane 0.60.0.
+- Accepting a task by hand passes the tick gates like any tick.
 
 ## [0.13.0] - 2026-11-06
 

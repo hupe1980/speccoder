@@ -403,6 +403,13 @@ fn human_body(
             }
             writeln!(out, "{}", result.message())
         }
+        (CommandStatus::Ok, Some(CommandData::Hooks(r))) => {
+            let look = crate::style::out();
+            for line in crate::human::hooks(r, &look) {
+                writeln!(out, "{line}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (_, Some(CommandData::Inbox(r))) => {
             let look = crate::style::out();
             for line in crate::human::inbox(r, &look) {
@@ -570,6 +577,7 @@ mod look_tests {
     fn task(id: &str, state: &str, title: &str) -> TaskStatus {
         TaskStatus {
             judged: None,
+            gates: Vec::new(),
             lane: speccoder_core::lane::Lane::default(),
             id: id.to_owned(),
             title: title.to_owned(),

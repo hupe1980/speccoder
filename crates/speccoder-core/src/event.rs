@@ -88,6 +88,8 @@ pub const REGISTRY: &[Name] = &[
     p("ask.step"),
     p("ask.text"),
     p("ask.done"),
+    d("task.ticked"),
+    d("task.stopped"),
 ];
 
 /// The registered name `name`.

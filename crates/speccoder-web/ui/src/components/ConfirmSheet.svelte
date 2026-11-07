@@ -4,7 +4,7 @@
   // the commands, the title and the body.
   import { app } from "../lib/app.svelte";
   import { get, q } from "../lib/api";
-  import type { Reply } from "../lib/types";
+  import type { HookEntry, HooksReport, Reply } from "../lib/types";
   import Icon from "./Icon.svelte";
 
   const a = $derived(app.confirming!.action);
@@ -15,6 +15,14 @@
     if (a.run?.kind !== "pull_request") return;
     void get<Reply<Preview>>(`/api/pr/preview${q({ feature: app.feature ?? undefined })}`).then((p) => (preview = p));
   });
+  // Trusting a hook: exactly what it runs, and for a changed one what it was.
+  let hook = $state<HookEntry | null | undefined>(undefined);
+  $effect(() => {
+    const r = a.run;
+    if (r?.kind !== "hook_trust") return;
+    void get<Reply<HooksReport>>("/api/hooks").then((h) => (hook = h.data?.hooks.find((x) => x.name === r.name) ?? null));
+  });
+  const stale = $derived(a.run?.kind === "hook_trust" && hook && hook.digest !== a.run.digest);
   const blocked = $derived(preview && preview.status !== "ok" ? preview.message : null);
   const go = () => app.perform(a, undefined, true);
   function key(e: KeyboardEvent) {
@@ -27,7 +35,7 @@
 <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && (app.confirming = null)}>
   <div class="sheet glass" role="alertdialog" aria-modal="true" aria-labelledby="c-title" aria-describedby="c-what">
     <header>
-      <span class="badge" aria-hidden="true"><Icon name="arrowup" size={20} weight={2.2} /></span>
+      <span class="badge" aria-hidden="true"><Icon name={a.run?.kind === "hook_trust" ? "shield" : "arrowup"} size={20} weight={2.2} /></span>
       <div>
         <h2 id="c-title">{a.label.charAt(0).toUpperCase() + a.label.slice(1)}?</h2>
         <p id="c-what">{a.confirm}</p>
@@ -49,12 +57,31 @@
         {#if showBody}<pre class="body">{preview.data.body}</pre>{/if}
       {/if}
     {/if}
+    {#if a.run?.kind === "hook_trust"}
+      {#if hook === undefined}
+        <div class="center"><span class="spinner"></span></div>
+      {:else if !hook}
+        <p class="bad"><Icon name="exclaim" size={14} /> The hook is no longer in speccoder.toml.</p>
+      {:else}
+        {#if hook.trusted_definition}
+          <p class="small">It changed. Trusted before:</p>
+          <pre class="body was">{hook.trusted_definition}</pre>
+          <p class="small">Now:</p>
+        {/if}
+        <pre class="body">{hook.definition}</pre>
+        {#if hook.files.length || hook.outside?.length}<ul class="cmds mono">
+          {#each hook.files as f (f.path)}<li>runs {f.path} <span class="muted">{f.digest.slice(0, 19)}…</span></li>{/each}
+          {#each hook.outside ?? [] as p (p)}<li>runs {p} <span class="muted">(outside the repository: not digested)</span></li>{/each}
+        </ul>{/if}
+        {#if stale}<p class="bad"><Icon name="exclaim" size={14} /> It changed since this was offered: what you see above is what would be trusted — open it again.</p>{/if}
+      {/if}
+    {/if}
     <p class="cli mono">$ {a.command}</p>
     <div class="row">
       <button class="btn" onclick={() => (app.confirming = null)}>Cancel</button>
       <!-- svelte-ignore a11y_autofocus -->
-      <button class="btn primary" autofocus disabled={(a.run?.kind === "pull_request" && (!preview || !!blocked)) || !!app.job?.running} onclick={go}>
-        {a.run?.kind === "pull_request" ? "Push and Open Draft" : "Continue"}
+      <button class="btn primary" autofocus disabled={(a.run?.kind === "pull_request" && (!preview || !!blocked)) || (a.run?.kind === "hook_trust" && (!hook || !!stale)) || !!app.job?.running} onclick={go}>
+        {a.run?.kind === "pull_request" ? "Push and Open Draft" : a.run?.kind === "hook_trust" ? "Trust" : "Continue"}
       </button>
     </div>
   </div>
@@ -80,4 +107,5 @@
   .center { display: grid; place-items: center; padding: 1.5rem; }
   .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--fill-2); border-top-color: var(--muted); animation: spin 800ms linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .was { opacity: 0.6; text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); }
 </style>

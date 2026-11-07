@@ -200,6 +200,8 @@ pub struct Protected {
     judge: GlobSet,
     context: GlobSet,
     manifests: GlobSet,
+    /// The files the project's hooks run: judge files by exact path.
+    hook_files: Vec<String>,
 }
 
 impl Default for Protected {
@@ -219,7 +221,15 @@ impl Protected {
             judge: set(JUDGE),
             context: set(CONTEXT),
             manifests: set(MANIFESTS),
+            hook_files: Vec::new(),
         }
+    }
+
+    /// The same set with the files the project's hooks run as judge files.
+    #[must_use]
+    pub fn with_hook_files(mut self, files: Vec<String>) -> Self {
+        self.hook_files = files;
+        self
     }
 
     /// The format's rules this set was built from.
@@ -265,7 +275,7 @@ impl Protected {
             Some(Class::Secret)
         } else if self.intent.is_match(rel) {
             Some(Class::Intent)
-        } else if self.judge.is_match(rel) {
+        } else if self.judge.is_match(rel) || self.hook_files.iter().any(|f| f == rel) {
             Some(Class::Judge)
         } else {
             None
@@ -409,6 +419,14 @@ mod tests {
         assert!(normalise("/etc/passwd").is_err());
         assert!(normalise("a/../../b").is_err());
         assert!(normalise("").is_err());
+    }
+
+    #[test]
+    fn a_file_a_hook_runs_is_a_judge_file() {
+        let p = Protected::default().with_hook_files(vec!["scripts/licence.sh".into()]);
+        assert_eq!(p.write_class("scripts/licence.sh"), Some(Class::Judge));
+        assert_eq!(p.write_class("scripts/other.sh"), None);
+        assert!(p.is_judged("scripts/licence.sh"));
     }
 
     #[test]

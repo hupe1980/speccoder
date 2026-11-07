@@ -39,6 +39,11 @@ pub fn judge_config_sha256_as(config: &str, version: &str) -> Result<String, Str
     for k in JUDGE {
         judge.insert((*k).to_owned(), section(k));
     }
+    // The gates decide whether a verdict is ticked; observers do not.
+    let gates = crate::hooks::gate_tables(&table);
+    if !gates.is_null() {
+        judge.insert("hooks".to_owned(), gates);
+    }
     let model = table.get("model");
     let field = |t: Option<&toml::Value>, k: &str| {
         t.and_then(|m| m.get(k))
@@ -79,6 +84,15 @@ mod tests {
         assert_ne!(judge_config_sha256(&other).unwrap(), base);
         let model = CONFIG.replace("model = \"m\"", "model = \"n\"");
         assert_ne!(judge_config_sha256(&model).unwrap(), base);
+    }
+
+    #[test]
+    fn a_gate_changes_the_hash_and_an_observer_does_not() {
+        let base = judge_config_sha256(CONFIG).unwrap();
+        let observed = format!("{CONFIG}\n[hooks.chat]\non = [\"*\"]\nurl = \"https://x.dev/h\"\n");
+        assert_eq!(judge_config_sha256(&observed).unwrap(), base);
+        let gated = format!("{CONFIG}\n[hooks.licence]\nat = \"tick\"\nargv = [\"true\"]\n");
+        assert_ne!(judge_config_sha256(&gated).unwrap(), base);
     }
 
     /// The md2csv example (2026-11-04): ticks of 0.9.7 and 0.9.8 were all

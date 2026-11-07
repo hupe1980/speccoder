@@ -499,6 +499,7 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
             "absent"
         }
         .to_owned(),
+        gates: Vec::new(),
     };
     if !options.open {
         let mut message =
@@ -529,6 +530,37 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
         return CommandResult::new("pr", CommandStatus::Ok, &message)
             .with_data(CommandData::Pr(Box::new(out)));
     }
+    // The person's gates, before anything leaves the machine (spec 095).
+    // The commit the gates judge is the one pushed: resolved once.
+    let tip = tip.trim().to_owned();
+    let prefix = crate::verify::find_config(path)
+        .and_then(|d| std::fs::canonicalize(d).ok())
+        .zip(std::fs::canonicalize(&repo_root).ok())
+        .and_then(|(d, r)| d.strip_prefix(&r).ok().map(Path::to_path_buf))
+        .unwrap_or_default();
+    out.gates = pr_gates(&repo, &branch, &tip, &prefix, &report.feature);
+    if let Some(g) = speccoder_core::hooks::first_block(&out.gates) {
+        let code = g.code.clone().unwrap_or_else(|| "HOOK-BLOCKED".to_owned());
+        let fix = if code == "HOOK-UNTRUSTED" {
+            vec![format!("speccoder hooks trust {}", g.name)]
+        } else {
+            vec![
+                format!(
+                    "→ fix what {} names on {branch}, then open the pull request again",
+                    g.name
+                ),
+                format!("speccoder hooks test {}", g.name),
+            ]
+        };
+        return CommandResult::new(
+            "pr",
+            CommandStatus::NeedsHuman,
+            &format!("{}; nothing was pushed", g.blocked_line()),
+        )
+        .with_code(&code)
+        .with_fix(fix)
+        .with_data(CommandData::Pr(Box::new(out)));
+    }
     // Nothing leaves the machine unless the pull request can be opened:
     // a GitHub repository the remote names, and someone signed in there.
     let github = match github {
@@ -548,7 +580,12 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
         )
         .with_data(CommandData::Pr(Box::new(out)));
     }
-    if let Err(e) = repo.run(&["push", "--quiet", options.remote, &refspec]) {
+    let pushed = if tip.is_empty() {
+        refspec.clone()
+    } else {
+        format!("{tip}:refs/heads/{branch}")
+    };
+    if let Err(e) = repo.run(&["push", "--quiet", options.remote, &pushed]) {
         return CommandResult::new(
             "pr",
             CommandStatus::GitPrecondition,
@@ -654,6 +691,75 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
         }
         Err(e) => failed(&e, out),
     }
+}
+
+/// The `pr` gates of the project at `prefix`, run in a fresh checkout of
+/// `tip` (the commit the push sends), whatever the worktree holds besides.
+fn pr_gates(
+    repo: &Git,
+    branch: &str,
+    tip: &str,
+    prefix: &Path,
+    feature: &str,
+) -> Vec<speccoder_core::hooks::GateRecord> {
+    use speccoder_core::hooks::{GateRecord, GateState, Point};
+    let blocked = |reason: String| {
+        vec![GateRecord {
+            name: "hooks".to_owned(),
+            point: Point::Pr,
+            outcome: GateState::Blocked,
+            reason: Some(reason),
+            code: Some("HOOK-BLOCKED".to_owned()),
+            duration_ms: 0,
+        }]
+    };
+    // No `pr` gate declared on the branch: nothing to check out.
+    let declared = repo
+        .run(&[
+            "show",
+            &format!(
+                "{tip}:{}",
+                prefix
+                    .join(crate::verify::config::FILE)
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            ),
+        ])
+        .ok()
+        .and_then(|b| String::from_utf8(b).ok())
+        .and_then(|t| crate::hooks::parse(&t).ok())
+        .is_none_or(|h| h.iter().any(|d| d.at() == Some(Point::Pr)));
+    if !declared {
+        return Vec::new();
+    }
+    let Some(state) = crate::worktree::state_dir() else {
+        return blocked("speccoder has no state directory to read trust from".to_owned());
+    };
+    let Ok(tmp) = tempfile::tempdir() else {
+        return blocked("no temporary directory for the gate's checkout".to_owned());
+    };
+    let checkout = tmp.path().join("checkout");
+    let checkout_s = checkout.to_string_lossy().into_owned();
+    if let Err(e) = repo.run(&["worktree", "add", "--quiet", "--detach", &checkout_s, tip]) {
+        return blocked(format!("could not check out {branch}: {}", e.0));
+    }
+    let project = checkout.join(prefix);
+    let gates = match crate::sandbox::runner_at(&project) {
+        Ok((runner, _)) => crate::hooks::gate::run(
+            &project,
+            &runner,
+            &state,
+            crate::hooks::gate::Facts {
+                point: Point::Pr,
+                feature,
+                task: None,
+                branch: Some(branch),
+            },
+        ),
+        Err(e) => blocked(e),
+    };
+    let _ = repo.run(&["worktree", "remove", "--force", &checkout_s]);
+    gates
 }
 
 #[cfg(test)]

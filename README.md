@@ -112,7 +112,7 @@ Then, as you need them:
 3. 🔴 **Red** — before a story's first code task, a separate model call with no tools writes the story's acceptance tests from the spec, through the product, and commits them: its oracle. The implementer cannot change them.
 4. 🛠️ **Attempt** — the model works in the worktree; every call is classified before it runs.
 5. ⚖️ **Judgement** — `verified` when the task turns scenarios of its story red → green and nothing regresses; `regression_only` (with the reason) when it turns none and breaks none; `failed` otherwise. The story's last task must leave every scenario green. A test file the runner never collected fails the verdict. A verified task's tests then meet wrong variants of the change: how many they reject is its acceptance strength.
-6. 🏁 **Outcome** — a verified task is ticked and committed by speccoder. A failed one is retried once with the verifier's facts. Anything else is saved under `refs/speccoder/attempts/…`, undone, and handed to a person.
+6. 🏁 **Outcome** — a verified task is ticked and committed by speccoder, after your own [gates](https://hupe1980.github.io/speccoder/docs/hooks/) exit 0. A failed one is retried once with the verifier's facts. Anything else is saved under `refs/speccoder/attempts/…`, undone, and handed to a person.
 
 🐞 **A bug** (`speccoder bug`) must first be reproduced: one test per expected behaviour that fails by an assertion, confirmed by you. The fix is `verified` only if undoing it makes a reproduction fail again; a bug that cannot be reproduced comes back to you ([bug fixes](https://hupe1980.github.io/speccoder/docs/bugs/)).
 

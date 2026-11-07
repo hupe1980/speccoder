@@ -136,6 +136,7 @@ mod tests {
     fn task(id: &str, state: &str, last: Option<&str>) -> TaskStatus {
         TaskStatus {
             judged: None,
+            gates: Vec::new(),
             lane: speccoder_core::lane::Lane::default(),
             id: id.to_owned(),
             title: "Parse: a, b\nc %".to_owned(),

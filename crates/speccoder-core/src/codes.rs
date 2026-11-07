@@ -409,6 +409,39 @@ pub const CATALOG: &[Entry] = &[
         ["→ fix the line the message names in speccoder.toml, then commit it"]
     ),
     entry!(
+        "HOOK-MISCONFIGURED",
+        E,
+        S::ConfigError,
+        "a hook in speccoder.toml is not valid",
+        "A `[hooks.<name>]` table has an unknown key, both or neither of `at` (a gate) and `on` (an observer), an event no observer can hear, a missing program or signing variable, or plain http to another machine. Nothing runs until it is fixed.",
+        [
+            "→ fix the hook the message names in speccoder.toml",
+            "speccoder hooks"
+        ]
+    ),
+    entry!(
+        "HOOK-UNTRUSTED",
+        P,
+        S::NeedsHuman,
+        "a hook waits for your trust",
+        "A hook runs only after a person trusted its exact bytes: its definition and every script it runs. A new or changed gate blocks its point until then; an untrusted observer is skipped.",
+        [
+            "speccoder hooks trust",
+            "→ in CI: pass --trust-hook <name>=<digest>; speccoder hooks prints it"
+        ]
+    ),
+    entry!(
+        "HOOK-BLOCKED",
+        P,
+        S::NeedsHuman,
+        "a gate blocked this",
+        "A gate passes only when its command exits 0. It exited otherwise, timed out, could not start, or changed a file the tick would commit; its own last line says why. The verdict the task earned is kept on its saved attempt.",
+        [
+            "→ fix what the gate names, then run the task again",
+            "speccoder hooks"
+        ]
+    ),
+    entry!(
         "KEY-MISSING",
         E,
         S::ConfigError,

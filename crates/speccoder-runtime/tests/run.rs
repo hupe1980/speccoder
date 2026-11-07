@@ -2501,6 +2501,8 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
             Event::PlanningStopped { .. } => "planning".to_owned(),
             Event::LadderOffered { .. } => "offered".to_owned(),
             Event::UnitPromoted { .. } => "promoted".to_owned(),
+            Event::TaskTicked(t) => format!("ticked {}", t.task),
+            Event::TaskStopped(t) => format!("stopped {}", t.task),
             Event::Project { .. } => "project".to_owned(),
             Event::AskStep { .. }
             | Event::AskText { .. }
@@ -2530,6 +2532,7 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
             "mutation skipped",
             "monitor skipped",
             "commit started",
+            "ticked T005",
             "commit passed",
             "end regression_only",
         ],

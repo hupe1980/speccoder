@@ -193,6 +193,13 @@
             "null"
           ]
         },
+        "gates": {
+          "description": "The gates that stood at the tick, in name order (spec 095).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GateRecord"
+          }
+        },
         "saved_attempt": {
           "description": "The ref this attempt was saved under when it did not pass; the\nworktree went back to where it started.",
           "type": [
@@ -851,6 +858,85 @@
         "status",
         "failing_tests",
         "excerpt"
+      ]
+    },
+    "GateRecord": {
+      "description": "One gate's run at its point, as a report and the evidence carry it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The hook's name.",
+          "type": "string"
+        },
+        "point": {
+          "description": "Where it stood.",
+          "$ref": "#/$defs/Point"
+        },
+        "outcome": {
+          "description": "How it ended.",
+          "$ref": "#/$defs/GateState"
+        },
+        "reason": {
+          "description": "Why it blocked.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "code": {
+          "description": "`HOOK-BLOCKED`, or `HOOK-UNTRUSTED` for a gate that waits for trust.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "How long it ran.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "name",
+        "point",
+        "outcome",
+        "duration_ms"
+      ]
+    },
+    "Point": {
+      "description": "Where a gate stands.",
+      "oneOf": [
+        {
+          "description": "After the verdict, before the tick commit.",
+          "type": "string",
+          "const": "tick"
+        },
+        {
+          "description": "After the person confirms a pull request, before anything is pushed.",
+          "type": "string",
+          "const": "pr"
+        }
+      ]
+    },
+    "GateState": {
+      "description": "How one gate ended at its point.",
+      "oneOf": [
+        {
+          "description": "It exited 0.",
+          "type": "string",
+          "const": "passed"
+        },
+        {
+          "description": "It stopped the point.",
+          "type": "string",
+          "const": "blocked"
+        },
+        {
+          "description": "An earlier gate at the point blocked first.",
+          "type": "string",
+          "const": "not_run"
+        }
       ]
     },
     "AgentAttempt": {
@@ -3150,6 +3236,47 @@
             "request",
             "checks",
             "run"
+          ]
+        },
+        {
+          "description": "Trust a hook as it was shown: refused when its bytes changed since.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "hook_trust"
+            },
+            "name": {
+              "description": "The hook.",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest the person saw.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "digest"
+          ]
+        },
+        {
+          "description": "Run a gate alone on the checkout, or send an observer a sample event.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "hook_test"
+            },
+            "name": {
+              "description": "The hook.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
           ]
         },
         {

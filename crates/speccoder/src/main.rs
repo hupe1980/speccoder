@@ -1073,7 +1073,20 @@ fn main() {
             pick_feature(path);
         }
     }
+    // `--trust-hook`: trust for this command, for the current digest only.
+    if !cli.trust_hook.is_empty()
+        && matches!(
+            command,
+            Command::Run { .. } | Command::Pr { .. } | Command::Hooks { .. }
+        )
+        && let Some(state) = speccoder_runtime::worktree::state_dir()
+        && let Err(refused) =
+            speccoder_runtime::hooks::report::apply_flags(path, &state, &cli.trust_hook)
+    {
+        finish(&cli, *refused, events.as_ref());
+    }
     let result = match command {
+        Command::Hooks { action } => hooks(path, action.as_ref(), machine),
         Command::Help { topic } => {
             help::print(topic);
             return;
@@ -2569,6 +2582,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Sample { .. } => "sample",
             C::Suggest { .. } => "suggest",
             C::Doctor { .. } => "doctor",
+            C::Hooks { .. } => "hooks",
             C::Fix { .. } => "fix",
             C::Spec { .. } => "spec",
             C::Feature { .. } => "feature",
@@ -3336,6 +3350,51 @@ fn copy(text: &str) -> bool {
             })
             .is_some_and(|s| s.success())
     })
+}
+
+/// `speccoder hooks …`.
+fn hooks(
+    path: &std::path::Path,
+    action: Option<&cli::HooksAction>,
+    machine: bool,
+) -> speccoder_core::CommandResult {
+    use speccoder_runtime::hooks::report;
+    let Some(state) = speccoder_runtime::worktree::state_dir() else {
+        return no_state("hooks");
+    };
+    match action {
+        None => report::list(path, &state),
+        Some(cli::HooksAction::Test { name }) => report::test(path, &state, name),
+        Some(cli::HooksAction::Deliver) => report::deliver(path, &state),
+        Some(cli::HooksAction::Trust { name }) => {
+            use std::io::IsTerminal;
+            let at_terminal =
+                !machine && std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+            let mut asked = 0;
+            let result = report::trust(path, &state, name.as_deref(), "terminal", &mut |e| {
+                asked += 1;
+                if !at_terminal {
+                    return false;
+                }
+                for line in human::trust_prompt(e) {
+                    eprintln!("{line}");
+                }
+                eprint!("Trust {} to run on this machine? [y/N] ", e.name);
+                let mut line = String::new();
+                let _ = std::io::stdin().read_line(&mut line);
+                matches!(line.trim(), "y" | "Y" | "yes")
+            });
+            if asked > 0 && !at_terminal {
+                return speccoder_core::CommandResult::new(
+                    "hooks",
+                    speccoder_core::CommandStatus::NeedsHuman,
+                    "nothing trusted: trusting needs you at a terminal, or --trust-hook name=digest as `speccoder hooks` prints it",
+                )
+                .with_code("HOOK-UNTRUSTED");
+            }
+            result
+        }
+    }
 }
 
 #[cfg(test)]

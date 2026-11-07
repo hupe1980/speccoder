@@ -200,6 +200,7 @@ pub const SUBCOMMANDS: &[&str] = &[
     "feature",
     "fix",
     "help",
+    "hooks",
     "inbox",
     "init",
     "inspect",
@@ -991,6 +992,12 @@ fn speccoder(argv: &[String], constant: bool) -> How {
             "The feature",
         ),
         (Some("init"), _) => view(View::Setup, None),
+        // A hook is tested in place; trusted in its sheet, after it is seen.
+        (Some("hooks"), Some("test")) => match a.get(2).filter(|n| !n.starts_with('-')) {
+            Some(name) => perform(Runnable::HookTest { name: name.clone() }, a),
+            None => view(View::Settings, Some("hooks")),
+        },
+        (Some("hooks"), _) => view(View::Settings, Some("hooks")),
         (Some("config"), None | Some("get" | "unset")) => view(View::Settings, None),
         (Some("config"), Some("set")) if a.iter().any(|w| has_blank(w)) => {
             view(View::Settings, None)

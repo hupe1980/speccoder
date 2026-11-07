@@ -149,6 +149,8 @@ class AppState {
   input = $state<{ action: Action | Offer } | null>(null);
   palette = $state(false);
   view = $state<"inbox" | "overview" | "board" | "code" | "documents" | "report" | "settings" | "setup">("inbox");
+  /** The Settings section a step opens (`speccoder hooks` → hooks). */
+  settingsSection = $state<string | null>(null);
 
   #toast = 1;
 
@@ -372,7 +374,7 @@ class AppState {
       case "live": this.view = "board"; return;
       case "approvals": this.view = "inbox"; return;
       case "review": this.doc = "review"; this.view = "documents"; return;
-      case "settings": this.view = "settings"; return;
+      case "settings": this.view = "settings"; this.settingsSection = subject ?? null; return;
       case "setup": this.view = "setup"; return;
       case "bug": this.bugSheet = {}; return;
       case "quick_change": this.quick = true; return;

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "a domain event's public projection: ids, digests and counts",
+  "description": "`task.stopped`: an attempt saved without a tick.",
+  "type": "object",
+  "properties": {
+    "feature": {
+      "description": "The unit (feature) it belongs to.",
+      "type": "string"
+    },
+    "task": {
+      "description": "The task id.",
+      "type": "string"
+    },
+    "outcome": {
+      "description": "`verification_failed`, `needs_approval`, `blocked_by_gate`, …",
+      "type": "string"
+    },
+    "code": {
+      "description": "The reason's code, when it has one.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "attempt_ref": {
+      "description": "The saved attempt.",
+      "type": "string"
+    },
+    "gates": {
+      "description": "The gates that ran.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/GateMark"
+      }
+    },
+    "run": {
+      "description": "The run.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "summary": {
+      "description": "One sentence, ready for a chat message.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "feature",
+    "task",
+    "outcome",
+    "attempt_ref",
+    "gates",
+    "summary"
+  ],
+  "$defs": {
+    "GateMark": {
+      "description": "A gate's mark on an event: its name and how it ended.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The hook's name.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "How it ended.",
+          "$ref": "#/$defs/GateState"
+        }
+      },
+      "required": [
+        "name",
+        "outcome"
+      ]
+    },
+    "GateState": {
+      "description": "How one gate ended at its point.",
+      "oneOf": [
+        {
+          "description": "It exited 0.",
+          "type": "string",
+          "const": "passed"
+        },
+        {
+          "description": "It stopped the point.",
+          "type": "string",
+          "const": "blocked"
+        },
+        {
+          "description": "An earlier gate at the point blocked first.",
+          "type": "string",
+          "const": "not_run"
+        }
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/task.stopped.json"
+}

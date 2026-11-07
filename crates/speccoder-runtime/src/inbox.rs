@@ -197,6 +197,11 @@ fn counted(kind: &str, n: usize) -> String {
         "review" => ("spec to review", "specs to review"),
         "revise" => ("change request", "change requests"),
         "stuck" => ("task that did not pass", "tasks that did not pass"),
+        "gate_blocked" => ("tick a gate blocked", "ticks a gate blocked"),
+        "hook_untrusted" => (
+            "gate that waits for your trust",
+            "gates that wait for your trust",
+        ),
         "yours" => ("step only you can take", "steps only you can take"),
         "aside" => ("set-aside change", "set-aside changes"),
         "commit" => ("plan to commit", "plans to commit"),
@@ -582,6 +587,13 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         let Some(a) = &t.last_attempt else {
             continue;
         };
+        // A gate the person declared stopped the tick: its own words, the
+        // way to trust it when that is why, and the way back to a tick.
+        if a.outcome == "blocked_by_gate" {
+            let (kind, title, detail, actions) = gate_item(path, state, t, a, &flag);
+            out.push(item(kind, Some(&t.id), title, detail, actions));
+            continue;
+        }
         if a.outcome == "suspected_gaming" {
             out.push(item(
                 "gaming",
@@ -1619,6 +1631,89 @@ fn skip(t: &speccoder_core::TaskStatus, flag: &dyn Fn(String) -> String) -> Acti
         "Why it is skipped",
         Runnable::Skip { task: t.id.clone() },
         flag,
+    )
+}
+
+/// The Needs You item of a tick a gate blocked — *T004 blocked by licence*,
+/// or *licence waits for your trust* when that is why: kind, title, detail
+/// and actions.
+fn gate_item(
+    root: &Path,
+    state: Option<&Path>,
+    t: &speccoder_core::TaskStatus,
+    a: &speccoder_core::LastAttempt,
+    flag: &dyn Fn(String) -> String,
+) -> (&'static str, String, String, Vec<Action>) {
+    let gate = a
+        .reason
+        .strip_prefix("Blocked by ")
+        .map(|r| r.split(" — ").next().unwrap_or(r))
+        .unwrap_or_default()
+        .to_owned();
+    let mut again = action(
+        "work",
+        format!("run {} again", t.id),
+        "a new attempt; its tick waits for the gate again",
+        flag(format!("speccoder run --task {}", t.id)),
+    );
+    again = again.with_run(Runnable::Run {
+        task: Some(t.id.clone()),
+        agent: None,
+        cap: None,
+    });
+    let untrusted = a.reason.contains(crate::hooks::gate::AWAITS_TRUST)
+        || a.reason.contains(crate::hooks::gate::CHANGED);
+    if untrusted {
+        let digest = crate::hooks::load(root)
+            .ok()
+            .and_then(|h| h.into_iter().find(|d| d.name == gate))
+            .map(|d| crate::hooks::digest(&d, root).digest)
+            .unwrap_or_default();
+        let mut trust = action(
+            "hooks",
+            format!("trust {gate}…"),
+            "see exactly what it runs, then let it stand before every tick",
+            format!("speccoder hooks trust {gate}"),
+        )
+        .with_run(Runnable::HookTrust {
+            name: gate.clone(),
+            digest,
+        });
+        trust.confirm = Some(format!(
+            "It stands before every tick from now on; only exit 0 lets {} through.",
+            t.id
+        ));
+        return (
+            "hook_untrusted",
+            format!("{gate} waits for your trust"),
+            format!("It blocks {}'s tick until you trust it.", t.id),
+            vec![trust, again],
+        );
+    }
+    let test = action(
+        "hooks",
+        format!("test {gate}"),
+        "run the gate alone on the checkout",
+        format!("speccoder hooks test {gate}"),
+    )
+    .with_run(Runnable::HookTest { name: gate.clone() });
+    (
+        "gate_blocked",
+        format!("{} blocked by {gate}", t.id),
+        // The gate's words, from its last block in speccoder's state.
+        state
+            .and_then(|s| {
+                crate::hooks::runs(&crate::hooks::dir(s, root))
+                    .remove(&gate)?
+                    .into_iter()
+                    .rev()
+                    .find(|r| r.outcome == "blocked")?
+                    .error
+            })
+            .unwrap_or_else(|| {
+                format!("{gate} did not let the tick through: speccoder hooks test {gate}")
+            }),
+        vec![again, test, skip(t, flag)],
     )
 }
 

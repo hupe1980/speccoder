@@ -36,6 +36,7 @@ pub mod git;
 pub mod github;
 pub mod handoff;
 pub mod held_out;
+pub mod hooks;
 pub mod hosting;
 pub mod in_place;
 pub mod inbox;
@@ -80,5 +81,5 @@ pub mod welcome;
 pub mod worktree;
 
 pub use commands::*;
-pub use format::speckit::{hooks, preset, workflow};
+pub use format::speckit::{hooks as extension_hooks, preset, workflow};
 pub use pipeline::*;

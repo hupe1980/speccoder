@@ -529,10 +529,37 @@ fn accept_task(
         }
         restored = format!(" with its saved attempt ({})", saved.reference);
     }
+    // A person's word does not pass the person's own gates (spec 095).
+    let gates = match crate::sandbox::runner_at(&wt_root) {
+        Ok((runner, _)) => crate::hooks::gate::run(
+            &project,
+            &runner,
+            state,
+            crate::hooks::gate::Facts {
+                point: speccoder_core::hooks::Point::Tick,
+                feature: &w.feature,
+                task: Some(task),
+                branch: None,
+            },
+        ),
+        Err(e) => return refuse(CommandStatus::ConfigError, e),
+    };
+    if let Some(g) = speccoder_core::hooks::first_block(&gates) {
+        let code = g.code.clone().unwrap_or_else(|| "HOOK-BLOCKED".to_owned());
+        return refuse(
+            CommandStatus::NeedsHuman,
+            format!("{}; {task} is not ticked", g.blocked_line()),
+        )
+        .with_code(&code);
+    }
+    let gate_lines: String = gates
+        .iter()
+        .map(|g| format!("Gate: {} {}\n", g.name, g.outcome.as_str()))
+        .collect();
     let reason = one_line(reason);
     let by = person(&project);
     let message = format!(
-        "speccoder: {task} accepted by {by}\n\n{}\n\n{reason}\n\nSpec-Task: {}/{task}\nVerdict: attested\nAccepted-By: {by}\nReason: {reason}\n",
+        "speccoder: {task} accepted by {by}\n\n{}\n\n{reason}\n\nSpec-Task: {}/{task}\nVerdict: attested\nAccepted-By: {by}\nReason: {reason}\n{gate_lines}",
         t.title, w.feature
     );
     let file = project.join(&tasks.path);

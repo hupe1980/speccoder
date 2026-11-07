@@ -466,6 +466,10 @@ fn every_next_step_and_fix_is_a_command_that_parses() {
             skills: vec!["plan".to_owned(), "tasks".to_owned()],
         },
         Outcome::AcceptanceWeak { task: t() },
+        Outcome::BlockedByGate {
+            task: t(),
+            gate: "licence".to_owned(),
+        },
         Outcome::NotDemonstrated { task: t() },
         Outcome::RunFailed { task: Some(t()) },
         Outcome::RunFailed { task: None },

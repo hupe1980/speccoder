@@ -8,6 +8,8 @@
 import type { Envelope, FeatureEntry, IssueEntry as GitHubIssue } from "./schema.gen";
 
 export type {
+  HookEntry,
+  HooksReport,
   Action,
   AgentAttempt,
   AgentCard,

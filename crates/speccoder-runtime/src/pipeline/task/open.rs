@@ -559,7 +559,8 @@ pub(super) fn task(
         });
     let policy = tools::policy::Policy::new(&check_argvs, &run_config.allow)
         .with_prefixes(run_config.allow_prefix.clone())
-        .rules(format.rules());
+        .rules(format.rules())
+        .with_hook_files(crate::hooks::judge_files(&project, &wt_root));
     let policy = match &planning {
         Some(dir) => policy.planning(dir),
         None => policy,

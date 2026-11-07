@@ -187,6 +187,16 @@ pub(crate) fn run_task(
     secret: Option<&str>,
     options: &RunOptions,
 ) -> CommandResult {
+    // Observers hear the task's tick or stop beside it (spec 095); inside a
+    // feature run, the feature's deliverer does.
+    let delivering = crate::hooks::deliver::Deliverer::start(path, state);
+    // An observer nobody trusted hears nothing: said once per run.
+    if delivering.is_some()
+        && let Some(p) = &options.progress
+        && let Some(text) = crate::hooks::report::untrusted_notice(path, state)
+    {
+        p.event(&progress::Event::Notice { text });
+    }
     // A unit that is a bug runs as one bug, never task by task.
     if options.bug_home.is_none()
         && let Some(slug) = bug_spec(path, feature)

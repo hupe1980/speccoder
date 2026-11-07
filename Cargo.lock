@@ -73,6 +73,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "hex",
+ "hmac 0.13.0",
  "jsonschema 0.56.0",
  "rand 0.10.3",
  "redb",

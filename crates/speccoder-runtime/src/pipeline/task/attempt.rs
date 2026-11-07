@@ -627,6 +627,7 @@ pub(super) fn run(
                                 usage: output.get("usage"),
                                 story_open: &[],
                                 own_test: None,
+                                extra: "",
                             },
                         )
                         .and_then(|saved| worktree::restore(wt_root, tmp, &before).map(|_| saved));

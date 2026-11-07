@@ -100,7 +100,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "rule_scenario" | "check_story" | "accept_untestable" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "hook_trust" | "hook_test" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "rule_scenario" | "check_story" | "accept_untestable" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -930,7 +930,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -1318,6 +1318,14 @@ export interface CostReport {
   estimate: Estimate | null;
   /** `[budget] cap`, as written back (`2M`, `$5`). */
   cap: string | null;
+}
+
+/** `k` of `n`. */
+export interface Count {
+  /** How many passed. */
+  passed: number;
+  /** Of how many. */
+  total: number;
 }
 
 /** Rejected of judged, for one source. */
@@ -2174,6 +2182,52 @@ export type EventLine = {
     /** The signals that hold (`S1`…`S4`). */
     signals: string[];
   }
+  /** A tick commit was written. */
+  | {
+    type: "task.ticked";
+    /** The unit (feature) it belongs to. */
+    feature: string;
+    /** The task id. */
+    task: string;
+    /** `verified` or `regression_only`. */
+    verdict: string;
+    /** The tick commit. */
+    commit: string;
+    /** The scenarios its tests showed green (spec ids). */
+    scenarios: string[];
+    /** The held-out tests that passed, when there were any. */
+    held_out?: Count | null;
+    /** How strong its acceptance tests were (0–1). */
+    acceptance_strength?: number | null;
+    /** The gates it passed. */
+    gates: GateMark[];
+    /** The external agent that did it, when one did. */
+    executor?: string | null;
+    /** The run. */
+    run?: string | null;
+    /** One sentence, ready for a chat message. */
+    summary: string;
+  }
+  /** An attempt was saved without a tick. */
+  | {
+    type: "task.stopped";
+    /** The unit (feature) it belongs to. */
+    feature: string;
+    /** The task id. */
+    task: string;
+    /** `verification_failed`, `needs_approval`, `blocked_by_gate`, … */
+    outcome: string;
+    /** The reason's code, when it has one. */
+    code?: string | null;
+    /** The saved attempt. */
+    attempt_ref: string;
+    /** The gates that ran. */
+    gates: GateMark[];
+    /** The run. */
+    run?: string | null;
+    /** One sentence, ready for a chat message. */
+    summary: string;
+  }
   /** A unit was promoted from a quick change or bug fix. */
   | {
     type: "unit.promoted";
@@ -2572,6 +2626,33 @@ export interface FullTier {
 /** The `min_strength` gate. */
 export type Gate = "off" | "met" | "regenerated_met" | "failed";
 
+/** A gate's mark on an event: its name and how it ended. */
+export interface GateMark {
+  /** The hook's name. */
+  name: string;
+  /** How it ended. */
+  outcome: GateState;
+}
+
+/** One gate's run at its point, as a report and the evidence carry it. */
+export interface GateRecord {
+  /** The hook's name. */
+  name: string;
+  /** Where it stood. */
+  point: Point;
+  /** How it ended. */
+  outcome: GateState;
+  /** Why it blocked. */
+  reason?: string | null;
+  /** `HOOK-BLOCKED`, or `HOOK-UNTRUSTED` for a gate that waits for trust. */
+  code?: string | null;
+  /** How long it ran. */
+  duration_ms: number;
+}
+
+/** How one gate ended at its point. */
+export type GateState = "passed" | "blocked" | "not_run";
+
 /** The person's git identity. */
 export interface GitIdentity {
   /** `user.name`. */
@@ -2661,6 +2742,96 @@ export interface HeldOutVariant {
 
 /** Where the format keeps the bug. */
 export type HomeKind = "native_speckit_bug" | "native_kiro_bugfix" | "standing_speckit" | "standing_openspec";
+
+/** One hook as `speccoder hooks` shows it. */
+export interface HookEntry {
+  /** The table's name. */
+  name: string;
+  /** `gate` or `observer`. */
+  role: string;
+  /** What it guards or hears, in words. */
+  listens: string;
+  /** Where a gate stands. */
+  at?: Point | null;
+  /** The events an observer hears. */
+  on?: string[];
+  /** The command it runs, or the URL it posts to. */
+  runs: string;
+  /** Whether it may run here. */
+  state: TrustState;
+  /** `sha256:<hex>` over its definition and files. */
+  digest: string;
+  /** The repository files it runs. */
+  files: HookFile[];
+  /** Programs it names outside the repository. */
+  outside?: string[];
+  /** Its definition as TOML, as a trust prompt shows it. */
+  definition: string;
+  /** The definition last trusted, for a changed hook. */
+  trusted_definition?: string | null;
+  /** Its recent runs, oldest first. */
+  recent: HookRun[];
+  /** The flag that trusts it in CI: `--trust-hook name=sha256:…`. */
+  trust_flag: string;
+  /**
+   * What keeps it from running here, with the fix (a missing program
+   * or signing variable).
+   */
+  problem?: string | null;
+}
+
+/** A file a hook runs, and its content's digest. */
+export interface HookFile {
+  /** Its path in the repository. */
+  path: string;
+  /** `sha256:<hex>` of its content. */
+  digest: string;
+}
+
+/** One run of a hook. */
+export interface HookRun {
+  /** When it started (RFC 3339). */
+  at: string;
+  /** The event id, `tick T004`, `pr` or `test`. */
+  what: string;
+  /** `delivered`, `failed`, `passed`, `blocked`, `not_run`, `skipped_untrusted`. */
+  outcome: string;
+  /** How long it ran. */
+  duration_ms: number;
+  /** Why it failed or blocked. */
+  error?: string | null;
+}
+
+/** How `speccoder hooks test` went. */
+export interface HookTested {
+  /** The hook. */
+  name: string;
+  /** `passed` or `blocked` (a gate), `delivered` or `failed` (an observer). */
+  outcome: string;
+  /** Why it blocked or failed, or what the receiver answered. */
+  detail?: string | null;
+  /** How long it took. */
+  duration_ms: number;
+}
+
+/**
+ * `speccoder hooks`: every hook, and what a `trust`, `test` or `deliver`
+ * just did.
+ */
+export interface HooksReport {
+  /** Every hook, by name. */
+  hooks: HookEntry[];
+  /** Why the hooks could not be read (`HOOK-MISCONFIGURED`). */
+  problem?: string | null;
+  /** The hooks just trusted. */
+  trusted?: string[];
+  /** A test just run. */
+  tested?: HookTested | null;
+  /** Events just delivered, per observer. */
+  delivered?: number | null;
+  /** Events still waiting for an observer that failed. */
+  pending?: number | null;
+}
 
 /** How an interface takes a line. */
 export type How =
@@ -3657,6 +3828,9 @@ export interface PlanningChainReport {
   next_skill: string | null;
 }
 
+/** Where a gate stands. */
+export type Point = "tick" | "pr";
+
 /**
  * What a prefix entry of `[commands] allow_prefix` or `[sandbox]
  * network_allow_prefix` would newly allow: every distinct argv the
@@ -3714,6 +3888,8 @@ export interface PrReport {
    * `speccoder attest verify --branch`; `absent`: none does.
    */
   evidence_check: string;
+  /** The gates that stood before the push (spec 095). */
+  gates?: GateRecord[];
 }
 
 /** Where the confirmed reproductions are kept, as recorded with the fix. */
@@ -4615,6 +4791,8 @@ export interface RunReport {
   earlier: EarlierAttempt[];
   /** Why no further attempt was made after a failed one, if it failed. */
   retry_stop: string | null;
+  /** The gates that stood at the tick, in name order (spec 095). */
+  gates?: GateRecord[];
   /**
    * The ref this attempt was saved under when it did not pass; the
    * worktree went back to where it started.
@@ -4850,6 +5028,20 @@ export type Runnable =
     run: boolean;
     /** The Ask conversation that suggested it, recorded as its origin. */
     asked?: string | null;
+  }
+  /** Trust a hook as it was shown: refused when its bytes changed since. */
+  | {
+    kind: "hook_trust";
+    /** The hook. */
+    name: string;
+    /** The digest the person saw. */
+    digest: string;
+  }
+  /** Run a gate alone on the checkout, or send an observer a sample event. */
+  | {
+    kind: "hook_test";
+    /** The hook. */
+    name: string;
   }
   /**
    * Commit the changes set aside before the task's run onto the
@@ -6002,6 +6194,8 @@ export interface TaskStatus {
   last_attempt: LastAttempt | null;
   /** For an open task of a story: what will judge it. */
   judged?: Judged | null;
+  /** The gates a done task's tick passed (spec 095). */
+  gates?: GateMark[];
   /**
    * Changes found in the worktree when the task's run started (a person's
    * edits, or an interrupted run's leftovers), saved and set aside.
@@ -6026,6 +6220,52 @@ export interface TaskStatus {
   regression?: RegressionOnly | null;
   /** Who does it ([`crate::lane`]); left out for `code`. */
   lane?: Lane;
+}
+
+/** `task.stopped`: an attempt saved without a tick. */
+export interface TaskStopped {
+  /** The unit (feature) it belongs to. */
+  feature: string;
+  /** The task id. */
+  task: string;
+  /** `verification_failed`, `needs_approval`, `blocked_by_gate`, … */
+  outcome: string;
+  /** The reason's code, when it has one. */
+  code?: string | null;
+  /** The saved attempt. */
+  attempt_ref: string;
+  /** The gates that ran. */
+  gates: GateMark[];
+  /** The run. */
+  run?: string | null;
+  /** One sentence, ready for a chat message. */
+  summary: string;
+}
+
+/** `task.ticked`: a tick commit on a unit's branch. */
+export interface TaskTicked {
+  /** The unit (feature) it belongs to. */
+  feature: string;
+  /** The task id. */
+  task: string;
+  /** `verified` or `regression_only`. */
+  verdict: string;
+  /** The tick commit. */
+  commit: string;
+  /** The scenarios its tests showed green (spec ids). */
+  scenarios: string[];
+  /** The held-out tests that passed, when there were any. */
+  held_out?: Count | null;
+  /** How strong its acceptance tests were (0–1). */
+  acceptance_strength?: number | null;
+  /** The gates it passed. */
+  gates: GateMark[];
+  /** The external agent that did it, when one did. */
+  executor?: string | null;
+  /** The run. */
+  run?: string | null;
+  /** One sentence, ready for a chat message. */
+  summary: string;
 }
 
 /** Outcome of one test from a JUnit report. */
@@ -6173,6 +6413,9 @@ export interface Triad {
    */
   digest: string;
 }
+
+/** Whether a hook may run. */
+export type TrustState = "trusted" | "untrusted" | "changed";
 
 /** One statement's class in one try. */
 export interface TryStatement {

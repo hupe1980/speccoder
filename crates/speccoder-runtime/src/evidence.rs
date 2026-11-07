@@ -479,6 +479,7 @@ mod tests {
             run_id: None,
             last_attempt: None,
             judged: None,
+            gates: Vec::new(),
             set_aside: None,
             bug: None,
             regression: None,

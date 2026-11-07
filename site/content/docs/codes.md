@@ -48,6 +48,9 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`CONFIG-EXISTS`](#config-exists) | error | 13 | the project has a speccoder.toml already |
 | [`CONFIG-MISSING`](#config-missing) | error | 13 | the project has no speccoder.toml |
 | [`CONFIG-INVALID`](#config-invalid) | error | 13 | speccoder.toml has an error |
+| [`HOOK-MISCONFIGURED`](#hook-misconfigured) | error | 13 | a hook in speccoder.toml is not valid |
+| [`HOOK-UNTRUSTED`](#hook-untrusted) | stop | 23 | a hook waits for your trust |
+| [`HOOK-BLOCKED`](#hook-blocked) | stop | 23 | a gate blocked this |
 | [`KEY-MISSING`](#key-missing) | error | 13 | the model provider's API key is not in the environment |
 | [`NO-CHECKS`](#no-checks) | error | 13 | no check applies, so nothing could show that nothing regressed |
 | [`GIT`](#git) | error | 14 | git is not in the state this command needs |
@@ -468,6 +471,33 @@ Speccoder.toml has an error.
 An unknown section or key, a wrong type, or a value outside the allowed set. Unknown keys are errors so a typo never goes unnoticed.
 
 - Fix the line the message names in speccoder.toml, then commit it
+
+### HOOK-MISCONFIGURED
+
+A hook in speccoder.toml is not valid.
+
+A `[hooks.<name>]` table has an unknown key, both or neither of `at` (a gate) and `on` (an observer), an event no observer can hear, a missing program or signing variable, or plain http to another machine. Nothing runs until it is fixed.
+
+- Fix the hook the message names in speccoder.toml
+- `speccoder hooks`
+
+### HOOK-UNTRUSTED
+
+A hook waits for your trust.
+
+A hook runs only after a person trusted its exact bytes: its definition and every script it runs. A new or changed gate blocks its point until then; an untrusted observer is skipped.
+
+- `speccoder hooks trust`
+- In CI: pass --trust-hook <name>=<digest>; speccoder hooks prints it
+
+### HOOK-BLOCKED
+
+A gate blocked this.
+
+A gate passes only when its command exits 0. It exited otherwise, timed out, could not start, or changed a file the tick would commit; its own last line says why. The verdict the task earned is kept on its saved attempt.
+
+- Fix what the gate names, then run the task again
+- `speccoder hooks`
 
 ### KEY-MISSING
 
