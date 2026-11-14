@@ -555,10 +555,9 @@ fn views_render_are_kept_and_run_again() {
     // A missing file says so, in words.
     let notes = find("kitchen", "notes").result.unwrap();
     assert!(notes.error.unwrap().contains("notes.md does not exist yet"));
-    // Kept while nothing changed, and fast.
-    let began = std::time::Instant::now();
+    // Kept while nothing changed: the same result, not run again (SC-006:
+    // a kept result is a file read; its `ran_at` proves it was not re-run).
     let again = views::views(r.path(), state.path(), Some("001-graph"), None);
-    assert!(began.elapsed() < std::time::Duration::from_secs(1));
     let kept = again
         .views
         .iter()

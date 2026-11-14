@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-14
+
 ### Added
 
 - **Extensions**: a folder of someone else's gates, views, skills and MCP
@@ -1016,7 +1018,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/hupe1980/speccoder/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/hupe1980/speccoder/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/hupe1980/speccoder/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/hupe1980/speccoder/compare/v0.11.0...v0.12.0
