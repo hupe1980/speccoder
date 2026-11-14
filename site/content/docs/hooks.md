@@ -94,7 +94,9 @@ There is no flag to skip a gate.
 
 Gates at one point run in name order; the first block stops the rest. A tick names the gates it passed (`Gate: licence passed`), and `report` shows them.
 
-A gate is told where it stands in `SPECCODER_POINT`, `SPECCODER_FEATURE`, `SPECCODER_TASK` (at a tick) and `SPECCODER_BRANCH` (at a pull request).
+A gate is told where it stands in `SPECCODER_POINT`, `SPECCODER_FEATURE`, `SPECCODER_FEATURE_DIR`, `SPECCODER_TASK` (at a tick) and `SPECCODER_BRANCH` (at a pull request). It may write SARIF 2.1.0 to the path in `SPECCODER_FINDINGS`; when it blocks, Needs You and the run show those findings, never as a reason to pass.
+
+An [extension](@/docs/extensions.md#gates-and-observers) brings hooks of its own, named `<extension>.<hook>` and trusted with the extension.
 
 ## Observers and events
 
@@ -142,4 +144,4 @@ $ speccoder hooks test licence
 licence would block — GPL-3.0 in `foo`
 ```
 
-`hooks test` runs a gate alone on the checkout, or sends an observer a sample event marked `"test": true`. Settings › Hooks in the [web app](@/docs/web.md) shows the same list, with **Trust…** and **Test** on each hook. `speccoder doctor` names a hook that is misconfigured, is missing its program or signing variable, or waits for trust.
+`hooks test` runs a gate alone on the checkout (at the current feature), or sends an observer a sample event marked `"test": true`. Settings › Hooks in the [web app](@/docs/web.md) shows the same list, with **Trust…** and **Test** on each hook. `speccoder doctor` names a hook that is misconfigured, is missing its program or signing variable, or waits for trust.

@@ -64,15 +64,35 @@ pub fn last_trusted(dir: &Path, name: &str) -> Option<Trust> {
 
 /// Records that `by` trusted `hook` as it is now, through `via`.
 pub fn record(dir: &Path, hook: &Digested, by: &str, via: &str) {
+    record_as(
+        dir,
+        &hook.def.name,
+        &hook.digest,
+        hook.def.definition.clone(),
+        by,
+        via,
+    );
+}
+
+/// Records that `by` trusted what `key` names (a hook, or
+/// `extension:<name>`) at `digest`, having seen `definition`.
+pub fn record_as(
+    dir: &Path,
+    key: &str,
+    digest: &str,
+    definition: serde_json::Value,
+    by: &str,
+    via: &str,
+) {
     let mut all = read(dir);
     let now = Trust {
-        digest: hook.digest.clone(),
+        digest: digest.to_owned(),
         by: by.to_owned(),
         via: via.to_owned(),
         at: crate::attest::now_rfc3339(),
-        definition: hook.def.definition.clone(),
+        definition,
     };
-    let previous = all.remove(&hook.def.name).and_then(|e| {
+    let previous = all.remove(key).and_then(|e| {
         if e.current.digest == now.digest {
             e.previous
         } else {
@@ -80,13 +100,21 @@ pub fn record(dir: &Path, hook: &Digested, by: &str, via: &str) {
         }
     });
     all.insert(
-        hook.def.name.clone(),
+        key.to_owned(),
         Entry {
             current: now,
             previous,
         },
     );
     super::write_json(dir, FILE, &all);
+}
+
+/// Forgets what `key` names.
+pub fn forget(dir: &Path, key: &str) {
+    let mut all = read(dir);
+    if all.remove(key).is_some() {
+        super::write_json(dir, FILE, &all);
+    }
 }
 
 /// `--trust-hook name=sha256:…`, split.
@@ -122,6 +150,11 @@ pub fn apply_flags(
         let Some(hook) = hooks.iter().find(|h| &h.def.name == name) else {
             return Err(format!("--trust-hook {name}: there is no hook `{name}`"));
         };
+        if let Some((ext, _)) = &hook.def.extension {
+            return Err(format!(
+                "--trust-hook {name}: it comes from the extension {ext}, trusted as a whole: --trust-extension {ext}=<digest>"
+            ));
+        }
         if &hook.digest != digest {
             return Err(format!(
                 "--trust-hook {name}: the hook is now {}, not {digest} — review it (speccoder hooks) before trusting",

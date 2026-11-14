@@ -271,6 +271,33 @@ pub fn available_with(
     }
 
     // ── plan: every hosted planning skill ─────────────────────────────
+    // A trusted Spec Kit extension's optional hooks, at their step (spec 096).
+    let now = report.and_then(|r| {
+        r.journey
+            .iter()
+            .find(|s| s.state == speccoder_core::actions::StepState::Now)
+            .map(|s| s.name.clone())
+    });
+    if let (Some(now), Some(state)) = (now, crate::worktree::state_dir()) {
+        for e in crate::extensions::trusted(path, &state)
+            .iter()
+            .filter(|e| e.source == speccoder_core::extensions::ExtensionSource::SpecKit)
+        {
+            for o in e.offers.iter().filter(|o| !o.mandatory) {
+                let installed = crate::format::speckit::extensions::skill_of(&o.command);
+                if !crate::extensions::offered_at(&o.event).contains(&now.as_str())
+                    || !skills.iter().any(|s| s.name == installed)
+                {
+                    continue;
+                }
+                let mut a = skill("next", &short(&installed), &format!("{} offers it", e.name));
+                if let Some(p) = &o.prompt {
+                    a.label = p.trim_end_matches('?').to_owned();
+                }
+                out.push(a);
+            }
+        }
+    }
     for s in skills.iter().filter(|s| s.refused.is_none()) {
         let name = short(&s.name);
         if planning_next.contains(&name) {
@@ -610,6 +637,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::DeclinePromotion
             | K::Explore
             | K::HookTrust
+            | K::ExtensionTrust
+            | K::ViewRun
             | K::HookTest
             | K::ExploreChoose => Offer::Take,
             K::Command => Offer::Refuse,
@@ -664,6 +693,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::Explore
             | K::ExploreChoose
             | K::HookTrust
+            | K::ExtensionTrust
+            | K::ViewRun
             | K::HookTest
             | K::Command => Offer::Refuse,
         },
@@ -715,6 +746,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::Explore
             | K::ExploreChoose
             | K::HookTrust
+            | K::ExtensionTrust
+            | K::ViewRun
             | K::HookTest
             | K::Command => Offer::Refuse,
         },
@@ -766,6 +799,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::Explore
             | K::ExploreChoose
             | K::HookTrust
+            | K::ExtensionTrust
+            | K::ViewRun
             | K::HookTest
             | K::Command => Offer::Refuse,
         },
@@ -819,6 +854,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::Explore
             | K::ExploreChoose
             | K::HookTrust
+            | K::ExtensionTrust
+            | K::ViewRun
             | K::HookTest
             | K::Command => Offer::Refuse,
         },
@@ -1058,6 +1095,39 @@ pub fn perform_in(
         },
         Runnable::HookTest { name } => match state {
             Some(s) => crate::hooks::report::test(root, s, name),
+            None => no_state(),
+        },
+        Runnable::ExtensionTrust { name, digest } => match state {
+            Some(s) => match crate::extensions::report::trust_from_sheet(root, s, name, digest) {
+                Ok(()) => CommandResult::new(
+                    "extensions",
+                    CommandStatus::Ok,
+                    &format!("trusted {name}: it runs from now on"),
+                ),
+                Err(e) => CommandResult::new("extensions", CommandStatus::UsageError, &e)
+                    .with_code("CALL-CHANGED"),
+            },
+            None => no_state(),
+        },
+        Runnable::ViewRun {
+            extension,
+            view,
+            feature: about,
+        } => match state {
+            Some(s) => {
+                let shown = crate::extensions::views::views(
+                    root,
+                    s,
+                    about.as_deref(),
+                    Some((extension, view)),
+                );
+                CommandResult::new(
+                    "extensions",
+                    CommandStatus::Ok,
+                    &format!("ran {extension}.{view}"),
+                )
+                .with_data(CommandData::ExtensionViews(Box::new(shown)))
+            }
             None => no_state(),
         },
         Runnable::KeepSetAside { task } => crate::controls::restore(root, feature, task),

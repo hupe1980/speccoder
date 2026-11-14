@@ -105,6 +105,12 @@ const fn describe(payload: &str) -> &'static str {
         b"issues" => "issue: the repository's open GitHub issues",
         b"inbox" => "inbox: every decision waiting for a person, across features",
         b"hooks" => "hooks: every hook, its trust and its recent runs",
+        b"extensions" => {
+            "extensions: every extension, what it contributes and can reach, and its trust"
+        }
+        b"extension_views" => {
+            "extension_views: the views extensions place on a feature or the project, with their results"
+        }
         b"shape" => "shape: a person's words made into a requirement, and what code found changed",
         b"ask" => "ask: one turn of a read-only conversation, its reads and checked citations",
         b"ask_conversations" => "ask --list: the conversations, newest first",
@@ -197,6 +203,8 @@ published! {
     "issues", "IssuesReport" => core::IssuesReport,
     "inbox", "InboxReport" => core::InboxReport,
     "hooks", "HooksReport" => core::hooks::HooksReport,
+    "extensions", "ExtensionsReport" => core::extensions::ExtensionsReport,
+    "extension_views", "ViewsReport" => core::extensions::ViewsReport,
     "shape", "ShapeReport" => core::ShapeReport,
     "ask", "AskReport" => core::ask::AskReport,
     "ask_conversations", "AskConversations" => core::ask::AskConversations,

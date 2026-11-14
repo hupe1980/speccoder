@@ -10,6 +10,7 @@ Entry points:
 - `codes` — the catalog of codes every non-ok result carries, with fixes and docs links.
 - `spec` — the spec formats (Spec Kit, OpenSpec, Kiro) and their requirements and scenarios.
 - `hooks` — the `[hooks.<name>]` grammar, the gate rule (only exit 0 passes) and the public events `task.ticked` and `task.stopped`.
+- `extensions` — extension names, the `[views.<name>]` grammar, what each contribution reaches in words, what widened since a trust, and SARIF findings.
 - `next` — the steps that continue after a result.
 
 This is an internal crate of speccoder. Its version follows speccoder's, and its API may change in any minor release; depend on it only together with speccoder.

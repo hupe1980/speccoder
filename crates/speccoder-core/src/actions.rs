@@ -122,6 +122,23 @@ pub enum Runnable {
         /// The digest the person saw.
         digest: String,
     },
+    /// Trust an extension as shown (its digest), from its sheet.
+    ExtensionTrust {
+        /// The extension.
+        name: String,
+        /// The digest the person saw.
+        digest: String,
+    },
+    /// Produce an extension's view anew.
+    ViewRun {
+        /// The extension.
+        extension: String,
+        /// The view.
+        view: String,
+        /// The feature it is about; `None`: the project.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        feature: Option<String>,
+    },
     /// Run a gate alone on the checkout, or send an observer a sample event.
     HookTest {
         /// The hook.
@@ -594,6 +611,10 @@ pub enum ActionKind {
     QuickChange,
     /// [`Runnable::HookTrust`].
     HookTrust,
+    /// [`Runnable::ExtensionTrust`].
+    ExtensionTrust,
+    /// [`Runnable::ViewRun`].
+    ViewRun,
     /// [`Runnable::HookTest`].
     HookTest,
     /// [`Runnable::KeepSetAside`].
@@ -684,6 +705,8 @@ impl ActionKind {
         Self::IssueComment,
         Self::QuickChange,
         Self::HookTrust,
+        Self::ExtensionTrust,
+        Self::ViewRun,
         Self::HookTest,
         Self::KeepSetAside,
         Self::DropSetAside,
@@ -741,6 +764,8 @@ impl ActionKind {
             Self::IssueComment => "issue_comment",
             Self::QuickChange => "quick_change",
             Self::HookTrust => "hook_trust",
+            Self::ExtensionTrust => "extension_trust",
+            Self::ViewRun => "view_run",
             Self::HookTest => "hook_test",
             Self::KeepSetAside => "keep_set_aside",
             Self::DropSetAside => "drop_set_aside",
@@ -835,6 +860,15 @@ impl ActionKind {
             Self::HookTrust => Runnable::HookTrust {
                 name: "licence".to_owned(),
                 digest: "sha256:00".to_owned(),
+            },
+            Self::ExtensionTrust => Runnable::ExtensionTrust {
+                name: "threatspec".to_owned(),
+                digest: "sha256:00".to_owned(),
+            },
+            Self::ViewRun => Runnable::ViewRun {
+                extension: "threatspec".to_owned(),
+                view: "findings".to_owned(),
+                feature: None,
             },
             Self::HookTest => Runnable::HookTest {
                 name: "licence".to_owned(),
@@ -1000,6 +1034,8 @@ impl Runnable {
             Self::IssueComment { .. } => ActionKind::IssueComment,
             Self::QuickChange { .. } => ActionKind::QuickChange,
             Self::HookTrust { .. } => ActionKind::HookTrust,
+            Self::ExtensionTrust { .. } => ActionKind::ExtensionTrust,
+            Self::ViewRun { .. } => ActionKind::ViewRun,
             Self::HookTest { .. } => ActionKind::HookTest,
             Self::KeepSetAside { .. } => ActionKind::KeepSetAside,
             Self::DropSetAside { .. } => ActionKind::DropSetAside,
@@ -1091,7 +1127,12 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         Runnable::ExploreChoose { session, .. } => Some(session.clone()),
         Runnable::OracleTests { req, .. } => Some(req.clone()),
         Runnable::CheckStory { story } => Some(story.clone()),
-        Runnable::HookTrust { name, .. } | Runnable::HookTest { name } => Some(name.clone()),
+        Runnable::HookTrust { name, .. }
+        | Runnable::HookTest { name }
+        | Runnable::ExtensionTrust { name, .. } => Some(name.clone()),
+        Runnable::ViewRun {
+            extension, view, ..
+        } => Some(format!("{extension}.{view}")),
         Runnable::AcceptUntestable { scenario } => Some(scenario.clone()),
         Runnable::ApproveAndRun { mode, .. } => Some(mode.as_str().to_owned()),
         Runnable::Comment { id, .. } => id.clone(),

@@ -1,0 +1,7 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "plain-plugin",
+  "version": "0.1.0",
+  "description": "A plugin made for another agent: one skill, one stdio MCP server",
+  "keywords": ["notes"]
+}

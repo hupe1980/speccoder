@@ -10,6 +10,11 @@ import type { Envelope, FeatureEntry, IssueEntry as GitHubIssue } from "./schema
 export type {
   HookEntry,
   HooksReport,
+  Extension,
+  ExtensionsReport,
+  SarifFinding,
+  ViewShown,
+  ViewsReport,
   Action,
   AgentAttempt,
   AgentCard,

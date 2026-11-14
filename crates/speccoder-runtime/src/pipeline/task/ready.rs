@@ -295,7 +295,11 @@ pub(super) fn make(
 
     // MCP servers, started in the worktree for this task's attempts.
     let servers = match mcp::parse(config_text) {
-        Ok(s) => s,
+        Ok(mut s) => {
+            // A trusted extension's stdio servers join (spec 096).
+            s.extend(crate::extensions::servers(project, state));
+            s
+        }
         Err(e) => {
             return Err(Box::new(
                 fail(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))

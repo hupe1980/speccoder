@@ -1,0 +1,23 @@
+[hooks.check]
+at = "tick"
+argv = ["./scripts/check.sh"]
+
+[hooks.notify]
+on = ["task.stopped"]
+argv = ["./scripts/notify.sh"]
+
+[views.findings]
+title = "Findings"
+run = ["./scripts/check.sh"]
+widget = "findings"
+exit = [0, 1]
+
+[views.notes]
+title = "Notes"
+file = "notes.md"
+widget = "markdown"
+
+[views.counts]
+run = ["sh", "-c", "echo '{\"tasks\": 3, \"state\": \"ok\"}'"]
+widget = "metrics"
+place = "project"

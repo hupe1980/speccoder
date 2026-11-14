@@ -278,6 +278,13 @@ const HOOK_SKILL: &str = "---\nname: \"speckit-audit-record\"\ndescription: \"Re
 
 fn with_hooks(r: &Path, extensions: &str, skills: &[(&str, &str)]) {
     fs::write(r.join(".specify/extensions.yml"), extensions).unwrap();
+    // The extension the mandatory hooks belong to, installed.
+    fs::create_dir_all(r.join(".specify/extensions/audit")).unwrap();
+    fs::write(
+        r.join(".specify/extensions/audit/extension.yml"),
+        "schema_version: \"1.0\"\nextension:\n  id: audit\n  version: \"0.1.0\"\nprovides:\n  commands:\n    - name: speckit.audit.record\n      file: commands/record.md\n",
+    )
+    .unwrap();
     for (name, text) in skills {
         fs::create_dir_all(r.join(format!(".claude/skills/{name}"))).unwrap();
         fs::write(r.join(format!(".claude/skills/{name}/SKILL.md")), text).unwrap();
@@ -292,6 +299,49 @@ fn with_hooks(r: &Path, extensions: &str, skills: &[(&str, &str)]) {
     git(r, &["commit", "-q", "-m", "hooks"]);
 }
 
+/// A person trusted the `audit` extension as it is.
+fn trust_audit(r: &Path, state: &Path) {
+    let e = speccoder_runtime::extensions::load(r)
+        .into_iter()
+        .find(|e| e.name == "audit")
+        .unwrap();
+    speccoder_runtime::extensions::trust::record(
+        &speccoder_runtime::hooks::dir(state, r),
+        &e,
+        "t",
+        "terminal",
+    );
+}
+
+#[test]
+fn a_mandatory_hook_of_an_untrusted_extension_does_not_run() {
+    let r = repo();
+    with_hooks(
+        r.path(),
+        "hooks:\n  before_implement:\n    - extension: audit\n      command: speckit.audit.record\n      optional: false\n",
+        &[("speckit-audit-record", HOOK_SKILL)],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    let d: Arc<dyn ModelProvider> = f.clone();
+    let res = speccoder_runtime::run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert_eq!(res.code().map(|c| c.name), Some("EXTENSION-UNTRUSTED"));
+    assert!(
+        res.message().contains("which waits for your trust"),
+        "{}",
+        res.message()
+    );
+    assert!(f.asked().is_empty());
+}
+
 #[test]
 fn a_mandatory_before_implement_hook_runs_as_a_hosted_skill_and_optional_ones_are_offered() {
     let r = repo();
@@ -301,6 +351,7 @@ fn a_mandatory_before_implement_hook_runs_as_a_hosted_skill_and_optional_ones_ar
         &[("speckit-audit-record", HOOK_SKILL)],
     );
     let state = tempfile::tempdir().unwrap();
+    trust_audit(r.path(), state.path());
     let f = FakeProvider::new();
     let d: Arc<dyn ModelProvider> = f.clone();
     // The hook skill (it only reads; one that leaves artifacts uncommitted is the next test).
@@ -359,6 +410,7 @@ fn a_mandatory_hook_whose_skill_is_missing_stops_before_any_task() {
         &[],
     );
     let state = tempfile::tempdir().unwrap();
+    trust_audit(r.path(), state.path());
     let f = FakeProvider::new();
     let d: Arc<dyn ModelProvider> = f.clone();
     let res = speccoder_runtime::run_feature_with(
@@ -393,6 +445,7 @@ fn a_hook_that_leaves_artifacts_uncommitted_stops_the_run_with_the_reason() {
         &[("speckit-audit-record", HOOK_SKILL)],
     );
     let state = tempfile::tempdir().unwrap();
+    trust_audit(r.path(), state.path());
     let f = FakeProvider::new();
     let d: Arc<dyn ModelProvider> = f.clone();
     f.will_call_tool(

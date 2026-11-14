@@ -106,6 +106,10 @@ pub struct HookDef {
     pub files: Vec<String>,
     /// The table as canonical JSON: what a digest and a trust prompt cover.
     pub definition: Value,
+    /// The extension it comes from, and that extension's folder relative
+    /// to the project: its trust is the extension's, its `./` paths are
+    /// inside that folder.
+    pub extension: Option<(String, String)>,
 }
 
 impl HookDef {
@@ -362,6 +366,7 @@ pub fn parse(name: &str, table: &Value) -> Result<HookDef, String> {
         env,
         files,
         definition: canonical(table),
+        extension: None,
     })
 }
 
@@ -495,6 +500,9 @@ pub struct GateRecord {
     pub code: Option<String>,
     /// How long it ran.
     pub duration_ms: u64,
+    /// The findings it left (SARIF), as shown.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<crate::extensions::SarifFinding>,
 }
 
 impl GateRecord {
@@ -677,6 +685,12 @@ pub struct HookRun {
     /// Why it failed or blocked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// The findings a gate left (SARIF), as shown.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<crate::extensions::SarifFinding>,
+    /// Why the findings it left could not be shown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub findings_error: Option<String>,
 }
 
 /// One hook as `speccoder hooks` shows it.

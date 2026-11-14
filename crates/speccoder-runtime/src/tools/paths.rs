@@ -105,6 +105,10 @@ const JUDGE: &[&str] = &[
     "**/.mcp.json",
     "opencode.json",
     "opencode.jsonc",
+    // Extensions: gates, views, skills and MCP servers a person trusted by
+    // digest (spec 096). Spec Kit's are under `.specify/`, intent already.
+    ".speccoder/extensions/**",
+    "**/.speccoder/extensions/**",
 ];
 
 /// Agent context files: instructions every agent session reads. Editing them
@@ -436,6 +440,14 @@ mod tests {
             ("specs/001-x/tasks.md", Class::Intent),
             (".specify/memory/constitution.md", Class::Intent),
             ("speccoder.toml", Class::Judge),
+            (
+                ".speccoder/extensions/kitchen/scripts/check.sh",
+                Class::Judge,
+            ),
+            (
+                "app/.specify/extensions/threatspec/extension.yml",
+                Class::Intent,
+            ),
             (".github/workflows/ci.yml", Class::Judge),
             (".config/nextest.toml", Class::Judge),
             ("web/jest.config.ts", Class::Judge),

@@ -758,6 +758,59 @@
           ]
         },
         {
+          "description": "Trust an extension as shown (its digest), from its sheet.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "extension_trust"
+            },
+            "name": {
+              "description": "The extension.",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest the person saw.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "digest"
+          ]
+        },
+        {
+          "description": "Produce an extension's view anew.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "view_run"
+            },
+            "extension": {
+              "description": "The extension.",
+              "type": "string"
+            },
+            "view": {
+              "description": "The view.",
+              "type": "string"
+            },
+            "feature": {
+              "description": "The feature it is about; `None`: the project.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "extension",
+            "view"
+          ]
+        },
+        {
           "description": "Run a gate alone on the checkout, or send an observer a sample event.",
           "type": "object",
           "properties": {
@@ -2601,6 +2654,14 @@
         {
           "description": "`hooks`: every hook, its trust and its recent runs.",
           "$ref": "#/$defs/HooksReport"
+        },
+        {
+          "description": "`extensions`: every extension, what it contributes and its trust.",
+          "$ref": "#/$defs/ExtensionsReport"
+        },
+        {
+          "description": "The views an extension places on a feature or the project.",
+          "$ref": "#/$defs/ViewsReport"
         },
         {
           "description": "`shape`: a person's words made into a requirement, and what changed.",
@@ -4455,6 +4516,13 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "findings": {
+          "description": "The findings it left (SARIF), as shown.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SarifFinding"
+          }
         }
       },
       "required": [
@@ -4497,6 +4565,45 @@
           "type": "string",
           "const": "not_run"
         }
+      ]
+    },
+    "SarifFinding": {
+      "description": "One finding, as speccoder shows it.",
+      "type": "object",
+      "properties": {
+        "rule": {
+          "description": "The rule's id.",
+          "type": "string"
+        },
+        "level": {
+          "description": "`error`, `warning`, `note` or `none`.",
+          "type": "string"
+        },
+        "message": {
+          "description": "What it says.",
+          "type": "string"
+        },
+        "file": {
+          "description": "The file, relative to the project.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "description": "The line.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "rule",
+        "level",
+        "message"
       ]
     },
     "AgentAttempt": {
@@ -10984,6 +11091,13 @@
               "type": "null"
             }
           ]
+        },
+        "findings": {
+          "description": "`gate_blocked`: the findings the gate left (SARIF), as shown.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SarifFinding"
+          }
         }
       },
       "required": [
@@ -11394,6 +11508,16 @@
           "description": "[`Runnable::HookTrust`].",
           "type": "string",
           "const": "hook_trust"
+        },
+        {
+          "description": "[`Runnable::ExtensionTrust`].",
+          "type": "string",
+          "const": "extension_trust"
+        },
+        {
+          "description": "[`Runnable::ViewRun`].",
+          "type": "string",
+          "const": "view_run"
         },
         {
           "description": "[`Runnable::HookTest`].",
@@ -11953,6 +12077,20 @@
             "string",
             "null"
           ]
+        },
+        "findings": {
+          "description": "The findings a gate left (SARIF), as shown.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SarifFinding"
+          }
+        },
+        "findings_error": {
+          "description": "Why the findings it left could not be shown.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -11992,6 +12130,618 @@
         "name",
         "outcome",
         "duration_ms"
+      ]
+    },
+    "ExtensionsReport": {
+      "description": "`speccoder extensions`: every extension, and what was just done.",
+      "type": "object",
+      "properties": {
+        "extensions": {
+          "description": "Every extension, by name.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Extension"
+          }
+        },
+        "trusted": {
+          "description": "Extensions just trusted.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "added": {
+          "description": "The extension just added.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "removed": {
+          "description": "The extension just removed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "extensions"
+      ]
+    },
+    "Extension": {
+      "description": "One extension as `speccoder extensions` shows it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Agent Plugins or Spec Kit.",
+          "$ref": "#/$defs/ExtensionSource"
+        },
+        "version": {
+          "description": "Its version, as it says.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "What it says it is.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "folder": {
+          "description": "Its folder, relative to the project.",
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where it was added from.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AddedFrom"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "digest": {
+          "description": "`sha256:<hex>` over every file.",
+          "type": "string"
+        },
+        "files": {
+          "description": "Every file and its digest.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HookFile"
+          }
+        },
+        "contributions": {
+          "description": "What it contributes.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Contribution"
+          }
+        },
+        "trust": {
+          "description": "Whether it may run here.",
+          "$ref": "#/$defs/TrustState"
+        },
+        "changes": {
+          "description": "For a changed extension: what changed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExtensionChanges"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trust_flag": {
+          "description": "The flag that trusts it in CI: `--trust-extension name=sha256:…`.",
+          "type": "string"
+        },
+        "problems": {
+          "description": "Why it cannot be loaded; nothing of it is offered while any.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "source",
+        "folder",
+        "digest",
+        "files",
+        "contributions",
+        "trust",
+        "trust_flag"
+      ]
+    },
+    "ExtensionSource": {
+      "description": "Where an extension comes from.",
+      "oneOf": [
+        {
+          "description": "An Agent Plugins 1.0 folder in `.speccoder/extensions/`.",
+          "type": "string",
+          "const": "agent_plugins"
+        },
+        {
+          "description": "A Spec Kit extension in `.specify/extensions/`.",
+          "type": "string",
+          "const": "spec_kit"
+        }
+      ]
+    },
+    "AddedFrom": {
+      "description": "Where `speccoder extensions add` copied an extension from.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "The repository, or the folder.",
+          "type": "string"
+        },
+        "commit": {
+          "description": "The commit, for a repository.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "added": {
+          "description": "When (RFC 3339).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "added"
+      ]
+    },
+    "Contribution": {
+      "description": "One contribution and what it can reach, in words.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Its kind.",
+          "$ref": "#/$defs/ContributionKind"
+        },
+        "name": {
+          "description": "Its qualified name: `threatspec.check`, `/threatspec:model`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "What it does and reaches: `gate before tick: runs ./check.sh — no network`.",
+          "type": "string"
+        },
+        "reaches": {
+          "description": "What it reaches that a narrower one would not: `network`,\n`host:hooks.example.com`, `event:task.stopped`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "line"
+      ]
+    },
+    "ContributionKind": {
+      "description": "What kind of thing an extension contributes.",
+      "oneOf": [
+        {
+          "description": "A `[hooks]` gate.",
+          "type": "string",
+          "const": "gate"
+        },
+        {
+          "description": "A `[hooks]` observer.",
+          "type": "string",
+          "const": "observer"
+        },
+        {
+          "description": "A `[views]` view.",
+          "type": "string",
+          "const": "view"
+        },
+        {
+          "description": "A `skills/<name>/SKILL.md`.",
+          "type": "string",
+          "const": "skill"
+        },
+        {
+          "description": "An `mcp.json` server.",
+          "type": "string",
+          "const": "mcp_server"
+        },
+        {
+          "description": "A Spec Kit command.",
+          "type": "string",
+          "const": "command"
+        },
+        {
+          "description": "A Spec Kit hook offered at its step.",
+          "type": "string",
+          "const": "hook_offer"
+        }
+      ]
+    },
+    "ExtensionChanges": {
+      "description": "What changed since an extension was trusted.",
+      "type": "object",
+      "properties": {
+        "files": {
+          "description": "Files added, changed or gone.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "widened": {
+          "description": "Contributions that are new or reach further, first in any listing.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "gone": {
+          "description": "Contributions that went.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "files",
+        "widened"
+      ]
+    },
+    "ViewsReport": {
+      "description": "The views placed on a feature (or the project).",
+      "type": "object",
+      "properties": {
+        "views": {
+          "description": "Every view, by extension then name.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewShown"
+          }
+        }
+      },
+      "required": [
+        "views"
+      ]
+    },
+    "ViewShown": {
+      "description": "One view as the app shows it.",
+      "type": "object",
+      "properties": {
+        "extension": {
+          "description": "The extension.",
+          "type": "string"
+        },
+        "view": {
+          "description": "The view.",
+          "$ref": "#/$defs/ViewDef"
+        },
+        "result": {
+          "description": "Its result for the current inputs; none while it waits for trust.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "waits_for_trust": {
+          "description": "The extension waits for trust (or changed since).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "extension",
+        "view",
+        "waits_for_trust"
+      ]
+    },
+    "ViewDef": {
+      "description": "One `[views.<name>]`.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The table's name.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Its heading.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Its data.",
+          "$ref": "#/$defs/ViewSource"
+        },
+        "widget": {
+          "description": "How it shows.",
+          "$ref": "#/$defs/ViewWidget"
+        },
+        "path": {
+          "description": "A dotted path into JSON output.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "columns": {
+          "description": "A table's columns.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "place": {
+          "description": "Where it stands.",
+          "$ref": "#/$defs/ViewPlace"
+        },
+        "timeout": {
+          "description": "Seconds a command may run.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "exit": {
+          "description": "Exit codes whose output is still data.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "title",
+        "source",
+        "widget",
+        "place",
+        "timeout",
+        "exit"
+      ]
+    },
+    "ViewSource": {
+      "description": "Where a view's data comes from.",
+      "oneOf": [
+        {
+          "description": "A command, run in the sandbox.",
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "run"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "A file, read as it is.",
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "file"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ViewWidget": {
+      "description": "How a view shows its data.",
+      "oneOf": [
+        {
+          "description": "SARIF findings.",
+          "type": "string",
+          "const": "findings"
+        },
+        {
+          "description": "Rows with columns.",
+          "type": "string",
+          "const": "table"
+        },
+        {
+          "description": "Named numbers or short words.",
+          "type": "string",
+          "const": "metrics"
+        },
+        {
+          "description": "A document.",
+          "type": "string",
+          "const": "markdown"
+        }
+      ]
+    },
+    "ViewPlace": {
+      "description": "Where a view stands.",
+      "oneOf": [
+        {
+          "description": "On each feature's page, about that feature.",
+          "type": "string",
+          "const": "feature"
+        },
+        {
+          "description": "On the project's overview.",
+          "type": "string",
+          "const": "project"
+        }
+      ]
+    },
+    "ViewResult": {
+      "description": "A view's last result.",
+      "type": "object",
+      "properties": {
+        "inputs": {
+          "description": "The digest of what it read.",
+          "type": "string"
+        },
+        "ran_at": {
+          "description": "When it ran (RFC 3339).",
+          "type": "string"
+        },
+        "duration_ms": {
+          "description": "How long.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "data": {
+          "description": "Its data.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewData"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "description": "Why there is no data, in words.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "inputs",
+        "ran_at",
+        "duration_ms"
+      ]
+    },
+    "ViewData": {
+      "description": "A view's data, ready for its widget.",
+      "oneOf": [
+        {
+          "description": "Findings.",
+          "type": "object",
+          "properties": {
+            "widget": {
+              "type": "string",
+              "const": "findings"
+            },
+            "findings": {
+              "description": "Each finding.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SarifFinding"
+              }
+            }
+          },
+          "required": [
+            "widget",
+            "findings"
+          ]
+        },
+        {
+          "description": "Rows.",
+          "type": "object",
+          "properties": {
+            "widget": {
+              "type": "string",
+              "const": "table"
+            },
+            "columns": {
+              "description": "The columns.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rows": {
+              "description": "Each row's cells, as text.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": [
+            "widget",
+            "columns",
+            "rows"
+          ]
+        },
+        {
+          "description": "Named values.",
+          "type": "object",
+          "properties": {
+            "widget": {
+              "type": "string",
+              "const": "metrics"
+            },
+            "metrics": {
+              "description": "`(name, value)`, values as text.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          },
+          "required": [
+            "widget",
+            "metrics"
+          ]
+        },
+        {
+          "description": "A document, rendered (raw HTML shown as text).",
+          "type": "object",
+          "properties": {
+            "widget": {
+              "type": "string",
+              "const": "markdown"
+            },
+            "html": {
+              "description": "The HTML.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "widget",
+            "html"
+          ]
+        }
       ]
     },
     "ShapeReport": {

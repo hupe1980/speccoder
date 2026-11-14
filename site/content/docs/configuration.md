@@ -244,7 +244,7 @@ Who makes the attempts; see [external agents](@/docs/integrations.md#external-ag
 | `allow` | `[]` | Tools called without approval |
 | `deny` | `[]` | Tools never offered |
 
-Server names are lowercase letters, digits and `-`, and not `fs`, `proc` or `git`. Their tools appear to the model as `mcp__<server>__<tool>`.
+Server names are lowercase letters, digits and single `_` inside, and not `fs`, `proc` or `git`. Their tools appear to the model as `mcp__<server>__<tool>`. An [extension](@/docs/extensions.md#skills-and-mcp-servers) adds its own servers from its `mcp.json`.
 
 ## `[hooks.<name>]`
 

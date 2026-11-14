@@ -100,7 +100,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "hook_trust" | "hook_test" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "rule_scenario" | "check_story" | "accept_untestable" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "hook_trust" | "extension_trust" | "view_run" | "hook_test" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "rule_scenario" | "check_story" | "accept_untestable" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -112,6 +112,16 @@ export interface ActionsReport {
   actions: Action[];
   /** The feature's journey (spec → plan → tasks → commit → run → review). */
   journey: JourneyStep[];
+}
+
+/** Where `speccoder extensions add` copied an extension from. */
+export interface AddedFrom {
+  /** The repository, or the folder. */
+  url: string;
+  /** The commit, for a repository. */
+  commit?: string | null;
+  /** When (RFC 3339). */
+  added: string;
 }
 
 /** An external agent's attempt, as the report keeps it. */
@@ -930,7 +940,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -1209,6 +1219,24 @@ export interface ContextManifest {
   /** Hex SHA-256 of [`ContextManifest::canonical`]. */
   digest: string;
 }
+
+/** One contribution and what it can reach, in words. */
+export interface Contribution {
+  /** Its kind. */
+  kind: ContributionKind;
+  /** Its qualified name: `threatspec.check`, `/threatspec:model`. */
+  name: string;
+  /** What it does and reaches: `gate before tick: runs ./check.sh — no network`. */
+  line: string;
+  /**
+   * What it reaches that a narrower one would not: `network`,
+   * `host:hooks.example.com`, `event:task.stopped`.
+   */
+  reaches?: string[];
+}
+
+/** What kind of thing an extension contributes. */
+export type ContributionKind = "gate" | "observer" | "view" | "skill" | "mcp_server" | "command" | "hook_offer";
 
 /** Result of `accept`, `skip` and `nudge`. */
 export interface ControlReport {
@@ -2404,6 +2432,46 @@ export interface ExploreSession {
   started?: Started | null;
 }
 
+/** One extension as `speccoder extensions` shows it. */
+export interface Extension {
+  /** Its name. */
+  name: string;
+  /** Agent Plugins or Spec Kit. */
+  source: ExtensionSource;
+  /** Its version, as it says. */
+  version?: string | null;
+  /** What it says it is. */
+  description?: string | null;
+  /** Its folder, relative to the project. */
+  folder: string;
+  /** Where it was added from. */
+  origin?: AddedFrom | null;
+  /** `sha256:<hex>` over every file. */
+  digest: string;
+  /** Every file and its digest. */
+  files: HookFile[];
+  /** What it contributes. */
+  contributions: Contribution[];
+  /** Whether it may run here. */
+  trust: TrustState;
+  /** For a changed extension: what changed. */
+  changes?: ExtensionChanges | null;
+  /** The flag that trusts it in CI: `--trust-extension name=sha256:…`. */
+  trust_flag: string;
+  /** Why it cannot be loaded; nothing of it is offered while any. */
+  problems?: string[];
+}
+
+/** What changed since an extension was trusted. */
+export interface ExtensionChanges {
+  /** Files added, changed or gone. */
+  files: string[];
+  /** Contributions that are new or reach further, first in any listing. */
+  widened: string[];
+  /** Contributions that went. */
+  gone?: string[];
+}
+
 /** A Spec Kit extension the person chose. */
 export interface ExtensionChoice {
   /** A bundled name, a local path or a URL, as given. */
@@ -2414,6 +2482,21 @@ export interface ExtensionChoice {
 
 /** What an extension source is. */
 export type ExtensionKind = "bundled" | "path" | "url";
+
+/** Where an extension comes from. */
+export type ExtensionSource = "agent_plugins" | "spec_kit";
+
+/** `speccoder extensions`: every extension, and what was just done. */
+export interface ExtensionsReport {
+  /** Every extension, by name. */
+  extensions: Extension[];
+  /** Extensions just trusted. */
+  trusted?: string[];
+  /** The extension just added. */
+  added?: string | null;
+  /** The extension just removed. */
+  removed?: string | null;
+}
 
 /** One check that did not pass. */
 export interface FailedCheck {
@@ -2648,6 +2731,8 @@ export interface GateRecord {
   code?: string | null;
   /** How long it ran. */
   duration_ms: number;
+  /** The findings it left (SARIF), as shown. */
+  findings?: SarifFinding[];
 }
 
 /** How one gate ended at its point. */
@@ -2800,6 +2885,10 @@ export interface HookRun {
   duration_ms: number;
   /** Why it failed or blocked. */
   error?: string | null;
+  /** The findings a gate left (SARIF), as shown. */
+  findings?: SarifFinding[];
+  /** Why the findings it left could not be shown. */
+  findings_error?: string | null;
 }
 
 /** How `speccoder hooks test` went. */
@@ -2964,6 +3053,8 @@ export interface InboxItem {
   actions: Action[];
   /** `unverified`: the feature's ticks and why each regression-only one is. */
   unverified?: Unverified | null;
+  /** `gate_blocked`: the findings the gate left (SARIF), as shown. */
+  findings?: SarifFinding[];
 }
 
 /**
@@ -5037,6 +5128,24 @@ export type Runnable =
     /** The digest the person saw. */
     digest: string;
   }
+  /** Trust an extension as shown (its digest), from its sheet. */
+  | {
+    kind: "extension_trust";
+    /** The extension. */
+    name: string;
+    /** The digest the person saw. */
+    digest: string;
+  }
+  /** Produce an extension's view anew. */
+  | {
+    kind: "view_run";
+    /** The extension. */
+    extension: string;
+    /** The view. */
+    view: string;
+    /** The feature it is about; `None`: the project. */
+    feature?: string | null;
+  }
   /** Run a gate alone on the checkout, or send an observer a sample event. */
   | {
     kind: "hook_test";
@@ -5428,6 +5537,20 @@ export interface SampleRun {
 export interface SandboxNote {
   /** `seatbelt`, `landlock`; `null`: the commands run without one. */
   backend: string | null;
+}
+
+/** One finding, as speccoder shows it. */
+export interface SarifFinding {
+  /** The rule's id. */
+  rule: string;
+  /** `error`, `warning`, `note` or `none`. */
+  level: string;
+  /** What it says. */
+  message: string;
+  /** The file, relative to the project. */
+  file?: string | null;
+  /** The line. */
+  line?: number | null;
 }
 
 /** One scenario of a story. */
@@ -6558,6 +6681,106 @@ export type Via = "terminal" | "web" | "window" | "acp" | "phone" | "ci" | "mcp"
 
 /** A read-only place an interface opens instead of running a command. */
 export type View = "doctor" | "bug_report" | "report" | "live" | "approvals" | "explain" | "review" | "settings" | "setup" | "bug" | "quick_change" | "new_feature" | "new_project" | "github" | "task" | "ask" | "explore";
+
+/** A view's data, ready for its widget. */
+export type ViewData =
+  /** Findings. */
+  | {
+    widget: "findings";
+    /** Each finding. */
+    findings: SarifFinding[];
+  }
+  /** Rows. */
+  | {
+    widget: "table";
+    /** The columns. */
+    columns: string[];
+    /** Each row's cells, as text. */
+    rows: string[][];
+  }
+  /** Named values. */
+  | {
+    widget: "metrics";
+    /** `(name, value)`, values as text. */
+    metrics: ([string, string])[];
+  }
+  /** A document, rendered (raw HTML shown as text). */
+  | {
+    widget: "markdown";
+    /** The HTML. */
+    html: string;
+  };
+
+/** One `[views.<name>]`. */
+export interface ViewDef {
+  /** The table's name. */
+  name: string;
+  /** Its heading. */
+  title: string;
+  /** Its data. */
+  source: ViewSource;
+  /** How it shows. */
+  widget: ViewWidget;
+  /** A dotted path into JSON output. */
+  path?: string | null;
+  /** A table's columns. */
+  columns?: string[];
+  /** Where it stands. */
+  place: ViewPlace;
+  /** Seconds a command may run. */
+  timeout: number;
+  /** Exit codes whose output is still data. */
+  exit: number[];
+}
+
+/** Where a view stands. */
+export type ViewPlace = "feature" | "project";
+
+/** A view's last result. */
+export interface ViewResult {
+  /** The digest of what it read. */
+  inputs: string;
+  /** When it ran (RFC 3339). */
+  ran_at: string;
+  /** How long. */
+  duration_ms: number;
+  /** Its data. */
+  data?: ViewData | null;
+  /** Why there is no data, in words. */
+  error?: string | null;
+}
+
+/** One view as the app shows it. */
+export interface ViewShown {
+  /** The extension. */
+  extension: string;
+  /** The view. */
+  view: ViewDef;
+  /** Its result for the current inputs; none while it waits for trust. */
+  result?: ViewResult | null;
+  /** The extension waits for trust (or changed since). */
+  waits_for_trust: boolean;
+}
+
+/** Where a view's data comes from. */
+export type ViewSource =
+  /** A command, run in the sandbox. */
+  | {
+    run: string[];
+  }
+  /** A file, read as it is. */
+  | {
+    file: string;
+  };
+
+/** How a view shows its data. */
+export type ViewWidget = "findings" | "table" | "metrics" | "markdown";
+
+/** The views placed on a feature (or the project). */
+export interface ViewsReport {
+  /** Every view, by extension then name. */
+  views: ViewShown[];
+}
 
 /** A run in progress, this host's or another speccoder process's. */
 export interface WorkingRun {

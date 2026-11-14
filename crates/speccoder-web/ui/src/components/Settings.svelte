@@ -12,6 +12,7 @@
   import Diff from "./Diff.svelte";
   import Agents from "./Agents.svelte";
   import Hooks from "./Hooks.svelte";
+  import Extensions from "./Extensions.svelte";
 
   let report = $state<ConfigReport | null>(null);
   let pick = $state("model");
@@ -360,6 +361,11 @@
         {#if count}<span class="dot" title="{count} unsaved">{count}</span>{/if}
       </button>
     {/each}
+    <!-- Not a section of speccoder.toml: its own folders, trusted by digest. -->
+    <button class:on={pick === "extensions"} onclick={() => (pick = "extensions")}>
+      <span class="badge" style="--c:#5e5ce6"><Icon name="grid" size={13} weight={2.2} /></span>
+      <span class="t">Extensions</span>
+    </button>
   </nav>
 
   <div class="pane">
@@ -375,6 +381,13 @@
     {/if}
     {#if report?.error}
       <p class="bad"><Icon name="exclaim" size={14} weight={2} /> {report.error}</p>
+    {/if}
+    {#if pick === "extensions"}
+      <header>
+        <span class="badge big" style="--c:#5e5ce6"><Icon name="grid" size={20} weight={2} /></span>
+        <div><h2>Extensions</h2><p>Folders of gates, views, skills and MCP servers; nothing of one runs before you trusted it.</p></div>
+      </header>
+      <Extensions />
     {/if}
     {#if section}
       <header>

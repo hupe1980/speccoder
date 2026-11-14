@@ -165,6 +165,8 @@ pub enum Kind {
     GateBlocked,
     /// A gate waits for a person's trust before any tick can pass it.
     HookUntrusted,
+    /// An extension waits for a person's trust before any of it runs.
+    ExtensionUntrusted,
     /// The last attempt did not pass.
     Stuck,
     /// An autopilot run refused calls it would have asked about: listed
@@ -184,7 +186,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, the most urgent first.
-    pub const ALL: [Self; 25] = [
+    pub const ALL: [Self; 26] = [
         Self::Unknown,
         Self::Approval,
         Self::ApprovalBatch,
@@ -202,6 +204,7 @@ impl Kind {
         Self::Revise,
         Self::Yours,
         Self::HookUntrusted,
+        Self::ExtensionUntrusted,
         Self::GateBlocked,
         Self::Stuck,
         Self::AutopilotDenied,
@@ -234,6 +237,7 @@ impl Kind {
             Self::Yours => "yours",
             Self::GateBlocked => "gate_blocked",
             Self::HookUntrusted => "hook_untrusted",
+            Self::ExtensionUntrusted => "extension_untrusted",
             Self::Stuck => "stuck",
             Self::AutopilotDenied => "autopilot_denied",
             Self::BugAlreadySatisfied => "bug_already_satisfied",
@@ -263,6 +267,7 @@ impl Kind {
             | Self::Yours
             | Self::GateBlocked
             | Self::HookUntrusted
+            | Self::ExtensionUntrusted
             | Self::Stuck
             | Self::Commit => Group::BlockedOnYou,
             Self::Unverified
@@ -293,7 +298,7 @@ impl Kind {
 
     /// Every recorded name, the most urgent first.
     #[must_use]
-    pub fn names() -> [&'static str; 25] {
+    pub fn names() -> [&'static str; 26] {
         Self::ALL.map(Self::as_str)
     }
 }
@@ -334,6 +339,7 @@ mod tests {
                             | "promote"
                             | "gate_blocked"
                             | "hook_untrusted"
+                            | "extension_untrusted"
                     )
             })
             .collect();

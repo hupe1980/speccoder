@@ -403,6 +403,13 @@ fn human_body(
             }
             writeln!(out, "{}", result.message())
         }
+        (_, Some(CommandData::Extensions(r))) => {
+            let look = crate::style::out();
+            for line in crate::human::extensions(r, &look) {
+                writeln!(out, "{line}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (CommandStatus::Ok, Some(CommandData::Hooks(r))) => {
             let look = crate::style::out();
             for line in crate::human::hooks(r, &look) {

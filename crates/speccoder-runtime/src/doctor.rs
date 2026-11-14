@@ -72,9 +72,10 @@ fn hooks_check(path: &Path, state: &Path) -> Option<DoctorCheck> {
             &["speccoder hooks"],
         ));
     }
+    // An extension's hooks are the extensions check's.
     let waiting: Vec<&str> = entries
         .iter()
-        .filter(|e| e.state != TrustState::Trusted)
+        .filter(|e| e.state != TrustState::Trusted && !e.name.contains('.'))
         .map(|e| e.name.as_str())
         .collect();
     if waiting.is_empty() {
@@ -96,6 +97,43 @@ fn hooks_check(path: &Path, state: &Path) -> Option<DoctorCheck> {
             waiting.join(", ")
         ),
         &["speccoder hooks trust"],
+    ))
+}
+
+/// The project's extensions: one that cannot be loaded fails, one that
+/// waits for trust warns; trusted ones pass with their count.
+fn extensions_check(path: &Path, state: &Path) -> Option<DoctorCheck> {
+    let all = crate::extensions::load(path);
+    if all.is_empty() {
+        return None;
+    }
+    let lines = crate::extensions::report::doctor_lines(path, state);
+    if let Some((_, l)) = lines.iter().find(|(_, l)| l.contains("cannot be loaded")) {
+        return Some(failed(
+            "extensions",
+            "EXTENSION-UNLOADABLE",
+            l.clone(),
+            &[
+                "→ fix what it names in the extension's folder, or remove it",
+                "speccoder extensions",
+            ],
+        ));
+    }
+    if lines.is_empty() {
+        return Some(check(
+            "extensions",
+            DoctorLevel::Pass,
+            format!("{} trusted", all.len()),
+        ));
+    }
+    Some(warned(
+        "extensions",
+        lines
+            .iter()
+            .map(|(_, l)| l.as_str())
+            .collect::<Vec<_>>()
+            .join("; "),
+        &["speccoder extensions"],
     ))
 }
 
@@ -514,6 +552,9 @@ pub fn checks(
     ));
     // Hooks: what keeps one from running, or that it waits for trust.
     if let Some(row) = crate::worktree::state_dir().and_then(|s| hooks_check(path, &s)) {
+        out.push(row);
+    }
+    if let Some(row) = crate::worktree::state_dir().and_then(|s| extensions_check(path, &s)) {
         out.push(row);
     }
     // `[worktree] include` and `.worktreeinclude`: what a run's worktree

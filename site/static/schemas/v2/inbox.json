@@ -121,6 +121,13 @@
               "type": "null"
             }
           ]
+        },
+        "findings": {
+          "description": "`gate_blocked`: the findings the gate left (SARIF), as shown.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SarifFinding"
+          }
         }
       },
       "required": [
@@ -621,6 +628,59 @@
             "kind",
             "name",
             "digest"
+          ]
+        },
+        {
+          "description": "Trust an extension as shown (its digest), from its sheet.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "extension_trust"
+            },
+            "name": {
+              "description": "The extension.",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest the person saw.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "digest"
+          ]
+        },
+        {
+          "description": "Produce an extension's view anew.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "view_run"
+            },
+            "extension": {
+              "description": "The extension.",
+              "type": "string"
+            },
+            "view": {
+              "description": "The view.",
+              "type": "string"
+            },
+            "feature": {
+              "description": "The feature it is about; `None`: the project.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "extension",
+            "view"
           ]
         },
         {
@@ -2392,6 +2452,16 @@
           "const": "hook_trust"
         },
         {
+          "description": "[`Runnable::ExtensionTrust`].",
+          "type": "string",
+          "const": "extension_trust"
+        },
+        {
+          "description": "[`Runnable::ViewRun`].",
+          "type": "string",
+          "const": "view_run"
+        },
+        {
           "description": "[`Runnable::HookTest`].",
           "type": "string",
           "const": "hook_test"
@@ -2654,6 +2724,45 @@
         "n",
         "tasks",
         "text"
+      ]
+    },
+    "SarifFinding": {
+      "description": "One finding, as speccoder shows it.",
+      "type": "object",
+      "properties": {
+        "rule": {
+          "description": "The rule's id.",
+          "type": "string"
+        },
+        "level": {
+          "description": "`error`, `warning`, `note` or `none`.",
+          "type": "string"
+        },
+        "message": {
+          "description": "What it says.",
+          "type": "string"
+        },
+        "file": {
+          "description": "The file, relative to the project.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "description": "The line.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "rule",
+        "level",
+        "message"
       ]
     },
     "GroupCount": {

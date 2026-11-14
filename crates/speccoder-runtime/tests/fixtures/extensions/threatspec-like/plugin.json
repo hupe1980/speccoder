@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "threatspec-like",
+  "version": "0.2.1",
+  "description": "A security checker shaped like threatspec's check"
+}

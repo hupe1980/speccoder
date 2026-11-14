@@ -150,7 +150,12 @@ fn advance(cursor: &mut Cursor, reference: &str, event: &Event) {
 pub fn send(def: &HookDef, envelope: &Value, root: &Path, state: &Path) -> Result<String, String> {
     match &def.runner {
         Runner::Url { url, secret_env } => post(def, url, secret_env.as_deref(), envelope),
-        Runner::Argv(argv) => command(def, argv, envelope, root, state),
+        Runner::Argv(argv) => {
+            // An extension's `./` paths are inside its folder.
+            let folder = def.extension.as_ref().map(|(_, f)| Path::new(f));
+            let argv = crate::extensions::resolve(argv, folder, &[]);
+            command(def, &argv, envelope, root, state)
+        }
     }
 }
 
@@ -315,8 +320,7 @@ pub fn pass(root: &Path, state: &Path, deadline: Option<Instant>) -> Delivery {
     let project = super::project_id(state, root);
     let mut all = cursors(&dir);
     for def in observers {
-        let digest = super::digest(def, root).digest;
-        if super::trust::state(&dir, &def.name, &digest) != TrustState::Trusted {
+        if super::digest(def, root).trust(&dir) != TrustState::Trusted {
             out.untrusted.push(def.name.clone());
             continue;
         }
@@ -362,6 +366,8 @@ pub fn pass(root: &Path, state: &Path, deadline: Option<Instant>) -> Delivery {
                     outcome: if sent.is_ok() { "delivered" } else { "failed" }.to_owned(),
                     duration_ms,
                     error: sent.as_ref().err().cloned(),
+                    findings: Vec::new(),
+                    findings_error: None,
                 },
             );
             match sent {

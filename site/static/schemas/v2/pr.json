@@ -129,6 +129,13 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "findings": {
+          "description": "The findings it left (SARIF), as shown.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SarifFinding"
+          }
         }
       },
       "required": [
@@ -171,6 +178,45 @@
           "type": "string",
           "const": "not_run"
         }
+      ]
+    },
+    "SarifFinding": {
+      "description": "One finding, as speccoder shows it.",
+      "type": "object",
+      "properties": {
+        "rule": {
+          "description": "The rule's id.",
+          "type": "string"
+        },
+        "level": {
+          "description": "`error`, `warning`, `note` or `none`.",
+          "type": "string"
+        },
+        "message": {
+          "description": "What it says.",
+          "type": "string"
+        },
+        "file": {
+          "description": "The file, relative to the project.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "description": "The line.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "rule",
+        "level",
+        "message"
       ]
     }
   },

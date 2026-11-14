@@ -35,6 +35,39 @@ pub mod progress {
     pub use crate::progress::{Event, Progress, read_live};
 }
 
+/// The project's extensions: what each contributes, and its views.
+pub mod extensions {
+    use speccoder_core::{CommandData, CommandResult, CommandStatus};
+
+    fn no_state() -> CommandResult {
+        CommandResult::new(
+            "extensions",
+            CommandStatus::ConfigError,
+            "no state directory",
+        )
+    }
+
+    /// Every extension of the project at `root`: what it contributes and
+    /// can reach, and its trust.
+    #[must_use]
+    pub fn list(root: &std::path::Path) -> CommandResult {
+        crate::worktree::state_dir().map_or_else(no_state, |state| {
+            crate::extensions::report::list_cmd(root, &state)
+        })
+    }
+
+    /// The views on `feature` (or, with none, on the project), each with its
+    /// result for the current inputs.
+    #[must_use]
+    pub fn views(root: &std::path::Path, feature: Option<&str>) -> CommandResult {
+        crate::worktree::state_dir().map_or_else(no_state, |state| {
+            let shown = crate::extensions::views::views(root, &state, feature, None);
+            CommandResult::new("extensions", CommandStatus::Ok, "")
+                .with_data(CommandData::ExtensionViews(Box::new(shown)))
+        })
+    }
+}
+
 /// The project's hooks: the list (trust and test go through actions).
 pub mod hooks {
     /// Every hook of the project at `root`, its trust and its recent runs.

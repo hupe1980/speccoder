@@ -166,3 +166,91 @@ mod tests {
         assert!(inv.enabled("bug").is_none());
     }
 }
+
+/// Where Spec Kit installs an extension, relative to the project.
+pub const DIR: &str = ".specify/extensions";
+
+/// What an installed extension's `extension.yml` says, as speccoder hosts it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Manifest {
+    /// `extension.id`.
+    pub id: Option<String>,
+    /// `extension.version`.
+    pub version: Option<String>,
+    /// `extension.description`.
+    pub description: Option<String>,
+    /// `provides.commands[].name`.
+    pub commands: Vec<String>,
+    /// `hooks`: `(event, command, prompt, mandatory)`.
+    pub hooks: Vec<(String, String, Option<String>, bool)>,
+}
+
+/// The folders of the extensions installed and enabled in the project at
+/// `project` (every folder with an `extension.yml` when Spec Kit keeps no
+/// registry), sorted.
+#[must_use]
+pub fn folders(project: &Path) -> Vec<std::path::PathBuf> {
+    let listed = files(project);
+    let mut out: Vec<std::path::PathBuf> = std::fs::read_dir(project.join(DIR))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.join("extension.yml").is_file())
+        .filter(|p| {
+            let id = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            listed
+                .as_ref()
+                .is_none_or(|i| i.entries.is_empty() || i.enabled(id).is_some())
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// The `extension.yml` in `folder`.
+///
+/// # Errors
+///
+/// It cannot be read or parsed.
+pub fn manifest(folder: &Path) -> Result<Manifest, String> {
+    let text = std::fs::read_to_string(folder.join("extension.yml"))
+        .map_err(|e| format!("extension.yml: {e}"))?;
+    let v: serde_json::Value =
+        serde_saphyr::from_str(&text).map_err(|e| format!("extension.yml: {e}"))?;
+    let ext = &v["extension"];
+    let mut hooks = Vec::new();
+    if let Some(all) = v["hooks"].as_object() {
+        for (event, h) in all {
+            for h in h.as_array().cloned().unwrap_or_else(|| vec![h.clone()]) {
+                if let Some(command) = h["command"].as_str() {
+                    hooks.push((
+                        event.clone(),
+                        command.to_owned(),
+                        h["prompt"].as_str().map(str::to_owned),
+                        h["optional"].as_bool() == Some(false),
+                    ));
+                }
+            }
+        }
+    }
+    Ok(Manifest {
+        id: ext["id"].as_str().map(str::to_owned),
+        version: ext["version"].as_str().map(str::to_owned),
+        description: ext["description"].as_str().map(str::to_owned),
+        commands: v["provides"]["commands"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|c| c["name"].as_str().map(str::to_owned))
+            .collect(),
+        hooks,
+    })
+}
+
+/// The skill a command installs as (`speckit.threatspec.model` →
+/// `speckit-threatspec-model`).
+#[must_use]
+pub fn skill_of(command: &str) -> String {
+    command.replace('.', "-")
+}

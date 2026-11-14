@@ -21,6 +21,9 @@ fn notes_server(allow: &[&str]) -> ServerConfig {
         ],
         allow: allow.iter().map(|s| (*s).to_owned()).collect(),
         deny: Vec::new(),
+        env: Vec::new(),
+        cwd: None,
+        data: None,
     }
 }
 

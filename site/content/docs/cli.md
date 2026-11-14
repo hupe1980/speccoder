@@ -24,6 +24,7 @@ Every command takes:
 | `--plain` | Lines instead of the dashboard: `run` prints its progress, bare `speccoder` the report |
 | `--format speckit\|openspec\|kiro` | The spec format (also `SPECCODER_FORMAT`; default: `[spec] format`, else detected) |
 | `--trust-hook NAME=DIGEST` | Trust a [hook](@/docs/hooks.md#trust) for this command when its digest is still this one (CI); repeatable |
+| `--trust-extension NAME=DIGEST` | Trust an [extension](@/docs/extensions.md#add-and-trust) the same way (CI); repeatable |
 | `--copy` | When the command fails, put what went wrong on the clipboard (`pbcopy`, `wl-copy` or `xclip`): the code and message, each fix, the docs link, the version, the OS and the run — secrets masked; the exit code is the command's |
 
 Every stop and finish ends with a `Next:` block of commands to copy (`next` in JSON). Every failure and stop names a [code](@/docs/codes.md): `error[CODE]`, `stopped[CODE]` when the run waits for you, `warning[CODE]` when it worked with less evidence.
@@ -116,6 +117,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | Command | What it does |
 |---|---|
 | `speccoder hooks [trust [NAME] \| test NAME \| deliver]` | Your [hooks](@/docs/hooks.md): each one's trust, what it guards or hears, its last runs; trust one after seeing what it runs; run a gate alone or send an observer a sample; deliver what waits for the observers |
+| `speccoder extensions [add SOURCE \| trust NAME \| remove NAME]` | Your [extensions](@/docs/extensions.md): what each contributes and can reach, its trust; add one from a folder or `URL@COMMIT` (nothing of it runs), trust it after seeing it, remove it |
 | `speccoder auth [login [--with-token] \| status \| logout] [--host H]` | Sign in to GitHub (a device code, or a token on stdin), show the account, sign out ([GitHub](@/docs/github.md#sign-in)) |
 | `speccoder suggest TEXT…` | The rung a description suggests — bug fix, quick change, feature or a question — and the cue that decided it (payload `rung_suggestion`); no model |
 | `speccoder preset add [--yes]` | Install or update the [speccoder Spec Kit preset](@/docs/planning.md#the-speccoder-preset) with `specify preset add --dev` |

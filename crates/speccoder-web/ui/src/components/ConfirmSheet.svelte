@@ -4,7 +4,7 @@
   // the commands, the title and the body.
   import { app } from "../lib/app.svelte";
   import { get, q } from "../lib/api";
-  import type { HookEntry, HooksReport, Reply } from "../lib/types";
+  import type { Extension, ExtensionsReport, HookEntry, HooksReport, Reply } from "../lib/types";
   import Icon from "./Icon.svelte";
 
   const a = $derived(app.confirming!.action);
@@ -22,7 +22,19 @@
     if (r?.kind !== "hook_trust") return;
     void get<Reply<HooksReport>>("/api/hooks").then((h) => (hook = h.data?.hooks.find((x) => x.name === r.name) ?? null));
   });
-  const stale = $derived(a.run?.kind === "hook_trust" && hook && hook.digest !== a.run.digest);
+  // Trusting an extension: what changed (a widened reach first), what it
+  // contributes and can reach, and where it came from.
+  let ext = $state<Extension | null | undefined>(undefined);
+  $effect(() => {
+    const r = a.run;
+    if (r?.kind !== "extension_trust") return;
+    void get<Reply<ExtensionsReport>>("/api/extensions").then((x) => (ext = x.data?.extensions.find((e) => e.name === r.name) ?? null));
+  });
+  const trusting = $derived(a.run?.kind === "hook_trust" || a.run?.kind === "extension_trust");
+  const stale = $derived(
+    (a.run?.kind === "hook_trust" && hook && hook.digest !== a.run.digest) ||
+      (a.run?.kind === "extension_trust" && ext && ext.digest !== a.run.digest),
+  );
   const blocked = $derived(preview && preview.status !== "ok" ? preview.message : null);
   const go = () => app.perform(a, undefined, true);
   function key(e: KeyboardEvent) {
@@ -35,7 +47,7 @@
 <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && (app.confirming = null)}>
   <div class="sheet glass" role="alertdialog" aria-modal="true" aria-labelledby="c-title" aria-describedby="c-what">
     <header>
-      <span class="badge" aria-hidden="true"><Icon name={a.run?.kind === "hook_trust" ? "shield" : "arrowup"} size={20} weight={2.2} /></span>
+      <span class="badge" aria-hidden="true"><Icon name={trusting ? "shield" : "arrowup"} size={20} weight={2.2} /></span>
       <div>
         <h2 id="c-title">{a.label.charAt(0).toUpperCase() + a.label.slice(1)}?</h2>
         <p id="c-what">{a.confirm}</p>
@@ -76,12 +88,35 @@
         {#if stale}<p class="bad"><Icon name="exclaim" size={14} /> It changed since this was offered: what you see above is what would be trusted — open it again.</p>{/if}
       {/if}
     {/if}
+    {#if a.run?.kind === "extension_trust"}
+      {#if ext === undefined}
+        <div class="center"><span class="spinner"></span></div>
+      {:else if !ext}
+        <p class="bad"><Icon name="exclaim" size={14} /> The extension is no longer in the project.</p>
+      {:else}
+        {#if ext.changes}
+          <div class="changed">
+            <p class="small"><strong>It changed since you trusted it.</strong></p>
+            {#each ext.changes.widened as w (w)}<p class="wide"><Icon name="arrowup" size={11} weight={2.4} /> {w}</p>{/each}
+            {#each ext.changes.gone ?? [] as g (g)}<p class="gone">gone — {g}</p>{/each}
+            {#if ext.changes.files.length}<p class="small mono">{ext.changes.files.join(" · ")}</p>{/if}
+          </div>
+        {/if}
+        <ul class="cmds">
+          {#each ext.contributions as c (c.kind + c.name)}<li>{c.line}</li>{/each}
+        </ul>
+        <p class="small muted mono">
+          {#if ext.origin}says it came from {ext.origin.url}{ext.origin.commit ? ` at ${ext.origin.commit}` : ""} · {/if}{ext.files.length} files in {ext.folder} · {ext.digest.slice(0, 19)}…
+        </p>
+        {#if stale}<p class="bad"><Icon name="exclaim" size={14} /> It changed since this was offered: what you see above is what would be trusted — open it again.</p>{/if}
+      {/if}
+    {/if}
     <p class="cli mono">$ {a.command}</p>
     <div class="row">
       <button class="btn" onclick={() => (app.confirming = null)}>Cancel</button>
       <!-- svelte-ignore a11y_autofocus -->
-      <button class="btn primary" autofocus disabled={(a.run?.kind === "pull_request" && (!preview || !!blocked)) || (a.run?.kind === "hook_trust" && (!hook || !!stale)) || !!app.job?.running} onclick={go}>
-        {a.run?.kind === "pull_request" ? "Push and Open Draft" : a.run?.kind === "hook_trust" ? "Trust" : "Continue"}
+      <button class="btn primary" autofocus disabled={(a.run?.kind === "pull_request" && (!preview || !!blocked)) || (a.run?.kind === "hook_trust" && (!hook || !!stale)) || (a.run?.kind === "extension_trust" && (!ext || !!stale)) || !!app.job?.running} onclick={go}>
+        {a.run?.kind === "pull_request" ? "Push and Open Draft" : trusting ? "Trust" : "Continue"}
       </button>
     </div>
   </div>
@@ -107,5 +142,9 @@
   .center { display: grid; place-items: center; padding: 1.5rem; }
   .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--fill-2); border-top-color: var(--muted); animation: spin 800ms linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .changed { border-radius: var(--radius); padding: 0.55rem 0.8rem; background: color-mix(in srgb, var(--attention) 12%, transparent); display: grid; gap: 0.2rem; }
+  .changed p { margin: 0; }
+  .wide { color: var(--attention); font-weight: 600; font-size: 0.84rem; display: flex; gap: 0.35rem; align-items: baseline; }
+  .gone { color: var(--muted); text-decoration: line-through; font-size: 0.82rem; }
   .was { opacity: 0.6; text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); }
 </style>

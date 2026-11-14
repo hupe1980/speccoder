@@ -489,6 +489,20 @@ async fn documents(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Js
 }
 
 /// `hooks`: every hook, its trust and its recent runs.
+async fn extensions(State(s): State<Shared>) -> Json<Value> {
+    let root = s.root.get();
+    let r = off(move || speccoder_runtime::service::extensions::list(&root)).await;
+    envelope(&s, &r)
+}
+
+/// The views extensions place on a feature (`?feature=`) or the project.
+async fn extension_views(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
+    let root = s.root.get();
+    let r = off(move || speccoder_runtime::service::extensions::views(&root, q.feature.as_deref()))
+        .await;
+    envelope(&s, &r)
+}
+
 async fn hooks(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.get();
     let r = off(move || speccoder_runtime::service::hooks::list(&root)).await;
@@ -1324,6 +1338,8 @@ pub fn router(s: Shared) -> Router {
         .route("/api/documents", get(documents))
         .route("/api/doctor", get(doctor))
         .route("/api/hooks", get(hooks))
+        .route("/api/extensions", get(extensions))
+        .route("/api/extensions/views", get(extension_views))
         .route("/api/agents", get(agents))
         .route("/api/job", get(job))
         .route("/api/live", get(live))

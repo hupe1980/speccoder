@@ -185,6 +185,12 @@ pub fn run_feature_with(
     {
         p.event(&progress::Event::Notice { text });
     }
+    // An extension nobody trusted runs nothing: said once per run.
+    if let Some(p) = &options.progress
+        && let Some(text) = crate::extensions::report::run_notice(path, state)
+    {
+        p.event(&progress::Event::Notice { text });
+    }
     // A unit that is a bug of the format's own structure runs as that bug.
     if let Some(slug) = bug_spec(path, feature) {
         return crate::bug::run_with(
@@ -282,11 +288,14 @@ pub fn run_feature_with(
     ) {
         Ok(lines) => hook_lines.borrow_mut().extend(lines),
         Err(stop) => {
-            return finish(
-                feature_name,
-                attempts,
-                stop.status(),
-                stop.message().to_owned(),
+            return carried(
+                finish(
+                    feature_name,
+                    attempts,
+                    stop.status(),
+                    stop.message().to_owned(),
+                ),
+                &stop,
             );
         }
     }
@@ -500,11 +509,14 @@ pub fn run_feature_with(
                 ) {
                     Ok(lines) => hook_lines.borrow_mut().extend(lines),
                     Err(stop) => {
-                        return finish(
-                            feature_name,
-                            attempts,
-                            stop.status(),
-                            stop.message().to_owned(),
+                        return carried(
+                            finish(
+                                feature_name,
+                                attempts,
+                                stop.status(),
+                                stop.message().to_owned(),
+                            ),
+                            &stop,
                         );
                     }
                 }
@@ -968,4 +980,19 @@ pub(crate) fn no_tasks(
             Some(name),
         ),
     })
+}
+
+/// `result` with the code and fix a hook's stop gave (an untrusted
+/// extension names its own), not the status's default.
+fn carried(result: CommandResult, stop: &CommandResult) -> CommandResult {
+    let mut out = result;
+    if stop.has_explicit_code()
+        && let Some(c) = stop.code()
+    {
+        out = out.with_code(c.name);
+    }
+    if !stop.given_fix().is_empty() {
+        out = out.with_fix(stop.given_fix().to_vec());
+    }
+    out
 }

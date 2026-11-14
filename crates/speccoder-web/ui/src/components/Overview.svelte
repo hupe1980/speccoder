@@ -8,6 +8,7 @@
   import Ring from "./Ring.svelte";
   import Icon from "./Icon.svelte";
   import GitHub from "./GitHub.svelte";
+  import ExtensionViews from "./ExtensionViews.svelte";
 
   const features = $derived(app.project?.features?.features ?? []);
   let reports = $state<Record<string, Report | null>>({});
@@ -101,6 +102,7 @@
     </div>
   {/if}
 
+  <ExtensionViews />
   <GitHub />
 </section>
 

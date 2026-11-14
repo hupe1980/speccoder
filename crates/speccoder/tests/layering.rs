@@ -584,7 +584,7 @@ fn one_dispatcher_maps_runnable_kinds_to_runtime_calls() {
 
 #[test]
 fn the_dispatcher_scan_finds_a_planted_second_one() {
-    let planted = "fn take(r: &Runnable) {\n    match r {\n        Runnable::Skill { .. } => a(),\n        Runnable::Run { .. } => b(),\n        Runnable::Converge | Runnable::Commit { .. } | Runnable::Approve { .. } => c(),\n        Runnable::Reject { .. } | Runnable::Accept { .. } | Runnable::Skip { .. } => d(),\n        Runnable::Nudge { .. } | Runnable::Rule { .. } | Runnable::Done { .. } | Runnable::Hint { .. } => e(),\n        Runnable::Review { .. } | Runnable::IssueComment { .. } | Runnable::QuickChange { .. } | Runnable::Feature | Runnable::PullRequest | Runnable::FixSetup => g(),\n        Runnable::OracleTests { .. } | Runnable::ApproveAndRun { .. } | Runnable::Comment { .. } | Runnable::CommentsSend { .. } | Runnable::RevisionUndo { .. } | Runnable::CodeNudge { .. } => h(),\n        _ => f(),\n    }\n}\n// match r { Runnable::Review {} }\n";
+    let planted = "fn take(r: &Runnable) {\n    match r {\n        Runnable::Skill { .. } => a(),\n        Runnable::Run { .. } => b(),\n        Runnable::Converge | Runnable::Commit { .. } | Runnable::Approve { .. } => c(),\n        Runnable::Reject { .. } | Runnable::Accept { .. } | Runnable::Skip { .. } => d(),\n        Runnable::Nudge { .. } | Runnable::Rule { .. } | Runnable::Done { .. } | Runnable::Hint { .. } => e(),\n        Runnable::Review { .. } | Runnable::IssueComment { .. } | Runnable::QuickChange { .. } | Runnable::Feature | Runnable::PullRequest | Runnable::FixSetup => g(),\n        Runnable::OracleTests { .. } | Runnable::ApproveAndRun { .. } | Runnable::Comment { .. } | Runnable::CommentsSend { .. } | Runnable::RevisionUndo { .. } | Runnable::CodeNudge { .. } | Runnable::HookTrust { .. } | Runnable::HookTest { .. } => h(),\n        _ => f(),\n    }\n}\n// match r { Runnable::Review {} }\n";
     let card = "fn verb(a: &Action) -> &str {\n    match &a.run {\n        Some(Runnable::Commit { .. }) => \"Commit them?\",\n        Some(Runnable::Run { .. } | Runnable::Converge) => \"Start it now?\",\n        _ => \"Run it now?\",\n    }\n}\n";
     let errors = second_dispatchers(&[
         ("speccoder-web/src/jobs.rs".to_owned(), planted.to_owned()),
@@ -592,7 +592,7 @@ fn the_dispatcher_scan_finds_a_planted_second_one() {
     ]);
     assert_eq!(errors.len(), 1, "{errors:?}");
     assert!(
-        errors[0].starts_with("layering: speccoder-web/src/jobs.rs:2 matches 24"),
+        errors[0].starts_with("layering: speccoder-web/src/jobs.rs:2 matches 26"),
         "{errors:?}"
     );
 }

@@ -197,6 +197,12 @@ pub(crate) fn run_task(
     {
         p.event(&progress::Event::Notice { text });
     }
+    // An extension nobody trusted runs nothing: said once per run.
+    if let Some(p) = &options.progress
+        && let Some(text) = crate::extensions::report::run_notice(path, state)
+    {
+        p.event(&progress::Event::Notice { text });
+    }
     // A unit that is a bug runs as one bug, never task by task.
     if options.bug_home.is_none()
         && let Some(slug) = bug_spec(path, feature)

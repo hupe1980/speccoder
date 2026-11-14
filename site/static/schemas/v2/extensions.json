@@ -1,0 +1,318 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "extensions: every extension, what it contributes and can reach, and its trust",
+  "description": "`speccoder extensions`: every extension, and what was just done.",
+  "type": "object",
+  "properties": {
+    "extensions": {
+      "description": "Every extension, by name.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Extension"
+      }
+    },
+    "trusted": {
+      "description": "Extensions just trusted.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "added": {
+      "description": "The extension just added.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "removed": {
+      "description": "The extension just removed.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "extensions"
+  ],
+  "$defs": {
+    "Extension": {
+      "description": "One extension as `speccoder extensions` shows it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Agent Plugins or Spec Kit.",
+          "$ref": "#/$defs/ExtensionSource"
+        },
+        "version": {
+          "description": "Its version, as it says.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "What it says it is.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "folder": {
+          "description": "Its folder, relative to the project.",
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where it was added from.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AddedFrom"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "digest": {
+          "description": "`sha256:<hex>` over every file.",
+          "type": "string"
+        },
+        "files": {
+          "description": "Every file and its digest.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HookFile"
+          }
+        },
+        "contributions": {
+          "description": "What it contributes.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Contribution"
+          }
+        },
+        "trust": {
+          "description": "Whether it may run here.",
+          "$ref": "#/$defs/TrustState"
+        },
+        "changes": {
+          "description": "For a changed extension: what changed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExtensionChanges"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trust_flag": {
+          "description": "The flag that trusts it in CI: `--trust-extension name=sha256:…`.",
+          "type": "string"
+        },
+        "problems": {
+          "description": "Why it cannot be loaded; nothing of it is offered while any.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "source",
+        "folder",
+        "digest",
+        "files",
+        "contributions",
+        "trust",
+        "trust_flag"
+      ]
+    },
+    "ExtensionSource": {
+      "description": "Where an extension comes from.",
+      "oneOf": [
+        {
+          "description": "An Agent Plugins 1.0 folder in `.speccoder/extensions/`.",
+          "type": "string",
+          "const": "agent_plugins"
+        },
+        {
+          "description": "A Spec Kit extension in `.specify/extensions/`.",
+          "type": "string",
+          "const": "spec_kit"
+        }
+      ]
+    },
+    "AddedFrom": {
+      "description": "Where `speccoder extensions add` copied an extension from.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "The repository, or the folder.",
+          "type": "string"
+        },
+        "commit": {
+          "description": "The commit, for a repository.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "added": {
+          "description": "When (RFC 3339).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "added"
+      ]
+    },
+    "HookFile": {
+      "description": "A file a hook runs, and its content's digest.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Its path in the repository.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "`sha256:<hex>` of its content.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "digest"
+      ]
+    },
+    "Contribution": {
+      "description": "One contribution and what it can reach, in words.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Its kind.",
+          "$ref": "#/$defs/ContributionKind"
+        },
+        "name": {
+          "description": "Its qualified name: `threatspec.check`, `/threatspec:model`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "What it does and reaches: `gate before tick: runs ./check.sh — no network`.",
+          "type": "string"
+        },
+        "reaches": {
+          "description": "What it reaches that a narrower one would not: `network`,\n`host:hooks.example.com`, `event:task.stopped`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "line"
+      ]
+    },
+    "ContributionKind": {
+      "description": "What kind of thing an extension contributes.",
+      "oneOf": [
+        {
+          "description": "A `[hooks]` gate.",
+          "type": "string",
+          "const": "gate"
+        },
+        {
+          "description": "A `[hooks]` observer.",
+          "type": "string",
+          "const": "observer"
+        },
+        {
+          "description": "A `[views]` view.",
+          "type": "string",
+          "const": "view"
+        },
+        {
+          "description": "A `skills/<name>/SKILL.md`.",
+          "type": "string",
+          "const": "skill"
+        },
+        {
+          "description": "An `mcp.json` server.",
+          "type": "string",
+          "const": "mcp_server"
+        },
+        {
+          "description": "A Spec Kit command.",
+          "type": "string",
+          "const": "command"
+        },
+        {
+          "description": "A Spec Kit hook offered at its step.",
+          "type": "string",
+          "const": "hook_offer"
+        }
+      ]
+    },
+    "TrustState": {
+      "description": "Whether a hook may run.",
+      "oneOf": [
+        {
+          "description": "A person trusted these exact bytes.",
+          "type": "string",
+          "const": "trusted"
+        },
+        {
+          "description": "Never trusted here.",
+          "type": "string",
+          "const": "untrusted"
+        },
+        {
+          "description": "Trusted once; the definition or a file it runs changed since.",
+          "type": "string",
+          "const": "changed"
+        }
+      ]
+    },
+    "ExtensionChanges": {
+      "description": "What changed since an extension was trusted.",
+      "type": "object",
+      "properties": {
+        "files": {
+          "description": "Files added, changed or gone.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "widened": {
+          "description": "Contributions that are new or reach further, first in any listing.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "gone": {
+          "description": "Contributions that went.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "files",
+        "widened"
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/extensions.json"
+}

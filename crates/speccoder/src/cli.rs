@@ -170,6 +170,16 @@ pub struct Cli {
     )]
     pub trust_hook: Vec<String>,
 
+    /// Trust an extension for this command when its digest is this one
+    /// (CI): `name=sha256:…`, as `speccoder extensions` prints it. Repeatable.
+    #[arg(
+        long,
+        global = true,
+        hide_short_help = true,
+        value_name = "NAME=DIGEST"
+    )]
+    pub trust_extension: Vec<String>,
+
     /// Without a command: the dashboard at a terminal, else the report.
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -377,6 +387,12 @@ pub enum Command {
     Hooks {
         #[command(subcommand)]
         action: Option<HooksAction>,
+    },
+    /// Extensions: gates, views, skills and MCP servers in a folder you trust by one digest; add, trust and remove them.
+    #[command(hide = true)]
+    Extensions {
+        #[command(subcommand)]
+        action: Option<ExtensionsAction>,
     },
     /// GitHub issues: list the open ones; `start 42` specifies a feature from one.
     Issue {
@@ -986,6 +1002,26 @@ pub enum HooksAction {
     },
     /// Deliver what waits for the observers (CI, cron).
     Deliver,
+}
+
+/// `speccoder extensions` actions; without one, the list.
+#[derive(Debug, Subcommand)]
+pub enum ExtensionsAction {
+    /// Copy an extension into the project from a folder, or a repository at a full commit (URL@COMMIT); nothing of it runs.
+    Add {
+        /// The folder, or URL@COMMIT (a full 40-character commit).
+        source: String,
+    },
+    /// Trust an extension after seeing what it contributes and can reach; in CI, `--trust-extension name=digest`.
+    Trust {
+        /// The extension.
+        name: String,
+    },
+    /// Delete an extension's folder and its trust.
+    Remove {
+        /// The extension.
+        name: String,
+    },
 }
 
 /// `speccoder auth` actions; without one, `status`.

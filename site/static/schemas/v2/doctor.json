@@ -676,6 +676,59 @@
           ]
         },
         {
+          "description": "Trust an extension as shown (its digest), from its sheet.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "extension_trust"
+            },
+            "name": {
+              "description": "The extension.",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest the person saw.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "digest"
+          ]
+        },
+        {
+          "description": "Produce an extension's view anew.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "view_run"
+            },
+            "extension": {
+              "description": "The extension.",
+              "type": "string"
+            },
+            "view": {
+              "description": "The view.",
+              "type": "string"
+            },
+            "feature": {
+              "description": "The feature it is about; `None`: the project.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "extension",
+            "view"
+          ]
+        },
+        {
           "description": "Run a gate alone on the checkout, or send an observer a sample event.",
           "type": "object",
           "properties": {

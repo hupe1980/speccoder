@@ -431,6 +431,28 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "EXTENSION-UNLOADABLE",
+        E,
+        S::ConfigError,
+        "an extension cannot be loaded",
+        "Its plugin.json, mcp.json or dev.speccoder/extension.toml breaks a rule, its name is taken, a link leaves its folder, or it holds more than 2,000 files or 20 MB. Nothing of it is offered or runs.",
+        [
+            "→ fix what the message names in the extension's folder, or remove it",
+            "speccoder extensions"
+        ]
+    ),
+    entry!(
+        "EXTENSION-UNTRUSTED",
+        P,
+        S::NeedsHuman,
+        "an extension waits for your trust",
+        "An extension runs only after a person trusted one digest over every file it holds. Until then its gates block, its observers are skipped, and its views, skills and MCP servers are not offered; a changed file makes it untrusted again.",
+        [
+            "speccoder extensions trust <name>",
+            "→ in CI: pass --trust-extension <name>=<digest>; speccoder extensions prints it"
+        ]
+    ),
+    entry!(
         "HOOK-BLOCKED",
         P,
         S::NeedsHuman,

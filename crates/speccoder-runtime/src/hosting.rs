@@ -36,7 +36,10 @@ pub fn list(path: &Path) -> CommandResult {
         Err(r) => return *r,
     };
     let format = crate::format::at(&root);
-    let found = skills::discover_with(&root, format.planning());
+    let found = match crate::worktree::state_dir() {
+        Some(state) => skills::discover_trusted(&root, format.planning(), &state),
+        None => skills::discover_with(&root, format.planning()),
+    };
     let message = if found.is_empty() {
         format.messages().no_skills.to_owned()
     } else {
@@ -217,7 +220,7 @@ fn run_unguarded(
     };
     let root = PathBuf::from(&s.snapshot.root);
     let planning = s.format.planning();
-    let installed = skills::discover_with(&root, planning);
+    let installed = skills::discover_trusted(&root, planning, state);
     // The fallback explorer is speccoder's own instruction, not a file.
     let fallback =
         (exploring && name == speccoder_core::explore::FALLBACK).then(|| skills::Skill {
@@ -691,6 +694,46 @@ pub fn run_hooks_in(
     let plan = crate::extension_hooks::plan(&root, event)
         .map_err(|e| Box::new(CommandResult::new("hooks", CommandStatus::ConfigError, &e)))?;
     let mut lines: Vec<String> = Vec::new();
+    // A mandatory hook is the extension's code: it runs only once a person
+    // trusted that extension's digest (spec 096).
+    if !plan.run.is_empty() {
+        let dir = crate::hooks::dir(state, &root);
+        let all = crate::extensions::load(&root);
+        for hook in &plan.run {
+            // The Spec Kit extension that provides this very command.
+            let owner = all.iter().find(|e| {
+                e.name == hook.extension
+                    && e.source == speccoder_core::extensions::ExtensionSource::SpecKit
+            });
+            let Some(e) = owner.filter(|e| e.commands.contains(&hook.command)) else {
+                return Err(Box::new(CommandResult::new(
+                    "hooks",
+                    CommandStatus::ConfigError,
+                    &format!(
+                        "mandatory {event} hook `{}` is not a command of an installed Spec Kit extension {}",
+                        hook.command, hook.extension
+                    ),
+                )));
+            };
+            if !e.usable()
+                || crate::extensions::trust::state(&dir, e)
+                    != speccoder_core::hooks::TrustState::Trusted
+            {
+                return Err(Box::new(
+                    CommandResult::new(
+                        "hooks",
+                        CommandStatus::NeedsHuman,
+                        &format!(
+                            "mandatory {event} hook `{}` belongs to the extension {}, which waits for your trust",
+                            hook.command, hook.extension
+                        ),
+                    )
+                    .with_code("EXTENSION-UNTRUSTED")
+                    .with_fix(vec![format!("speccoder extensions trust {}", hook.extension)]),
+                ));
+            }
+        }
+    }
     for hook in &plan.run {
         let note = |text: String| {
             if let Some(p) = &options.progress {

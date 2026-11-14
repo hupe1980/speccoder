@@ -8,6 +8,7 @@
   import { KINDS, key } from "../lib/actions";
   import type { Action, InboxItem } from "../lib/types";
   import Code from "./Code.svelte";
+  import Findings from "./Findings.svelte";
   import Icon from "./Icon.svelte";
   import StopCard from "./StopCard.svelte";
 
@@ -32,6 +33,7 @@
     autopilot_denied: { title: "Refused on Autopilot", icon: "shield", tone: "ready", why: "Calls the autopilot run would have asked you about were refused, not asked: look at each, and allow one when you run again." },
     gate_blocked: { title: "Blocked by a Gate", icon: "shield", tone: "failed", why: "Your gate did not let the tick through — its own words say why. Fix that, then run again." },
     hook_untrusted: { title: "Gates to Trust", icon: "shield", tone: "needs_approval", why: "A gate runs only after you trusted exactly what it runs; until then it blocks every tick." },
+    extension_untrusted: { title: "Extensions to Trust", icon: "shield", tone: "needs_approval", why: "Nothing of an extension runs before you trusted one digest over every file it holds." },
     stuck: { title: "Did Not Pass", icon: "xoctagon", tone: "failed", why: "Decide: run again, leave a note, skip or accept." },
     aside: { title: "Changes Set Aside", icon: "tray", tone: "needs_approval", why: "Found in the worktree when a run started — keep them on the branch, or let them go." },
     commit: { title: "Plans to Commit", icon: "doc", tone: "ready", why: "A run reads committed files only." },
@@ -116,6 +118,12 @@
     app.view = view;
   }
   async function open(i: InboxItem) {
+    // About the project, not a feature: its pane in Settings.
+    if (i.kind === "extension_untrusted") {
+      app.view = "settings";
+      app.settingsSection = "extensions";
+      return;
+    }
     if (i.kind.startsWith("bug_") && i.task) {
       app.bugSheet = { key: `${i.feature}/${i.task}` };
       return;
@@ -169,11 +177,11 @@
       <section class="group {g.g}" aria-label={g.title}>
         <h2><span class="gtitle">{g.title}</span><span class="count">{g.items.length}</span><span class="why">{groupWhy[g.g]}</span></h2>
         <ul class="grouped">
-          {#each g.items as i (i.feature + (i.task ?? "") + i.kind)}
+          {#each g.items as i (i.feature + (i.task ?? "") + i.kind + i.title)}
             {@const k = kindOf(i)}
             {#if i.kind === "yours" && i.task}
               <li class="yours">
-                <span class="where"><span class="kind s-{k.tone}"><Icon name={k.icon} size={10} weight={2.4} />{k.title}</span>{#if features > 1}<span class="feat">{i.feature.replace(/^\d+-/, "")}</span>{/if}</span>
+                <span class="where"><span class="kind s-{k.tone}"><Icon name={k.icon} size={10} weight={2.4} />{k.title}</span>{#if features > 1 && i.feature}<span class="feat">{i.feature.replace(/^\d+-/, "")}</span>{/if}</span>
                 <StopCard task={i.task} claim={i.detail || null} actions={i.actions} />
               </li>
             {:else}
@@ -184,7 +192,7 @@
               <div class="what">
                 <span class="where">
                   <span class="kind s-{k.tone}" title={k.why}><Icon name={k.icon} size={10} weight={2.4} />{k.title}</span>
-                  {#if features > 1}<span class="feat">{i.feature.replace(/^\d+-/, "")}</span>{/if}
+                  {#if features > 1 && i.feature}<span class="feat">{i.feature.replace(/^\d+-/, "")}</span>{/if}
                   {#if i.task}<span class="mono task">{i.task}</span>{/if}
                   {#if i.since}<span class="age">{ago(i.since)}</span>{/if}
                 </span>
@@ -203,6 +211,7 @@
                     {/each}
                   </ul>
                 {:else if i.detail}<span class="detail"><Code text={i.detail} /></span>{/if}
+                {#if i.findings?.length}<div class="found"><Findings findings={i.findings} /></div>{/if}
               </div>
               <div class="acts">
                 {#each i.actions as a, n (key(a))}
@@ -278,6 +287,7 @@
   .where { display: flex; gap: 0.45rem; align-items: center; font-size: 0.74rem; color: var(--muted); }
   .feat { padding: 0 0.45rem; border-radius: 999px; background: var(--fill); color: var(--text-2); font-weight: 600; }
   .task { color: var(--text-2); }
+  .found { margin-top: 0.45rem; }
   .detail { color: var(--text-2); font-size: 0.86rem; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .reasons { display: grid; gap: 0.25rem; margin: 0.2rem 0 0; padding: 0; }
   .reasons li { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; padding: 0; color: var(--text-2); font-size: 0.86rem; grid-template-columns: none; }

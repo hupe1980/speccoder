@@ -656,6 +656,17 @@ pub fn run(w: &mut impl Write, r: &RunReport, message: &str) -> io::Result<()> {
             g.name,
             g.point.words()
         )?;
+        for f in g.findings.iter().take(5) {
+            let at = match (&f.file, f.line) {
+                (Some(file), Some(line)) => format!(" {file}:{line}"),
+                (Some(file), None) => format!(" {file}"),
+                _ => String::new(),
+            };
+            writeln!(w, "             {} {}{at} — {}", f.level, f.rule, f.message)?;
+        }
+        if g.findings.len() > 5 {
+            writeln!(w, "             … and {} more", g.findings.len() - 5)?;
+        }
     }
     for f in &r.integrity {
         writeln!(w, "  ! {f}")?;
@@ -2601,6 +2612,119 @@ pub fn trust_prompt(e: &speccoder_core::hooks::HookEntry) -> Vec<String> {
     for p in &e.outside {
         out.push(format!(
             "  runs {p}  (outside the repository: not digested)"
+        ));
+    }
+    out.push(format!("  digest {}", e.digest));
+    out.push(String::new());
+    out
+}
+
+/// `speccoder extensions`: each extension, its trust, and what it
+/// contributes in words; none: how to add one.
+pub fn extensions(
+    r: &speccoder_core::extensions::ExtensionsReport,
+    look: &crate::style::Look,
+) -> Vec<String> {
+    use crate::style::Token;
+    use speccoder_core::hooks::TrustState;
+    let mut out = Vec::new();
+    if r.extensions.is_empty() {
+        out.push("An extension is a folder: gates, views, skills and MCP servers, trusted by one digest.".to_owned());
+        out.push("  speccoder extensions add ./path/to/folder".to_owned());
+        out.push("  speccoder extensions add https://github.com/you/ext@<commit>".to_owned());
+        return out;
+    }
+    for e in &r.extensions {
+        let (mark, token, state) = if !e.problems.is_empty() {
+            ("✗", Token::Danger, "cannot be loaded")
+        } else {
+            match e.trust {
+                TrustState::Trusted => ("●", Token::Verified, "trusted"),
+                TrustState::Untrusted => ("○", Token::Attention, "waits for your trust"),
+                TrustState::Changed => ("◐", Token::Attention, "changed since you trusted it"),
+            }
+        };
+        let version = e
+            .version
+            .as_deref()
+            .map(|v| format!(" {v}"))
+            .unwrap_or_default();
+        let source = match e.source {
+            speccoder_core::extensions::ExtensionSource::AgentPlugins => "",
+            speccoder_core::extensions::ExtensionSource::SpecKit => " (Spec Kit)",
+        };
+        out.push(format!(
+            "  {} {}{version}{source}  {}",
+            look.paint(token, mark),
+            e.name,
+            look.paint(Token::Muted, state)
+        ));
+        for p in &e.problems {
+            out.push(format!("      {}", look.paint(Token::Danger, p)));
+        }
+        if let Some(c) = &e.changes {
+            for w in &c.widened {
+                out.push(format!(
+                    "      {} {w}",
+                    look.paint(Token::Attention, "widened:")
+                ));
+            }
+        }
+        for c in &e.contributions {
+            out.push(format!("      {}", c.line));
+        }
+        if e.problems.is_empty() && e.trust != TrustState::Trusted {
+            out.push(format!(
+                "      trust it: speccoder extensions trust {}",
+                e.name
+            ));
+            out.push(format!("      in CI:    {}", e.trust_flag));
+        }
+    }
+    out
+}
+
+/// What a person sees before trusting an extension: what changed (widened
+/// first), what it contributes and reaches, its files and the digest.
+#[must_use]
+pub fn extension_trust_prompt(e: &speccoder_core::extensions::Extension) -> Vec<String> {
+    let mut out = vec![format!(
+        "{}{} — {}",
+        e.name,
+        e.version
+            .as_deref()
+            .map(|v| format!(" {v}"))
+            .unwrap_or_default(),
+        e.description.as_deref().unwrap_or("an extension")
+    )];
+    out.push(String::new());
+    if let Some(c) = &e.changes {
+        out.push("It changed since you trusted it.".to_owned());
+        for w in &c.widened {
+            out.push(format!("  ! {w}"));
+        }
+        for g in &c.gone {
+            out.push(format!("  - {g}"));
+        }
+        for f in &c.files {
+            out.push(format!("  changed {f}"));
+        }
+        out.push(String::new());
+    }
+    out.push("It contributes:".to_owned());
+    for c in &e.contributions {
+        out.push(format!("  {}", c.line));
+    }
+    out.push(String::new());
+    out.push(format!("  {} files in {}", e.files.len(), e.folder));
+    if let Some(o) = &e.origin {
+        out.push(format!(
+            "  its source.toml says: from {}{}",
+            o.url,
+            o.commit
+                .as_deref()
+                .map(|c| format!(" at {c}"))
+                .unwrap_or_default()
         ));
     }
     out.push(format!("  digest {}", e.digest));

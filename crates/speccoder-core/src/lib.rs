@@ -16,6 +16,7 @@ pub mod context;
 pub mod event;
 pub mod evidence;
 pub mod explore;
+pub mod extensions;
 pub mod graph;
 pub mod hooks;
 pub mod inbox;

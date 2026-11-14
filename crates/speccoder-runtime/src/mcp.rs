@@ -35,6 +35,12 @@ pub struct ServerConfig {
     pub allow: Vec<String>,
     /// Tools never called.
     pub deny: Vec<String>,
+    /// Literal variables it is started with (an extension's `mcp.json`).
+    pub env: Vec<(String, String)>,
+    /// Where it starts, when not the worktree.
+    pub cwd: Option<std::path::PathBuf>,
+    /// A folder of its own it may write (an extension's `${PLUGIN_DATA}`).
+    pub data: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,6 +51,20 @@ struct RawServer {
     allow: Vec<String>,
     #[serde(default)]
     deny: Vec<String>,
+}
+
+/// Whether `name` may name an MCP server: lowercase letters, digits and
+/// single `_` inside it (a tool reference's component), not fs, proc or git.
+#[must_use]
+pub fn valid_server_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        && !name.contains("__")
+        && !name.starts_with('_')
+        && !name.ends_with('_')
+        && !matches!(name, "fs" | "proc" | "git")
 }
 
 /// Reads `[mcp.<name>]` sections.
@@ -58,14 +78,9 @@ pub fn parse(text: &str) -> Result<Vec<ServerConfig>, String> {
         .ok_or_else(|| "`mcp` must be a table of [mcp.<name>] tables".to_owned())?;
     mcp.iter()
         .map(|(name, v)| {
-            let valid = !name.is_empty()
-                && name
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-                && !matches!(name.as_str(), "fs" | "proc" | "git");
-            if !valid {
+            if !valid_server_name(name) {
                 return Err(format!(
-                    "[mcp.{name}]: a server name is lowercase letters, digits and `-`, and not fs, proc or git"
+                    "[mcp.{name}]: a server name is lowercase letters, digits and single `_` inside it, and not fs, proc or git"
                 ));
             }
             let raw: RawServer = v
@@ -80,6 +95,9 @@ pub fn parse(text: &str) -> Result<Vec<ServerConfig>, String> {
                 command: raw.command,
                 allow: raw.allow,
                 deny: raw.deny,
+                env: Vec::new(),
+                cwd: None,
+                data: None,
             })
         })
         .collect()
@@ -137,7 +155,11 @@ pub async fn connect(
 ) -> Connected {
     let mut out = Connected::default();
     for s in servers {
-        match connect_one(s, cwd, runner).await {
+        let runner = match &s.data {
+            Some(d) => runner.clone().with_writable(d),
+            None => runner.clone(),
+        };
+        match connect_one(s, s.cwd.as_deref().unwrap_or(cwd), &runner).await {
             Ok((client, tools, notices)) => {
                 out.clients.push((s.name.clone(), client));
                 out.tools.extend(tools);
@@ -164,6 +186,7 @@ async fn connect_one(
         .current_dir(cwd)
         .env_clear()
         .envs(crate::verify::process::scrubbed_env(std::env::vars()))
+        .envs(s.env.iter().cloned())
         .kill_on_drop(true);
     if let Some(private) = tmp {
         command.envs(private);

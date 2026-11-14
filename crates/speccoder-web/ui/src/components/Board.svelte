@@ -10,6 +10,7 @@
   import BugCard from "./BugCard.svelte";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
+  import ExtensionViews from "./ExtensionViews.svelte";
   let expanded = $state<Record<string, boolean>>({});
   const LIMIT = 5;
 
@@ -151,6 +152,7 @@
       </section>
     {/each}
   </div>
+  {#if app.feature}<ExtensionViews feature={app.feature} />{/if}
 {/if}
 
 <style>

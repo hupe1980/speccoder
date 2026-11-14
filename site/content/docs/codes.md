@@ -50,6 +50,8 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`CONFIG-INVALID`](#config-invalid) | error | 13 | speccoder.toml has an error |
 | [`HOOK-MISCONFIGURED`](#hook-misconfigured) | error | 13 | a hook in speccoder.toml is not valid |
 | [`HOOK-UNTRUSTED`](#hook-untrusted) | stop | 23 | a hook waits for your trust |
+| [`EXTENSION-UNLOADABLE`](#extension-unloadable) | error | 13 | an extension cannot be loaded |
+| [`EXTENSION-UNTRUSTED`](#extension-untrusted) | stop | 23 | an extension waits for your trust |
 | [`HOOK-BLOCKED`](#hook-blocked) | stop | 23 | a gate blocked this |
 | [`KEY-MISSING`](#key-missing) | error | 13 | the model provider's API key is not in the environment |
 | [`NO-CHECKS`](#no-checks) | error | 13 | no check applies, so nothing could show that nothing regressed |
@@ -489,6 +491,24 @@ A hook runs only after a person trusted its exact bytes: its definition and ever
 
 - `speccoder hooks trust`
 - In CI: pass --trust-hook <name>=<digest>; speccoder hooks prints it
+
+### EXTENSION-UNLOADABLE
+
+An extension cannot be loaded.
+
+Its plugin.json, mcp.json or dev.speccoder/extension.toml breaks a rule, its name is taken, a link leaves its folder, or it holds more than 2,000 files or 20 MB. Nothing of it is offered or runs.
+
+- Fix what the message names in the extension's folder, or remove it
+- `speccoder extensions`
+
+### EXTENSION-UNTRUSTED
+
+An extension waits for your trust.
+
+An extension runs only after a person trusted one digest over every file it holds. Until then its gates block, its observers are skipped, and its views, skills and MCP servers are not offered; a changed file makes it untrusted again.
+
+- `speccoder extensions trust <name>`
+- In CI: pass --trust-extension <name>=<digest>; speccoder extensions prints it
 
 ### HOOK-BLOCKED
 

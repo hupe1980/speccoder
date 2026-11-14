@@ -197,6 +197,7 @@ pub const SUBCOMMANDS: &[&str] = &[
     "doctor",
     "eval",
     "explain",
+    "extensions",
     "feature",
     "fix",
     "help",
@@ -998,6 +999,8 @@ fn speccoder(argv: &[String], constant: bool) -> How {
             None => view(View::Settings, Some("hooks")),
         },
         (Some("hooks"), _) => view(View::Settings, Some("hooks")),
+        // An extension is trusted in its sheet, after it is seen.
+        (Some("extensions"), _) => view(View::Settings, Some("extensions")),
         (Some("config"), None | Some("get" | "unset")) => view(View::Settings, None),
         (Some("config"), Some("set")) if a.iter().any(|w| has_blank(w)) => {
             view(View::Settings, None)

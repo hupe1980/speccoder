@@ -12,7 +12,7 @@ use speccoder_core::hooks::{GateExit, GateOutcome, GateRecord, GateState, Point}
 
 use super::{HookRun, TrustState};
 use crate::sandbox::Runner;
-use crate::verify::process::{CommandRunner as _, Invocation, OUTPUT_CAP};
+use crate::verify::process::{Invocation, OUTPUT_CAP};
 
 /// The words of a gate that waits for a person's trust.
 pub const AWAITS_TRUST: &str = "waits for your trust";
@@ -75,6 +75,7 @@ pub fn run(worktree: &Path, runner: &Runner, state: &Path, facts: Facts<'_>) -> 
                 reason: Some(speccoder_core::hooks::clean(&e)),
                 code: Some("HOOK-MISCONFIGURED".to_owned()),
                 duration_ms: 0,
+                findings: Vec::new(),
             }];
         }
     };
@@ -100,6 +101,7 @@ pub fn run(worktree: &Path, runner: &Runner, state: &Path, facts: Facts<'_>) -> 
                 reason: None,
                 code: None,
                 duration_ms: 0,
+                findings: Vec::new(),
             });
             super::record_run(&dir, &def.name, run_record(&facts, "not_run", 0, None));
             continue;
@@ -119,13 +121,16 @@ fn judge(
     facts: &Facts<'_>,
 ) -> GateRecord {
     let digested = super::digest(def, worktree);
-    let trust = super::trust::state(dir, &def.name, &digested.digest);
+    let trust = digested.trust(dir);
     let began = Instant::now();
+    let mut findings = Left::default();
     let (outcome, code) = if trust == TrustState::Trusted {
         // Only where the sandbox enforces what it hides: speccoder's state
         // and the held-out tests stay out of a gate's reach.
         let ended = if runner.hides() {
-            run_one(def, runner, worktree, facts)
+            let (outcome, left) = run_one(def, runner, worktree, facts);
+            findings = left;
+            outcome
         } else {
             GateOutcome::Blocked(
                 "no sandbox is enforced here that hides speccoder's state, and a gate runs only in one"
@@ -134,12 +139,17 @@ fn judge(
         };
         (ended, "HOOK-BLOCKED")
     } else {
-        let why = if trust == TrustState::Changed {
-            "changed since it was trusted: trust it again (speccoder hooks trust)"
-        } else {
-            "waits for your trust (speccoder hooks trust)"
+        let why = match (&def.extension, trust == TrustState::Changed) {
+            (Some((ext, _)), true) => format!(
+                "{CHANGED}: the extension {ext} changed — trust it again (speccoder extensions trust {ext})"
+            ),
+            (Some((ext, _)), false) => {
+                format!("{AWAITS_TRUST} of the extension {ext} (speccoder extensions trust {ext})")
+            }
+            (None, true) => format!("{CHANGED}: trust it again (speccoder hooks trust)"),
+            (None, false) => format!("{AWAITS_TRUST} (speccoder hooks trust)"),
         };
-        (GateOutcome::Blocked(why.to_owned()), "HOOK-UNTRUSTED")
+        (GateOutcome::Blocked(why), "HOOK-UNTRUSTED")
     };
     let duration_ms = u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX);
     let record = match outcome {
@@ -150,27 +160,37 @@ fn judge(
             reason: None,
             code: None,
             duration_ms,
+            findings: Vec::new(),
         },
         GateOutcome::Blocked(reason) => GateRecord {
             name: def.name.clone(),
             point: facts.point,
             outcome: GateState::Blocked,
-            reason: Some(reason),
+            // Findings say more than a checker's last line ("written: …").
+            reason: Some(summary_of(&findings.findings).unwrap_or(reason)),
             code: Some(code.to_owned()),
             duration_ms,
+            findings: findings.findings.clone(),
         },
     };
-    super::record_run(
-        dir,
-        &def.name,
-        run_record(
-            facts,
-            record.outcome.as_str(),
-            duration_ms,
-            record.reason.clone(),
-        ),
+    let mut run = run_record(
+        facts,
+        record.outcome.as_str(),
+        duration_ms,
+        record.reason.clone(),
     );
+    run.findings = findings.findings;
+    run.findings_error = findings.error;
+    super::record_run(dir, &def.name, run);
     record
+}
+
+/// The findings a gate left at `SPECCODER_FINDINGS`, or why they cannot
+/// be shown.
+#[derive(Debug, Default)]
+struct Left {
+    findings: Vec<speccoder_core::extensions::SarifFinding>,
+    error: Option<String>,
 }
 
 /// `speccoder hooks test`: the gate `def` alone, on `root`, as it would
@@ -178,9 +198,13 @@ fn judge(
 #[must_use]
 pub fn test(def: &speccoder_core::hooks::HookDef, root: &Path, state: &Path) -> GateRecord {
     let point = def.at().unwrap_or(Point::Tick);
+    // The current feature, so a gate that reads its folder reads a real one.
+    let current = crate::format::open(root, None)
+        .ok()
+        .and_then(|o| o.snapshot.selection.feature);
     let facts = Facts {
         point,
-        feature: "TEST",
+        feature: current.as_deref().unwrap_or("TEST"),
         task: (point == Point::Tick).then_some("TEST"),
         branch: (point == Point::Pr).then_some("TEST"),
     };
@@ -194,6 +218,7 @@ pub fn test(def: &speccoder_core::hooks::HookDef, root: &Path, state: &Path) -> 
                 reason: Some(speccoder_core::hooks::clean(&e)),
                 code: Some("HOOK-BLOCKED".to_owned()),
                 duration_ms: 0,
+                findings: Vec::new(),
             };
         }
     };
@@ -203,7 +228,7 @@ pub fn test(def: &speccoder_core::hooks::HookDef, root: &Path, state: &Path) -> 
 /// speccoder's state a gate may not read: other projects', and this one's
 /// journal, trust, approvals and held-out tests — everything but the
 /// worktrees (the gate runs in one) and the scratch directory.
-pub(super) fn hidden_state(state: &Path, worktree: &Path) -> Vec<std::path::PathBuf> {
+pub(crate) fn hidden_state(state: &Path, worktree: &Path) -> Vec<std::path::PathBuf> {
     let project = crate::worktree::project_state_dir(state, worktree);
     let entries = |d: &Path| -> Vec<std::path::PathBuf> {
         std::fs::read_dir(d)
@@ -238,6 +263,8 @@ fn run_record(
         outcome: outcome.to_owned(),
         duration_ms,
         error,
+        findings: Vec::new(),
+        findings_error: None,
     }
 }
 
@@ -246,10 +273,39 @@ fn run_one(
     runner: &Runner,
     worktree: &Path,
     facts: &Facts<'_>,
-) -> GateOutcome {
+) -> (GateOutcome, Left) {
     let Some(argv) = def.argv() else {
-        return GateOutcome::Blocked("a gate runs `argv`".to_owned());
+        return (
+            GateOutcome::Blocked("a gate runs `argv`".to_owned()),
+            Left::default(),
+        );
     };
+    // Where it may leave SARIF findings: the sandbox's scratch directory.
+    let findings_file = runner.scratch().map(|d| {
+        d.join(format!(
+            "findings-{}-{}.sarif",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |t| t.as_nanos())
+        ))
+    });
+    let findings_text = findings_file
+        .as_ref()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let feature_dir = crate::extensions::feature_dir(worktree, facts.feature)
+        .map(|d| d.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let folder = def.extension.as_ref().map(|(_, f)| PathBuf::from(f));
+    let argv = crate::extensions::resolve(
+        argv,
+        folder.as_deref(),
+        &[
+            ("SPECCODER_FEATURE_DIR", feature_dir.clone()),
+            ("SPECCODER_FINDINGS", findings_text.clone()),
+        ],
+    );
     let network = matches!(
         def.role,
         speccoder_core::hooks::Role::Gate { network: true, .. }
@@ -264,23 +320,37 @@ fn run_one(
         }
     }
     env.extend(facts.env());
+    env.push(("SPECCODER_FEATURE_DIR".to_owned(), feature_dir));
+    // A Python checker leaves no bytecode beside its scripts.
+    env.push(("PYTHONDONTWRITEBYTECODE".to_owned(), "1".to_owned()));
+    if !findings_text.is_empty() {
+        env.push(("SPECCODER_FINDINGS".to_owned(), findings_text));
+    }
     let inv = Invocation {
-        argv: argv.to_vec(),
+        argv,
         cwd: worktree.to_path_buf(),
         env,
         timeout: Duration::from_secs(def.timeout),
         output_cap: OUTPUT_CAP,
     };
     let Some(before) = dirty(worktree) else {
-        return GateOutcome::Blocked("git could not say what the tick would commit".to_owned());
+        return (
+            GateOutcome::Blocked("git could not say what the tick would commit".to_owned()),
+            Left::default(),
+        );
     };
+    // No network unless the gate says `network = true`: not even loopback.
     let ended = if network {
         runner.run_with(&inv, true)
     } else {
-        runner.run(&inv)
+        runner.run_offline(&inv)
     };
+    let left = findings_file.map_or_else(Left::default, |f| read_findings(&f, worktree));
     let Some(after) = dirty(worktree) else {
-        return GateOutcome::Blocked("git could not say what the tick would commit".to_owned());
+        return (
+            GateOutcome::Blocked("git could not say what the tick would commit".to_owned()),
+            left,
+        );
     };
     let mut changed: Vec<String> = before
         .keys()
@@ -292,7 +362,7 @@ fn run_one(
     changed.dedup();
     let stdout = String::from_utf8_lossy(&ended.stdout.kept);
     let stderr = String::from_utf8_lossy(&ended.stderr.kept);
-    GateOutcome::of(&GateExit {
+    let outcome = GateOutcome::of(&GateExit {
         exit_code: ended.exit_code,
         timed_out: ended.timed_out,
         spawn_error: ended.spawn_error.as_deref(),
@@ -300,7 +370,72 @@ fn run_one(
         stderr: &stderr,
         changed: &changed,
         timeout: def.timeout,
-    })
+    });
+    (outcome, left)
+}
+
+/// `22 findings, 22 errors — Requirement 'SR-001' has no task…`: what a
+/// gate's findings say, in one line; `None` without any.
+fn summary_of(findings: &[speccoder_core::extensions::SarifFinding]) -> Option<String> {
+    let first = findings
+        .iter()
+        .find(|f| f.level == "error")
+        .or_else(|| findings.first())?;
+    let errors = findings.iter().filter(|f| f.level == "error").count();
+    let count = if findings.len() == 1 {
+        "1 finding".to_owned()
+    } else {
+        format!("{} findings", findings.len())
+    };
+    let errors = match errors {
+        0 => String::new(),
+        1 => ", 1 error".to_owned(),
+        n => format!(", {n} errors"),
+    };
+    Some(speccoder_core::hooks::clean(&format!(
+        "{count}{errors} — {}",
+        first.message
+    )))
+}
+
+/// The SARIF a gate left in `file`, read once and removed: a regular file
+/// only (never through a link, never a device or a pipe), at most
+/// [`MAX_SARIF`](speccoder_core::extensions::MAX_SARIF) bytes read.
+fn read_findings(file: &Path, worktree: &Path) -> Left {
+    use std::io::Read as _;
+    let Ok(meta) = std::fs::symlink_metadata(file) else {
+        return Left::default();
+    };
+    let max = speccoder_core::extensions::MAX_SARIF;
+    let text = if !meta.file_type().is_file() {
+        Err("they are not a regular file".to_owned())
+    } else {
+        let mut buf = Vec::new();
+        std::fs::File::open(file)
+            .and_then(|f| f.take(max as u64 + 1).read_to_end(&mut buf))
+            .map_err(|e| e.to_string())
+            .and_then(|n| {
+                if n > max {
+                    Err(format!("the findings are more than {} KB", max / 1024))
+                } else {
+                    String::from_utf8(buf).map_err(|_| "they are not UTF-8".to_owned())
+                }
+            })
+    };
+    let _ = std::fs::remove_file(file);
+    let project = crate::extensions::project(worktree);
+    match text.and_then(|t| {
+        speccoder_core::extensions::sarif(&t, |p| crate::extensions::relative_to(&project, p))
+    }) {
+        Ok(findings) => Left {
+            findings,
+            error: None,
+        },
+        Err(e) => Left {
+            findings: Vec::new(),
+            error: Some(format!("its findings could not be shown: {e}")),
+        },
+    }
 }
 
 /// Every file git would commit that differs from `HEAD` (tracked changes

@@ -1,0 +1,14 @@
+[hooks.check]
+at = "tick"
+argv = ["./scripts/check.sh", "--feature-dir", "${SPECCODER_FEATURE_DIR}", "--output", "${SPECCODER_FINDINGS}"]
+
+[views.findings]
+title = "Security findings"
+run = ["./scripts/check.sh", "--feature-dir", "${SPECCODER_FEATURE_DIR}"]
+widget = "findings"
+exit = [0, 2]
+
+[views.model]
+title = "Threat model"
+file = "threat-model.md"
+widget = "markdown"

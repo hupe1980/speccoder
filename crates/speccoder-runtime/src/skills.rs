@@ -86,6 +86,10 @@ pub fn discover_with(root: &Path, planning: &Planning) -> Vec<Skill> {
             let (fields, _) = split(&text);
             let get = |k: &str| fields.iter().find(|(f, _)| f == k).map(|(_, v)| v.clone());
             let name = get("name").unwrap_or_else(|| e.file_name().to_string_lossy().into_owned());
+            // `<ext>:<skill>` names an extension's skill: no other may wear it.
+            if name.contains(':') {
+                continue;
+            }
             if out.iter().any(|s| s.name == name) {
                 continue; // the first directory wins
             }
@@ -96,6 +100,48 @@ pub fn discover_with(root: &Path, planning: &Planning) -> Vec<Skill> {
                 invocable: get("user-invocable").is_none_or(|v| v != "false"),
                 name,
             });
+        }
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    out
+}
+
+/// [`discover_with`] with the project's extensions, as trusted in the
+/// state directory `state`: a trusted extension's skills join as
+/// `<ext>:<skill>`. A Spec Kit extension's commands are installed skills
+/// already, run only when a person asks.
+#[must_use]
+pub fn discover_trusted(root: &Path, planning: &Planning, state: &Path) -> Vec<Skill> {
+    use speccoder_core::extensions::ExtensionSource;
+    let mut out = discover_with(root, planning);
+    let dir = crate::hooks::dir(state, root);
+    for e in crate::extensions::load(root) {
+        let trusted = e.usable()
+            && crate::extensions::trust::state(&dir, &e)
+                == speccoder_core::hooks::TrustState::Trusted;
+        if e.source == ExtensionSource::AgentPlugins && trusted {
+            {
+                for (name, file) in &e.skills {
+                    let text = std::fs::read_to_string(file).unwrap_or_default();
+                    let (fields, _) = split(&text);
+                    let rel = file
+                        .strip_prefix(root)
+                        .unwrap_or(file)
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    out.push(Skill {
+                        name: name.clone(),
+                        description: fields
+                            .iter()
+                            .find(|(k, _)| k == "description")
+                            .map(|(_, v)| v.clone())
+                            .unwrap_or_default(),
+                        path: rel,
+                        invocable: true,
+                        refused: None,
+                    });
+                }
+            }
         }
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));

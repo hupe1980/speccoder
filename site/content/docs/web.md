@@ -58,6 +58,7 @@ Per feature: its ring of verdicts, stage, tasks done, requirements proven, spend
 - Lanes: Waiting for You, Running, Ready, Blocked, Verified, Regression Only, Attested, No Evidence, Skipped. A lane folds after five cards.
 - A card badges a planning task **📐 Planning** and one that is yours **🙋 Yours** ([who does a task](@/docs/running.md#who-does-a-task)); a ready card has **Run** (not one that is yours); the running card shows its stage; a stale tick says *Spec changed: FR-001*; a task whose test file never ran says *Tests never ran*. A regression-only card says why on hover and to a screen reader. Right-click a card for its actions.
 - **Before you run** lists what `speccoder doctor` would warn about, the plan checks included: each with its tasks as buttons and its fix; and, as information, **Who does what**.
+- **Extensions**, below the lanes: each trusted [extension](@/docs/extensions.md)'s views of the feature (findings, a table, metrics, a document with its diagrams), when each ran, and **Run again**.
 
 Click a card to open the **inspector**:
 
@@ -153,7 +154,7 @@ Spec & Plan then follows the new unit as its skill writes it. Above the document
 
 ## Settings
 
-The gear (`,`) opens `speccoder.toml` as a page: each key with its default and meaning, checks and MCP servers as tables. **Save** writes the file only when it parses, keeping its comments, then offers **Commit** for `speccoder.toml` alone. Prefix lists are saved separately, from their coverage preview (**Preview…**, **Save Prefix**, **Coverage**; see [prefix lists](@/docs/configuration.md#prefix-lists)). **Executor** shows each agent with *installed*, *signed in* and *asks first* and the one step a missing tick needs; **Use** writes `[executor] agent`. The Run button's **▾** picks an agent for the runs started here (remembered in this browser), without changing the file.
+The gear (`,`) opens `speccoder.toml` as a page: each key with its default and meaning, checks and MCP servers as tables. **Save** writes the file only when it parses, keeping its comments, then offers **Commit** for `speccoder.toml` alone. Prefix lists are saved separately, from their coverage preview (**Preview…**, **Save Prefix**, **Coverage**; see [prefix lists](@/docs/configuration.md#prefix-lists)). **Executor** shows each agent with *installed*, *signed in* and *asks first* and the one step a missing tick needs; **Use** writes `[executor] agent`. The Run button's **▾** picks an agent for the runs started here (remembered in this browser), without changing the file. **Extensions** lists each [extension](@/docs/extensions.md): what it contributes and can reach, its trust, and for a changed one what widened first; **Trust…** shows exactly that before you decide.
 
 ## When a run needs you
 

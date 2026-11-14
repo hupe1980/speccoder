@@ -6,6 +6,49 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Extensions**: a folder of someone else's gates, views, skills and MCP
+  servers, trusted by one digest over every file in it
+  ([Extensions](https://hupe1980.github.io/speccoder/docs/extensions/)).
+  - Agent Plugins 1.0 folders (`plugin.json`, `skills/`, `mcp.json`) in
+    `.speccoder/extensions/<name>/` work as they are; speccoder's part is
+    `dev.speccoder/extension.toml`. Spec Kit extensions are listed and
+    trusted the same way.
+  - `speccoder extensions add <folder | URL@commit>` copies one in and runs
+    nothing of it; `trust` shows what it contributes and can reach;
+    `remove` deletes it. `--trust-extension name=digest` in CI.
+  - A changed file makes it untrusted again; the trust view names what
+    changed and lists a widened reach first. The digest covers what git
+    tracks, so trust and runs see the same bytes; one that cannot be
+    loaded blocks every tick.
+  - Its gates and observers follow the `[hooks]` rules. A gate may leave
+    SARIF findings (`SPECCODER_FINDINGS`), shown with the block in Needs
+    You and the run.
+  - Views: findings, a table, metrics or a document, from a file or a
+    command run read-only in the sandbox, on each feature's board or the
+    Overview, with **Run again**.
+  - Its skills are offered as `/<extension>:<skill>`; its stdio MCP
+    servers join the model's tools under the approval rules.
+  - A Spec Kit extension's optional hooks are offered at their step of the
+    journey; its mandatory hooks run only once it is trusted.
+  - Settings › Extensions, a Needs You kind and a `doctor` check.
+
+### Changed
+
+- The sandbox is procage 0.8.0: a planted link can no longer move a Linux
+  mount (R-33), a macOS allow rule no longer matches a path's case
+  variants (R-37), a run whose child was reaped elsewhere ends its whole
+  session (R-23), and on macOS 27 reading a command's output no longer
+  hangs on a pipe the violation helper held.
+- An MCP server's name is lowercase letters, digits and single `_` inside
+  (`-` is no longer accepted): the name a tool reference can carry.
+
+### Removed
+
+- Naming decisions recorded by speccoder 0.2.0: the journal is replaced
+  across upgrades, as for any other release.
+
 ## [0.14.0] - 2026-11-07
 
 ### Added

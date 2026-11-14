@@ -151,6 +151,10 @@ A [hook](@/docs/hooks.md) declared in `speccoder.toml` runs only after you trust
 
 A gate runs in the checks' sandbox, with speccoder's state and the held-out tests hidden, and only exit 0 passes it. An observer's command runs sandboxed too, with the checkout read-only and the network on. Without an enforced sandbox, gates block and observers are skipped.
 
+## Extensions
+
+An [extension](@/docs/extensions.md) runs only after you trusted one digest over the files git tracks in its folder (a link, an uncommitted change or an ignored file there is refused); a pulled change to any of them makes it untrusted again, and the trust view lists first what now reaches further. Adding one runs nothing of it and takes a repository only at a full commit. Its views run in the sandbox with the checkout read-only and no network, and only their data reaches the page. Its MCP servers start in the sandbox and each call is decided like any MCP call. The model cannot write `.speccoder/extensions/` or `.specify/extensions/`.
+
 ## What it does not protect against
 
 - **Code that runs during checks, within the sandbox's limits:** it can read files outside the hidden paths and use CPU and memory.

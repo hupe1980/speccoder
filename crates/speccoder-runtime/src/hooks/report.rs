@@ -41,7 +41,7 @@ fn problem(def: &HookDef, root: &Path) -> Option<String> {
 #[must_use]
 pub fn entry(d: &Digested, root: &Path, dir: &Path) -> HookEntry {
     let def = &d.def;
-    let state = super::trust::state(dir, &def.name, &d.digest);
+    let state = d.trust(dir);
     let (role, on) = match &def.role {
         Role::Gate { .. } => ("gate", Vec::new()),
         Role::Observer { on } => ("observer", on.clone()),
@@ -158,6 +158,21 @@ pub fn trust(
         Err(r) => return *r,
     };
     if let Some(n) = name
+        && let Some((ext, _)) = hooks
+            .iter()
+            .find(|h| h.def.name == n)
+            .and_then(|h| h.def.extension.clone())
+    {
+        return result(
+            &format!(
+                "{n} comes from the extension {ext}, trusted as a whole: speccoder extensions trust {ext}"
+            ),
+            report_of(&hooks, root, &dir),
+            CommandStatus::UsageError,
+        )
+        .with_fix(vec![format!("speccoder extensions trust {ext}")]);
+    }
+    if let Some(n) = name
         && !hooks.iter().any(|h| h.def.name == n)
     {
         return result(
@@ -173,7 +188,8 @@ pub fn trust(
         .filter(|h| name.is_none_or(|n| h.def.name == n))
     {
         let e = entry(d, root, &dir);
-        if e.state == TrustState::Trusted || !confirm(&e) {
+        // An extension's hook is trusted with its extension, as a whole.
+        if d.def.extension.is_some() || e.state == TrustState::Trusted || !confirm(&e) {
             continue;
         }
         super::trust::record(&dir, d, &by, via);
@@ -234,14 +250,18 @@ pub fn test(root: &Path, state: &Path, name: &str) -> CommandResult {
             CommandStatus::NotFound,
         );
     };
-    if super::trust::state(&dir, name, &d.digest) != TrustState::Trusted {
+    if d.trust(&dir) != TrustState::Trusted {
+        let fix = match &d.def.extension {
+            Some((ext, _)) => format!("speccoder extensions trust {ext}"),
+            None => format!("speccoder hooks trust {name}"),
+        };
         return result(
             &format!("{name} waits for your trust: it runs only after you trusted it"),
             report_of(&hooks, root, &dir),
             CommandStatus::NeedsHuman,
         )
         .with_code("HOOK-UNTRUSTED")
-        .with_fix(vec![format!("speccoder hooks trust {name}")]);
+        .with_fix(vec![fix]);
     }
     let began = std::time::Instant::now();
     let tested = if d.def.at().is_some() {
@@ -265,6 +285,8 @@ pub fn test(root: &Path, state: &Path, name: &str) -> CommandResult {
                 outcome: if sent.is_ok() { "delivered" } else { "failed" }.to_owned(),
                 duration_ms,
                 error: sent.as_ref().err().cloned(),
+                findings: Vec::new(),
+                findings_error: None,
             },
         );
         HookTested {
@@ -364,8 +386,8 @@ pub fn untrusted_notice(root: &Path, state: &Path) -> Option<String> {
     let (hooks, dir) = read(root, state).ok()?;
     let waiting: Vec<&str> = hooks
         .iter()
-        .filter(|h| h.def.at().is_none())
-        .filter(|h| super::trust::state(&dir, &h.def.name, &h.digest) != TrustState::Trusted)
+        .filter(|h| h.def.at().is_none() && h.def.extension.is_none())
+        .filter(|h| h.trust(&dir) != TrustState::Trusted)
         .map(|h| h.def.name.as_str())
         .collect();
     (!waiting.is_empty()).then(|| {

@@ -39,18 +39,37 @@ pub fn parse(text: &str) -> Result<Vec<HookDef>, String> {
     Ok(out)
 }
 
-/// The hooks of the project at `root` (none without a configuration).
+/// The hooks of the project at `root`: its `[hooks]` and its extensions'.
 ///
 /// # Errors
 ///
-/// The configuration cannot be read, or a hook is misconfigured.
+/// The configuration cannot be read, a hook is misconfigured, or an
+/// extension cannot be loaded.
 pub fn load(root: &Path) -> Result<Vec<HookDef>, String> {
-    let Some(dir) = crate::verify::find_config(root) else {
-        return Ok(Vec::new());
+    let mut hooks = match crate::verify::find_config(root) {
+        Some(dir) => {
+            let file = dir.join(crate::verify::config::FILE);
+            let text =
+                std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+            parse(&text)?
+        }
+        None => Vec::new(),
     };
-    let file = dir.join(crate::verify::config::FILE);
-    let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
-    parse(&text)
+    // An extension's hooks, trusted or not: an untrusted gate blocks. One
+    // that cannot be loaded blocks every point, as a broken `[hooks]` table
+    // does — its gates must not quietly fall away.
+    for e in crate::extensions::load(root) {
+        if !e.usable() {
+            return Err(format!(
+                "the extension {} cannot be loaded ({}): fix or remove it (speccoder extensions)",
+                e.name,
+                e.problems.join("; ")
+            ));
+        }
+        hooks.extend(e.hooks);
+    }
+    hooks.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(hooks)
 }
 
 /// The hooks of a configuration's gate tables, as the judge's configuration
@@ -86,6 +105,17 @@ pub struct Digested {
     /// Programs it names outside the repository (named in the trust prompt,
     /// not digested).
     pub outside: Vec<String>,
+    /// What its trust is recorded under: its name, or `extension:<name>`
+    /// for an extension's hook (whose digest is the extension's).
+    pub trust_key: String,
+}
+
+impl Digested {
+    /// Whether it may run, against the records in `dir`.
+    #[must_use]
+    pub fn trust(&self, dir: &Path) -> TrustState {
+        trust::state(dir, &self.trust_key, &self.digest)
+    }
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -98,6 +128,17 @@ fn sha256_hex(bytes: &[u8]) -> String {
 /// `def`'s digest with the files it runs as they are under `root`.
 #[must_use]
 pub fn digest(def: &HookDef, root: &Path) -> Digested {
+    if let Some((extension, folder)) = &def.extension {
+        let (digest, files) = crate::extensions::digest(Path::new(folder))
+            .unwrap_or_else(|e| (format!("unreadable: {e}"), Vec::new()));
+        return Digested {
+            def: def.clone(),
+            digest,
+            files,
+            outside: Vec::new(),
+            trust_key: crate::extensions::trust::key(extension),
+        };
+    }
     let canonical_root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     let mut files = Vec::new();
     let mut outside = Vec::new();
@@ -153,6 +194,7 @@ pub fn digest(def: &HookDef, root: &Path) -> Digested {
         digest: format!("sha256:{}", sha256_hex(&bytes)),
         files,
         outside,
+        trust_key: def.name.clone(),
     }
 }
 
@@ -165,9 +207,11 @@ pub fn judge_files(project: &Path, wt_root: &Path) -> Vec<String> {
         .zip(std::fs::canonicalize(wt_root).ok())
         .and_then(|(p, w)| p.strip_prefix(&w).ok().map(Path::to_path_buf))
         .unwrap_or_default();
+    // An extension's files are protected by its folder (`tools::paths`).
     load(project)
         .unwrap_or_default()
         .iter()
+        .filter(|d| d.extension.is_none())
         .flat_map(|d| digest(d, project).files)
         .map(|f| prefix.join(&f.path).to_string_lossy().replace('\\', "/"))
         .collect()
@@ -301,6 +345,8 @@ url = "https://hooks.example.com/x"
                     outcome: "passed".into(),
                     duration_ms: 1,
                     error: None,
+                    findings: Vec::new(),
+                    findings_error: None,
                 },
             );
         }

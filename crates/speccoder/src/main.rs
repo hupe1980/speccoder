@@ -1085,8 +1085,21 @@ fn main() {
     {
         finish(&cli, *refused, events.as_ref());
     }
+    // `--trust-extension`: the same, for an extension's digest.
+    if !cli.trust_extension.is_empty()
+        && matches!(
+            command,
+            Command::Run { .. } | Command::Pr { .. } | Command::Extensions { .. }
+        )
+        && let Some(state) = speccoder_runtime::worktree::state_dir()
+        && let Err(refused) =
+            speccoder_runtime::extensions::report::apply_flags(path, &state, &cli.trust_extension)
+    {
+        finish(&cli, *refused, events.as_ref());
+    }
     let result = match command {
         Command::Hooks { action } => hooks(path, action.as_ref(), machine),
+        Command::Extensions { action } => extensions(path, action.as_ref(), machine),
         Command::Help { topic } => {
             help::print(topic);
             return;
@@ -2583,6 +2596,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Suggest { .. } => "suggest",
             C::Doctor { .. } => "doctor",
             C::Hooks { .. } => "hooks",
+            C::Extensions { .. } => "extensions",
             C::Fix { .. } => "fix",
             C::Spec { .. } => "spec",
             C::Feature { .. } => "feature",
@@ -3393,6 +3407,45 @@ fn hooks(
                 .with_code("HOOK-UNTRUSTED");
             }
             result
+        }
+    }
+}
+
+/// `speccoder extensions …`.
+fn extensions(
+    path: &std::path::Path,
+    action: Option<&cli::ExtensionsAction>,
+    machine: bool,
+) -> speccoder_core::CommandResult {
+    use speccoder_runtime::extensions::report;
+    let Some(state) = speccoder_runtime::worktree::state_dir() else {
+        return no_state("extensions");
+    };
+    match action {
+        None => report::list_cmd(path, &state),
+        Some(cli::ExtensionsAction::Add { source }) => report::add_cmd(path, &state, source),
+        Some(cli::ExtensionsAction::Remove { name }) => report::remove_cmd(path, &state, name),
+        Some(cli::ExtensionsAction::Trust { name }) => {
+            use std::io::IsTerminal;
+            let at_terminal =
+                !machine && std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+            if !at_terminal {
+                return speccoder_core::CommandResult::new(
+                    "extensions",
+                    speccoder_core::CommandStatus::NeedsHuman,
+                    "nothing trusted: trusting needs you at a terminal, or --trust-extension name=digest as `speccoder extensions` prints it",
+                )
+                .with_code("EXTENSION-UNTRUSTED");
+            }
+            report::trust_cmd(path, &state, name, "terminal", &mut |e| {
+                for line in human::extension_trust_prompt(e) {
+                    eprintln!("{line}");
+                }
+                eprint!("Trust {} to run on this machine? [y/N] ", e.name);
+                let mut line = String::new();
+                let _ = std::io::stdin().read_line(&mut line);
+                matches!(line.trim(), "y" | "Y" | "yes")
+            })
         }
     }
 }

@@ -711,6 +711,7 @@ fn pr_gates(
             reason: Some(reason),
             code: Some("HOOK-BLOCKED".to_owned()),
             duration_ms: 0,
+            findings: Vec::new(),
         }]
     };
     // No `pr` gate declared on the branch: nothing to check out.

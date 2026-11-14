@@ -193,6 +193,10 @@ pub enum CommandData {
     Inbox(Box<InboxReport>),
     /// `hooks`: every hook, its trust and its recent runs.
     Hooks(Box<crate::hooks::HooksReport>),
+    /// `extensions`: every extension, what it contributes and its trust.
+    Extensions(Box<crate::extensions::ExtensionsReport>),
+    /// The views an extension places on a feature or the project.
+    ExtensionViews(Box<crate::extensions::ViewsReport>),
     /// `shape`: a person's words made into a requirement, and what changed.
     Shape(Box<ShapeReport>),
     /// `ask`: one turn of a read-only conversation.
@@ -613,6 +617,9 @@ pub struct InboxItem {
     /// `unverified`: the feature's ticks and why each regression-only one is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unverified: Option<Unverified>,
+    /// `gate_blocked`: the findings the gate left (SARIF), as shown.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<crate::extensions::SarifFinding>,
 }
 
 /// A feature whose ticks are mostly regression-only, counted by reason.
@@ -1074,6 +1081,8 @@ impl CommandData {
             Self::Issues(_) => "issues",
             Self::Inbox(_) => "inbox",
             Self::Hooks(_) => "hooks",
+            Self::Extensions(_) => "extensions",
+            Self::ExtensionViews(_) => "extension_views",
             Self::Shape(_) => "shape",
             Self::Ask(_) => "ask",
             Self::AskConversations(_) => "ask_conversations",
@@ -1130,6 +1139,8 @@ pub const PAYLOADS: &[&str] = &[
     "issues",
     "inbox",
     "hooks",
+    "extensions",
+    "extension_views",
     "shape",
     "ask",
     "ask_conversations",

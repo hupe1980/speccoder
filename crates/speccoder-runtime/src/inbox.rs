@@ -80,6 +80,12 @@ pub fn inbox_with(path: &Path, feature: Option<&str>, state: Option<&Path>) -> C
                 .filter_map(|b| bug_item(b, &|c| c)),
         );
     }
+    // Extensions waiting for trust: one item each, about the project.
+    if only.is_none()
+        && let Some(s) = state
+    {
+        items.extend(extension_items(path, s));
+    }
     sort(&mut items);
     let working = working(path, state);
     let idle: Vec<String> = names
@@ -202,6 +208,10 @@ fn counted(kind: &str, n: usize) -> String {
             "gate that waits for your trust",
             "gates that wait for your trust",
         ),
+        "extension_untrusted" => (
+            "extension that waits for your trust",
+            "extensions that wait for your trust",
+        ),
         "yours" => ("step only you can take", "steps only you can take"),
         "aside" => ("set-aside change", "set-aside changes"),
         "commit" => ("plan to commit", "plans to commit"),
@@ -234,7 +244,12 @@ fn summary(items: &[InboxItem], features: usize) -> String {
             count(features, "feature", "features")
         );
     }
-    let mut in_features: Vec<&str> = items.iter().map(|i| i.feature.as_str()).collect();
+    // An item about the project (an extension) is in no feature.
+    let mut in_features: Vec<&str> = items
+        .iter()
+        .map(|i| i.feature.as_str())
+        .filter(|f| !f.is_empty())
+        .collect();
     in_features.sort_unstable();
     in_features.dedup();
     let parts: Vec<String> = KINDS
@@ -286,6 +301,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         unverified: None,
         risk: Vec::new(),
         tool: None,
+        findings: Vec::new(),
     };
     let mut out = Vec::new();
     let waiting: Vec<&str> = approvals
@@ -590,8 +606,10 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         // A gate the person declared stopped the tick: its own words, the
         // way to trust it when that is why, and the way back to a tick.
         if a.outcome == "blocked_by_gate" {
-            let (kind, title, detail, actions) = gate_item(path, state, t, a, &flag);
-            out.push(item(kind, Some(&t.id), title, detail, actions));
+            let (kind, title, detail, actions, findings) = gate_item(path, state, t, a, &flag);
+            let mut i = item(kind, Some(&t.id), title, detail, actions);
+            i.findings = findings;
+            out.push(i);
             continue;
         }
         if a.outcome == "suspected_gaming" {
@@ -1518,6 +1536,7 @@ fn bug_item(
         unverified: None,
         risk: Vec::new(),
         tool: None,
+        findings: Vec::new(),
         kind: kind.as_str().to_owned(),
         group: kind.group().as_str().to_owned(),
         feature: b.unit.clone(),
@@ -1643,7 +1662,13 @@ fn gate_item(
     t: &speccoder_core::TaskStatus,
     a: &speccoder_core::LastAttempt,
     flag: &dyn Fn(String) -> String,
-) -> (&'static str, String, String, Vec<Action>) {
+) -> (
+    &'static str,
+    String,
+    String,
+    Vec<Action>,
+    Vec<speccoder_core::extensions::SarifFinding>,
+) {
     let gate = a
         .reason
         .strip_prefix("Blocked by ")
@@ -1663,10 +1688,37 @@ fn gate_item(
     });
     let untrusted = a.reason.contains(crate::hooks::gate::AWAITS_TRUST)
         || a.reason.contains(crate::hooks::gate::CHANGED);
+    let def = crate::hooks::load(root)
+        .ok()
+        .and_then(|h| h.into_iter().find(|d| d.name == gate));
+    if untrusted
+        && let Some(d) = def.as_ref()
+        && let Some((ext, _)) = d.extension.clone()
+    {
+        let digest = crate::hooks::digest(d, root).digest;
+        let mut trust = action(
+            "extensions",
+            format!("trust {ext}…"),
+            "see what it contributes and can reach, then let it run",
+            format!("speccoder extensions trust {ext}"),
+        )
+        .with_run(Runnable::ExtensionTrust {
+            name: ext.clone(),
+            digest,
+        });
+        trust.confirm = Some(format!(
+            "Every gate, view, skill and server of {ext} runs from now on, as shown."
+        ));
+        return (
+            "extension_untrusted",
+            format!("{ext} waits for your trust"),
+            format!("Its gate {gate} blocks {}'s tick until you trust it.", t.id),
+            vec![trust, again],
+            Vec::new(),
+        );
+    }
     if untrusted {
-        let digest = crate::hooks::load(root)
-            .ok()
-            .and_then(|h| h.into_iter().find(|d| d.name == gate))
+        let digest = def
             .map(|d| crate::hooks::digest(&d, root).digest)
             .unwrap_or_default();
         let mut trust = action(
@@ -1688,6 +1740,7 @@ fn gate_item(
             format!("{gate} waits for your trust"),
             format!("It blocks {}'s tick until you trust it.", t.id),
             vec![trust, again],
+            Vec::new(),
         );
     }
     let test = action(
@@ -1697,24 +1750,97 @@ fn gate_item(
         format!("speccoder hooks test {gate}"),
     )
     .with_run(Runnable::HookTest { name: gate.clone() });
+    // The gate's words and findings, from its last block in speccoder's state.
+    let last = state.and_then(|s| {
+        crate::hooks::runs(&crate::hooks::dir(s, root))
+            .remove(&gate)?
+            .into_iter()
+            .rev()
+            .find(|r| r.outcome == "blocked")
+    });
+    let detail = last
+        .as_ref()
+        .and_then(|r| {
+            let words = r.error.clone()?;
+            Some(match &r.findings_error {
+                Some(e) => format!("{words} ({e})"),
+                None => words,
+            })
+        })
+        .unwrap_or_else(|| {
+            format!("{gate} did not let the tick through: speccoder hooks test {gate}")
+        });
     (
         "gate_blocked",
         format!("{} blocked by {gate}", t.id),
-        // The gate's words, from its last block in speccoder's state.
-        state
-            .and_then(|s| {
-                crate::hooks::runs(&crate::hooks::dir(s, root))
-                    .remove(&gate)?
-                    .into_iter()
-                    .rev()
-                    .find(|r| r.outcome == "blocked")?
-                    .error
-            })
-            .unwrap_or_else(|| {
-                format!("{gate} did not let the tick through: speccoder hooks test {gate}")
-            }),
+        detail,
         vec![again, test, skip(t, flag)],
+        last.map(|r| r.findings).unwrap_or_default(),
     )
+}
+
+/// One Needs You item per extension that waits for trust (or changed
+/// since), with what it contributes in its detail.
+fn extension_items(path: &Path, state: &Path) -> Vec<InboxItem> {
+    let dir = crate::hooks::dir(state, path);
+    crate::extensions::load(path)
+        .iter()
+        .filter(|e| e.usable())
+        .filter_map(|e| {
+            let shown = crate::extensions::report::entry(e, &dir);
+            if shown.trust == speccoder_core::hooks::TrustState::Trusted {
+                return None;
+            }
+            let changed = shown.trust == speccoder_core::hooks::TrustState::Changed;
+            let mut trust = action(
+                "extensions",
+                format!("trust {}…", e.name),
+                "see what it contributes and can reach, then let it run",
+                format!("speccoder extensions trust {}", e.name),
+            )
+            .with_run(Runnable::ExtensionTrust {
+                name: e.name.clone(),
+                digest: e.digest.clone(),
+            });
+            trust.confirm = Some(format!(
+                "Every gate, view, skill and server of {} runs from now on, as shown.",
+                e.name
+            ));
+            // A changed one: what widened, else which files; a new one: what
+            // it brings, by name.
+            let detail = match &shown.changes {
+                Some(c) if !c.widened.is_empty() => format!("Widened: {}", c.widened.join("; ")),
+                Some(c) => format!("Changed: {}", c.files.join(", ")),
+                None => format!(
+                    "Brings {}",
+                    shown
+                        .contributions
+                        .iter()
+                        .map(|c| format!("{} {}", c.kind_words(), c.name))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            };
+            Some(InboxItem {
+                kind: "extension_untrusted".to_owned(),
+                group: Kind::ExtensionUntrusted.group().as_str().to_owned(),
+                risk: Vec::new(),
+                tool: None,
+                feature: String::new(),
+                task: None,
+                title: if changed {
+                    format!("{} changed since you trusted it", e.name)
+                } else {
+                    format!("{} waits for your trust", e.name)
+                },
+                detail,
+                since: None,
+                actions: vec![trust],
+                unverified: None,
+                findings: Vec::new(),
+            })
+        })
+        .collect()
 }
 
 fn accept(t: &speccoder_core::TaskStatus, flag: &dyn Fn(String) -> String) -> Action {
@@ -1812,6 +1938,7 @@ mod order_tests {
             actions: Vec::new(),
             unverified: None,
             tool: None,
+            findings: Vec::new(),
             risk: risk
                 .iter()
                 .map(|(r, n)| speccoder_core::RiskReason {

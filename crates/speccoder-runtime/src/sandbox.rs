@@ -754,6 +754,16 @@ impl Runner {
         matches!(self, Self::Sandboxed(s) if s.network_for(argv) == Network::On)
     }
 
+    /// `inv` with no network at all — not the project's loopback, not its
+    /// allow list: what a gate without `network = true` and a view get.
+    #[must_use]
+    pub fn run_offline(&self, inv: &Invocation) -> Outcome {
+        match self {
+            Self::Plain => LocalRunner.run(inv),
+            Self::Sandboxed(s) => s.run_with_network(inv, Network::Off),
+        }
+    }
+
     /// Runs `inv`; `network` (a person's approval) widens the network.
     #[must_use]
     pub fn run_with(&self, inv: &Invocation, network: bool) -> Outcome {
