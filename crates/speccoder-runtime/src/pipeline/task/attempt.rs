@@ -522,11 +522,8 @@ pub(super) fn run(
                     if !output.is_object() {
                         output = serde_json::json!({});
                     }
-                    // A decision an earlier release recorded is named, with
-                    // the fix, not left as a decoding error.
-                    let reason = if rt.block_on(plane.holds_a_pre_054_decision(outcome.run_id)) {
-                        substrate::PRE_054_DECISION.to_owned()
-                    } else if let agentplane::prelude::RunStatus::Exhausted(limit) = &outcome.status
+                    let reason = if let agentplane::prelude::RunStatus::Exhausted(limit) =
+                        &outcome.status
                     {
                         // The plane's ceiling, not the skill's: the same stop.
                         output["status"] = serde_json::json!("budget_exhausted");

@@ -45,10 +45,6 @@ A journal this build cannot read (another format, or damage) is moved aside as `
 - **A run killed before it closed the journal** (Ctrl-C, a closed terminal) leaves it for the next writer — the next run, or any decision — to repair. Until then the listings say `unknown — the last run ended without closing its journal`.
 - Waiting calls that cannot be read show as `unknown`, never as none; a run that cannot read them does not start.
 
-## A decision recorded by 0.2.0
-
-An attempt that waited on a decision speccoder 0.2.0 recorded fails once ("… run the task again") and is set aside; the next `speccoder run` asks again, and `speccoder replay` of such a run says so. Ticks and attempt refs live in git: nothing needs deleting. Upgrade every speccoder that works on a project together — a 0.2.0 process holds the journal alone, so a newer one shows its waiting calls as `unknown`.
-
 ## Replay
 
 ```sh

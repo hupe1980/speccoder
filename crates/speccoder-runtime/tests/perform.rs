@@ -815,7 +815,7 @@ fn against_goldens(
     let mut differ = Vec::new();
     let mut held = None;
     for c in cases() {
-        // A writer that holds the journal alone, as speccoder 0.2.0 did.
+        // A writer that holds the journal alone.
         if c.name.ends_with("-unreadable") {
             if held.is_none() {
                 held = Some(agentplane::store::RedbStore::open(&journal).unwrap());
