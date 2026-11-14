@@ -193,6 +193,10 @@ pub enum CommandData {
     Inbox(Box<InboxReport>),
     /// `hooks`: every hook, its trust and its recent runs.
     Hooks(Box<crate::hooks::HooksReport>),
+    /// An attempt's thread: its words, calls and evidence, in order.
+    Thread(Box<crate::thread::Thread>),
+    /// A waiting call's facts, without a model.
+    Explanation(Box<crate::thread::Explanation>),
     /// `extensions`: every extension, what it contributes and its trust.
     Extensions(Box<crate::extensions::ExtensionsReport>),
     /// The views an extension places on a feature or the project.
@@ -1081,6 +1085,8 @@ impl CommandData {
             Self::Issues(_) => "issues",
             Self::Inbox(_) => "inbox",
             Self::Hooks(_) => "hooks",
+            Self::Thread(_) => "thread",
+            Self::Explanation(_) => "explanation",
             Self::Extensions(_) => "extensions",
             Self::ExtensionViews(_) => "extension_views",
             Self::Shape(_) => "shape",
@@ -1141,6 +1147,8 @@ pub const PAYLOADS: &[&str] = &[
     "hooks",
     "extensions",
     "extension_views",
+    "thread",
+    "explanation",
     "shape",
     "ask",
     "ask_conversations",
@@ -2098,6 +2106,9 @@ pub struct PendingCall {
     pub sources: Vec<String>,
     /// The run it belongs to.
     pub run: Option<String>,
+    /// The waiting attempt's own run (its record), when it is suspended.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempt: Option<String>,
     /// It waits in its run's batch: the asking budget was used.
     pub batched: bool,
     /// SHA-256 over its id and the object a decision covers: a decision

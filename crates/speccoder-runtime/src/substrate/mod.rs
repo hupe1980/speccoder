@@ -782,6 +782,21 @@ impl Plane {
     /// `actions::perform(AllowAlways)`, which the caller runs).
     pub async fn decide_inline(
         &self,
+        outcome: RunOutcome,
+        approver: Option<&dyn crate::approvals::Approver>,
+        context: &crate::approvals::PresentContext,
+    ) -> Result<Inline, PlaneError> {
+        let run = outcome.run_id;
+        let r = self.decide_inline_on(outcome, approver, context).await;
+        // An error ends the attempt here: it is no longer live.
+        if r.is_err() {
+            live_ended_run(run);
+        }
+        r
+    }
+
+    async fn decide_inline_on(
+        &self,
         mut outcome: RunOutcome,
         approver: Option<&dyn crate::approvals::Approver>,
         context: &crate::approvals::PresentContext,
@@ -791,13 +806,40 @@ impl Plane {
             let Some((decision, answer)) =
                 approver.and_then(|a| crate::approvals::tasks::ask(a, &task, context))
             else {
+                // Left waiting for a later decision: not running here.
+                live_ended_run(outcome.run_id);
                 return Ok(Inline {
                     outcome,
                     waiting: Some(task),
                     always,
                 });
             };
-            self.decide(task.id, &decision).await?;
+            if let Err(e) = self.decide(task.id, &decision).await {
+                // Stopped while it waited (spec 124): the stop withdrew the
+                // decision; resumed, the run observes the stop and unwinds.
+                let resumed = self
+                    .runtime
+                    .replay(outcome.run_id, agentplane::runtime::Mode::Resume)
+                    .await
+                    .ok();
+                match resumed {
+                    Some(o) if matches!(o.status, RunStatus::Cancelled { .. }) => {
+                        live_ended_run(o.run_id);
+                        return Ok(Inline {
+                            outcome: o,
+                            waiting: None,
+                            always,
+                        });
+                    }
+                    other => {
+                        return Err(PlaneError(format!(
+                            "{} (the run rests as {:?})",
+                            e.0,
+                            other.map(|o| o.status)
+                        )));
+                    }
+                }
+            }
             if answer.always && decision.approved() {
                 let via = answer
                     .by
@@ -817,6 +859,9 @@ impl Plane {
                 Some(o) => outcome = o,
                 None => break,
             }
+        }
+        if !matches!(outcome.status, RunStatus::Suspended(_)) {
+            live_ended_run(outcome.run_id);
         }
         Ok(Inline {
             outcome,
@@ -1045,6 +1090,26 @@ impl Plane {
         input: Tainted<Value>,
         key: &str,
     ) -> Result<(RunOutcome, bool), PlaneError> {
+        let name = format!("{feature}/{task}");
+        live_started(&name, &self.runtime);
+        let out = self.attempt_keyed_run(feature, task, input, key).await;
+        match &out {
+            // Waiting for a person: still the task's attempt, still stoppable.
+            Ok((o, _)) if matches!(o.status, RunStatus::Suspended(_)) => {
+                live_run_is(&name, o.run_id);
+            }
+            _ => live_ended(&name),
+        }
+        out
+    }
+
+    async fn attempt_keyed_run(
+        &self,
+        feature: &str,
+        task: &str,
+        input: Tainted<Value>,
+        key: &str,
+    ) -> Result<(RunOutcome, bool), PlaneError> {
         use agentplane::runtime::{Admission, Mode};
         let err = |e: agentplane::RuntimeError| PlaneError(e.to_string());
         let admitted = self
@@ -1216,6 +1281,164 @@ pub fn answered(completion: &agentplane::model::Completion) -> Option<String> {
     (!text.is_empty()).then(|| text.to_owned())
 }
 
+/// The journal records of `run`, from the project's journal or a lane's
+/// (a lane run keeps its own).
+///
+/// # Errors
+///
+/// No journal is here, or none holds `run`.
+pub async fn records(
+    dir: &Path,
+    run: &str,
+) -> Result<Vec<agentplane::journal::Record>, PlaneError> {
+    let Ok(id) = agentplane::core::RunId::parse(run) else {
+        return Err(PlaneError(format!("{run} is not a run id")));
+    };
+    // No journal here, or none holding the run: said, never read as a
+    // silent model.
+    let lanes = std::fs::read_dir(dir.join("lanes"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path());
+    let mut any = false;
+    for d in std::iter::once(dir.to_path_buf()).chain(lanes) {
+        let Some(store) = open_reader(&d)? else {
+            continue;
+        };
+        any = true;
+        let history = store
+            .read(id, 1)
+            .await
+            .map_err(|e| PlaneError(e.to_string()))?;
+        if !history.is_empty() {
+            return Ok(history);
+        }
+    }
+    if any {
+        Err(PlaneError(format!(
+            "run {run} is not in this project's journal"
+        )))
+    } else {
+        Err(PlaneError(
+            "no journal of this project's runs is here".to_owned(),
+        ))
+    }
+}
+
+/// Who stopped `run`, when a person did: its `RunCancelled` record.
+pub async fn stopped_by(dir: &Path, run: &str) -> Option<String> {
+    records(dir, run).await.ok()?.iter().find_map(|r| {
+        let v = serde_json::to_value(r.kind()).ok()?;
+        (v["kind"] == "RunCancelled")
+            .then(|| v["actor"]["actor"].as_str().map(str::to_owned))
+            .flatten()
+    })
+}
+
+// ── live attempts, for a Stop that stops ───────────────────────────────
+
+/// Attempts running in this process: `feature/task` → the runtime it runs
+/// on (never kept alive by this: it holds the run's lease) and, once its
+/// skill started, its run.
+type Live = std::sync::Mutex<
+    std::collections::BTreeMap<String, (Option<agentplane::core::RunId>, std::sync::Weak<Runtime>)>,
+>;
+
+fn live() -> &'static Live {
+    static LIVE: std::sync::OnceLock<Live> = std::sync::OnceLock::new();
+    LIVE.get_or_init(Default::default)
+}
+
+/// Notes that `task`'s attempt starts (or resumes) on `runtime`, keeping
+/// the run it already has.
+fn live_started(task: &str, runtime: &Arc<Runtime>) {
+    if let Ok(mut l) = live().lock() {
+        // An entry whose runtime is gone ended without saying so (an error
+        // or a panic on the way out): it is dropped, never carried on.
+        l.retain(|_, (_, rt)| rt.strong_count() > 0);
+        // The same runtime resuming its suspended attempt keeps its run.
+        let run = l
+            .get(task)
+            .filter(|(_, rt)| rt.upgrade().is_some_and(|rt| Arc::ptr_eq(&rt, runtime)))
+            .and_then(|(r, _)| *r);
+        l.insert(task.to_owned(), (run, Arc::downgrade(runtime)));
+    }
+}
+
+/// Notes the run of `task`'s attempt, from inside it.
+pub(crate) fn live_run_is(task: &str, run: agentplane::core::RunId) {
+    if let Ok(mut l) = live().lock()
+        && let Some(entry) = l.get_mut(task)
+    {
+        entry.0 = Some(run);
+    }
+}
+
+/// Notes that `task`'s attempt ended.
+pub fn live_ended(task: &str) {
+    if let Ok(mut l) = live().lock() {
+        l.remove(task);
+    }
+}
+
+/// Notes that the attempt with `run` ended.
+fn live_ended_run(run: agentplane::core::RunId) {
+    if let Ok(mut l) = live().lock() {
+        l.retain(|_, (r, _)| *r != Some(run));
+    }
+}
+
+/// The run of `task`'s attempt running in this process, if any.
+#[must_use]
+pub fn live_run(task: &str) -> Option<String> {
+    live()
+        .lock()
+        .ok()?
+        .get(task)
+        .filter(|(_, rt)| rt.strong_count() > 0)
+        .and_then(|(r, _)| r.map(|r| r.to_string()))
+}
+
+/// Asks the attempts running in this process — `task`'s, or every one — to
+/// stop before their next model turn or tool call (agentplane 0.61); the
+/// call in flight completes. Returns the tasks asked.
+#[must_use]
+pub fn stop_live(task: Option<&str>, by: &str, via: &str) -> Vec<String> {
+    let asked: Vec<(String, agentplane::core::RunId, Arc<Runtime>)> = live()
+        .lock()
+        .map(|l| {
+            l.iter()
+                .filter(|(t, _)| task.is_none_or(|x| x == *t))
+                .filter_map(|(t, (r, rt))| Some((t.clone(), (*r)?, rt.upgrade()?)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let Ok(operator) = agentplane::core::Operator::from_parts(by, "asserted") else {
+        return Vec::new();
+    };
+    let reason = format!("stopped by {by} via {via}");
+    // Its own thread and runtime: a caller may already be inside one.
+    std::thread::spawn(move || {
+        let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        else {
+            return Vec::new();
+        };
+        asked
+            .into_iter()
+            .filter(|(_, run, runtime)| {
+                rt.block_on(runtime.request_cancel(*run, &operator, &reason))
+                    .is_ok()
+            })
+            .map(|(t, _, _)| t)
+            .collect()
+    })
+    .join()
+    .unwrap_or_default()
+}
+
 /// One model turn of an attempt, as the person is shown it afterwards: the
 /// model's summary of its reasoning, its words beside its calls and how it
 /// ended — its account, a claim. Control characters escaped.
@@ -1238,42 +1461,7 @@ pub struct AccountTurn {
 ///
 /// The journal cannot be read, is not here, or does not hold `run`.
 pub async fn account(dir: &Path, run: &str) -> Result<Vec<AccountTurn>, PlaneError> {
-    let Ok(id) = agentplane::core::RunId::parse(run) else {
-        return Err(PlaneError(format!("{run} is not a run id")));
-    };
-    // The project's journal, then each lane's (a lane run keeps its own).
-    // No journal here, or none holding the run: said, never read as a
-    // silent model.
-    let lanes = std::fs::read_dir(dir.join("lanes"))
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| e.path());
-    let mut any = false;
-    let mut history = Vec::new();
-    for d in std::iter::once(dir.to_path_buf()).chain(lanes) {
-        let Some(store) = open_reader(&d)? else {
-            continue;
-        };
-        any = true;
-        history = store
-            .read(id, 1)
-            .await
-            .map_err(|e| PlaneError(e.to_string()))?;
-        if !history.is_empty() {
-            break;
-        }
-    }
-    if !any {
-        return Err(PlaneError(
-            "no journal of this project's runs is here".to_owned(),
-        ));
-    }
-    if history.is_empty() {
-        return Err(PlaneError(format!(
-            "run {run} is not in this project's journal"
-        )));
-    }
+    let history = records(dir, run).await?;
     let text = |t: &str| {
         let t = t.trim();
         (!t.is_empty()).then(|| crate::approvals::present::escape(t))

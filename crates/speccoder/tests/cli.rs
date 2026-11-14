@@ -1205,7 +1205,7 @@ fn reading_a_fresh_project_creates_no_state() {
         &["report", "--live"],
         &["actions"],
         &["doctor"],
-        &["task", "show", "T005", "--account"],
+        &["task", "show", "T005", "--thread"],
     ] {
         let _ = speccoder()
             .args(args)

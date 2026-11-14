@@ -71,6 +71,7 @@ pub(super) fn make(
         worktree_config,
         planning,
         policy,
+        contained,
         contained_notice,
         task_grants,
         ..
@@ -325,7 +326,13 @@ pub(super) fn make(
 
     // One plane for the whole task. Its tool server enforces denials; the
     // frozen-test approvals are the skill's, from its journaled input.
-    let tools_server = match tools::WorkspaceTools::new(wt_root, policy.clone()) {
+    // It knows what the sandbox confines too, so a command's record says
+    // when it ran without asking (the attempt's thread reads it).
+    let server_policy = match contained {
+        Some(m) => policy.clone().contained(m),
+        None => policy.clone(),
+    };
+    let tools_server = match tools::WorkspaceTools::new(wt_root, server_policy) {
         Ok(t) => std::sync::Arc::new(t.with_runner(runner.clone())),
         Err(e) => return Err(Box::new(fail(CommandStatus::Error, e.to_string()))),
     };

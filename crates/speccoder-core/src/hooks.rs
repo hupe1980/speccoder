@@ -591,6 +591,9 @@ pub struct TaskStopped {
     /// The run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<String>,
+    /// Who stopped it, when a person did (`outcome` is `stopped`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopped_by: Option<String>,
     /// One sentence, ready for a chat message.
     pub summary: String,
 }
@@ -624,6 +627,9 @@ pub fn stopped_summary(s: &TaskStopped) -> String {
         && let Some(g) = s.gates.iter().find(|g| g.outcome == GateState::Blocked)
     {
         return format!("{} blocked by {} in {}", s.task, g.name, s.feature);
+    }
+    if let Some(by) = &s.stopped_by {
+        return format!("{} stopped by {by} in {}", s.task, s.feature);
     }
     let code = s
         .code
@@ -997,6 +1003,7 @@ mod tests {
             attempt_ref: "refs/x".into(),
             gates: vec![],
             run: None,
+            stopped_by: None,
             summary: String::new(),
         };
         assert_eq!(

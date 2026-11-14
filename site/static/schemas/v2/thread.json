@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "thread: an attempt as one thread — the model's words, its calls, the evidence",
+  "description": "One attempt as one thread.",
+  "type": "object",
+  "properties": {
+    "feature": {
+      "description": "The feature.",
+      "type": "string"
+    },
+    "task": {
+      "description": "The task.",
+      "type": "string"
+    },
+    "attempt": {
+      "description": "The attempt shown.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AttemptRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "attempts": {
+      "description": "The task's attempts, newest first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AttemptRef"
+      }
+    },
+    "rows": {
+      "description": "The rows, oldest first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Row"
+      }
+    },
+    "live": {
+      "description": "The attempt is running now.",
+      "type": "boolean"
+    },
+    "more": {
+      "description": "Rows before the first shown.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "feature",
+    "task",
+    "attempts",
+    "rows",
+    "live",
+    "more"
+  ],
+  "$defs": {
+    "AttemptRef": {
+      "description": "One attempt of a task, as the switcher names it.",
+      "type": "object",
+      "properties": {
+        "run": {
+          "description": "Its run.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "`verified`, `failed`, `stopped`, `running`, …",
+          "type": "string"
+        },
+        "at": {
+          "description": "When it ended or started (RFC 3339), when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "run",
+        "outcome"
+      ]
+    },
+    "Row": {
+      "description": "One row of a thread.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "What it is.",
+          "$ref": "#/$defs/RowKind"
+        },
+        "turn": {
+          "description": "The model turn (1-based).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "text": {
+          "description": "A thought's or words' text; a divider's words.",
+          "type": "string"
+        },
+        "conclusion": {
+          "description": "A thought's last paragraph, shown first.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verb": {
+          "description": "A call's verb: `Read`, `Searched`, `Edited`, `Wrote`, `Ran`, `Called`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "object": {
+          "description": "What it acted on: a path, a command, a tool.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "added": {
+          "description": "An edit's lines added.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "removed": {
+          "description": "An edit's lines removed.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "outcome": {
+          "description": "`ok`, `failed`, `refused`, `waiting`, `stopped`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "description": "An exit code and last lines, a refusal's reason, a duration.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decided": {
+          "description": "Who let it run, when the record says: `contained`, `you`, or\n`refused`; none when a rule allowed it without asking.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "call": {
+          "description": "The model's call id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "description": "A fold's calls.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Row"
+          }
+        },
+        "tone": {
+          "description": "A divider's tone: `verified`, `failed`, `stopped`, `blocked`, `info`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "RowKind": {
+      "description": "What a row is.",
+      "oneOf": [
+        {
+          "description": "The model's reasoning (a claim).",
+          "type": "string",
+          "const": "thought"
+        },
+        {
+          "description": "The model's words beside its calls (a claim).",
+          "type": "string",
+          "const": "words"
+        },
+        {
+          "description": "One call.",
+          "type": "string",
+          "const": "call"
+        },
+        {
+          "description": "Consecutive read-only calls, folded.",
+          "type": "string",
+          "const": "fold"
+        },
+        {
+          "description": "A call that waits for a person.",
+          "type": "string",
+          "const": "approval"
+        },
+        {
+          "description": "Evidence: acceptance, a scenario turning green, a check, the end.",
+          "type": "string",
+          "const": "divider"
+        }
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/thread.json"
+}

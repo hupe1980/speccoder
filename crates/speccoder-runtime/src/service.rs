@@ -35,6 +35,50 @@ pub mod progress {
     pub use crate::progress::{Event, Progress, read_live};
 }
 
+/// An attempt's thread, and a waiting call's facts.
+pub mod thread {
+    use speccoder_core::{CommandData, CommandResult, CommandStatus};
+
+    /// The thread of `task`'s attempt `run` (the newest when `None`);
+    /// `all`: every row, else the last 200.
+    #[must_use]
+    pub fn of(
+        root: &std::path::Path,
+        feature: &str,
+        task: &str,
+        run: Option<&str>,
+        all: bool,
+    ) -> CommandResult {
+        let Some(state) = crate::worktree::state_dir() else {
+            return CommandResult::new("thread", CommandStatus::ConfigError, "no state directory");
+        };
+        match crate::thread::of(root, &state, feature, task, run, all) {
+            Ok(t) => CommandResult::new("thread", CommandStatus::Ok, "")
+                .with_data(CommandData::Thread(Box::new(t))),
+            Err(e) => CommandResult::new("thread", CommandStatus::NotFound, &e),
+        }
+    }
+
+    /// The facts of the waiting call `call` of `task` (`feature/task`).
+    #[must_use]
+    pub fn explain(root: &std::path::Path, task: &str, call: Option<&str>) -> CommandResult {
+        let Some(state) = crate::worktree::state_dir() else {
+            return CommandResult::new("explain", CommandStatus::ConfigError, "no state directory");
+        };
+        match crate::thread::explain(root, &state, task, call) {
+            Ok(x) => CommandResult::new("explain", CommandStatus::Ok, "")
+                .with_data(CommandData::Explanation(Box::new(x))),
+            Err(e) => CommandResult::new("explain", CommandStatus::NotFound, &e),
+        }
+    }
+
+    /// Asks the attempts this process runs to stop before their next call.
+    #[must_use]
+    pub fn stop(root: &std::path::Path, via: &str) -> Vec<String> {
+        crate::substrate::stop_live(None, &crate::approvals::who_in(root), via)
+    }
+}
+
 /// The project's extensions: what each contributes, and its views.
 pub mod extensions {
     use speccoder_core::{CommandData, CommandResult, CommandStatus};

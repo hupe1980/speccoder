@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "explanation: a waiting call's facts, without a model",
+  "description": "A waiting call's facts, without any model.",
+  "type": "object",
+  "properties": {
+    "task": {
+      "description": "The task (`feature/task`) and the call.",
+      "type": "string"
+    },
+    "call": {
+      "description": "The model's call id.",
+      "type": "string"
+    },
+    "title": {
+      "description": "The task's title.",
+      "type": "string"
+    },
+    "question": {
+      "description": "What it asks: `Run this command?`.",
+      "type": "string"
+    },
+    "program": {
+      "description": "The program, by name.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "path": {
+      "description": "Where it resolves to.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "hosts": {
+      "description": "Hosts its arguments name.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "outside": {
+      "description": "Paths outside the workspace its arguments name.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reach": {
+      "description": "What it can reach if allowed, in words.",
+      "type": "string"
+    },
+    "rule": {
+      "description": "Why it asks.",
+      "type": "string"
+    },
+    "provenance": {
+      "description": "Where its arguments came from.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "said": {
+      "description": "The model's words in that turn (a claim).",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reasoning": {
+      "description": "The model's last reasoning before it (a claim).",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "scenarios": {
+      "description": "The scenarios the task's story is checked by: `US1-2 — …`.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "task",
+    "call",
+    "title",
+    "question",
+    "reach",
+    "rule"
+  ],
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/explanation.json"
+}

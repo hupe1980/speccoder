@@ -332,7 +332,7 @@ fn the_approval_overlay_answers_with_the_prompts_keys() {
         "\"NFKD is needed\"   (a claim)",
         "1. Yes, once",
         "(s)",
-        "tab note · v view all · esc later",
+        "tab note · v view all · ? explain · esc later",
     ] {
         assert!(s.contains(needle), "missing {needle:?} in\n{s}");
     }

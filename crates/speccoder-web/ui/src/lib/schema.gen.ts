@@ -435,6 +435,16 @@ export interface Assumption {
   question: string;
 }
 
+/** One attempt of a task, as the switcher names it. */
+export interface AttemptRef {
+  /** Its run. */
+  run: string;
+  /** `verified`, `failed`, `stopped`, `running`, … */
+  outcome: string;
+  /** When it ended or started (RFC 3339), when known. */
+  at?: string | null;
+}
+
 /** Result of `speccoder attest verify` and `attest sign`. */
 export interface AttestReport {
   /** Feature directory name. */
@@ -940,7 +950,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -2253,6 +2263,8 @@ export type EventLine = {
     gates: GateMark[];
     /** The run. */
     run?: string | null;
+    /** Who stopped it, when a person did (`outcome` is `stopped`). */
+    stopped_by?: string | null;
     /** One sentence, ready for a chat message. */
     summary: string;
   }
@@ -2368,6 +2380,38 @@ export type ExitCode = number;
 export interface ExplainReport {
   /** The code asked for, or every code with `--list`. */
   codes: CodeInfo[];
+}
+
+/** A waiting call's facts, without any model. */
+export interface Explanation {
+  /** The task (`feature/task`) and the call. */
+  task: string;
+  /** The model's call id. */
+  call: string;
+  /** The task's title. */
+  title: string;
+  /** What it asks: `Run this command?`. */
+  question: string;
+  /** The program, by name. */
+  program?: string | null;
+  /** Where it resolves to. */
+  path?: string | null;
+  /** Hosts its arguments name. */
+  hosts?: string[];
+  /** Paths outside the workspace its arguments name. */
+  outside?: string[];
+  /** What it can reach if allowed, in words. */
+  reach: string;
+  /** Why it asks. */
+  rule: string;
+  /** Where its arguments came from. */
+  provenance?: string[];
+  /** The model's words in that turn (a claim). */
+  said?: string | null;
+  /** The model's last reasoning before it (a claim). */
+  reasoning?: string | null;
+  /** The scenarios the task's story is checked by: `US1-2 — …`. */
+  scenarios?: string[];
 }
 
 /** `spec explore`'s payload: one session as it stands, or the list. */
@@ -3745,6 +3789,8 @@ export interface PendingCall {
   sources?: string[];
   /** The run it belongs to. */
   run: string | null;
+  /** The waiting attempt's own run (its record), when it is suspended. */
+  attempt?: string | null;
   /** It waits in its run's batch: the asking budget was used. */
   batched: boolean;
   /**
@@ -4811,6 +4857,44 @@ export interface RiskReason {
   /** The chip (`2 regression-only`). */
   text: string;
 }
+
+/** One row of a thread. */
+export interface Row {
+  /** What it is. */
+  kind: RowKind;
+  /** The model turn (1-based). */
+  turn?: number | null;
+  /** A thought's or words' text; a divider's words. */
+  text?: string;
+  /** A thought's last paragraph, shown first. */
+  conclusion?: string | null;
+  /** A call's verb: `Read`, `Searched`, `Edited`, `Wrote`, `Ran`, `Called`. */
+  verb?: string | null;
+  /** What it acted on: a path, a command, a tool. */
+  object?: string | null;
+  /** An edit's lines added. */
+  added?: number | null;
+  /** An edit's lines removed. */
+  removed?: number | null;
+  /** `ok`, `failed`, `refused`, `waiting`, `stopped`. */
+  outcome?: string | null;
+  /** An exit code and last lines, a refusal's reason, a duration. */
+  detail?: string | null;
+  /**
+   * Who let it run, when the record says: `contained`, `you`, or
+   * `refused`; none when a rule allowed it without asking.
+   */
+  decided?: string | null;
+  /** The model's call id. */
+  call?: string | null;
+  /** A fold's calls. */
+  items?: Row[];
+  /** A divider's tone: `verified`, `failed`, `stopped`, `blocked`, `info`. */
+  tone?: string | null;
+}
+
+/** What a row is. */
+export type RowKind = "thought" | "words" | "call" | "fold" | "approval" | "divider";
 
 /**
  * A person's ruling that an over-strict finding was wrong: the tests were
@@ -6361,6 +6445,8 @@ export interface TaskStopped {
   gates: GateMark[];
   /** The run. */
   run?: string | null;
+  /** Who stopped it, when a person did (`outcome` is `stopped`). */
+  stopped_by?: string | null;
   /** One sentence, ready for a chat message. */
   summary: string;
 }
@@ -6400,6 +6486,24 @@ export interface TestResult {
   id: string;
   /** What happened. */
   outcome: TestOutcome;
+}
+
+/** One attempt as one thread. */
+export interface Thread {
+  /** The feature. */
+  feature: string;
+  /** The task. */
+  task: string;
+  /** The attempt shown. */
+  attempt?: AttemptRef | null;
+  /** The task's attempts, newest first. */
+  attempts: AttemptRef[];
+  /** The rows, oldest first. */
+  rows: Row[];
+  /** The attempt is running now. */
+  live: boolean;
+  /** Rows before the first shown. */
+  more: number;
 }
 
 /** How far plan through goes. */

@@ -1,13 +1,18 @@
 // The payloads, as the host sends them. Every one with a published schema
 // is generated from site/static/schemas/v2 (./schema.gen.ts, drift-tested
 // in `just ci`) and re-exported here under the name the page uses. Kept by
-// hand, because the host sends them without a schema: Project, Row,
+// hand, because the host sends them without a schema: Project, Line,
 // Presentation, Document, ConfigChange, Pull, GitHubState, AccountTurn,
 // LiveRun — and Reply, an envelope whose `data` the caller knows.
 
 import type { Envelope, FeatureEntry, IssueEntry as GitHubIssue } from "./schema.gen";
 
 export type {
+  Thread,
+  Row as ThreadRow,
+  RowKind,
+  AttemptRef,
+  Explanation,
   HookEntry,
   HooksReport,
   Extension,
@@ -143,7 +148,7 @@ export interface WelcomeView {
   version: string;
 }
 
-export interface Row {
+export interface Line {
   label: string;
   mark: string;
   text: string;

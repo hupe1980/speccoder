@@ -31,9 +31,11 @@
   let always = $state(false);
   const stopTask = () => app.answer({ answer: { decision: "stop", scope: "once", note: null, reason: null, by: null } });
 
+  // The run's feature, which need not be the one on screen.
+  const explain = () => p && (app.explain = { task: `${app.task?.feature ?? app.feature ?? ""}/${p.request.task}`, call: "" });
   function keydown(e: KeyboardEvent) {
     if ((e.target as HTMLElement).closest("input, textarea")) return;
-    if (!p) return;
+    if (!p || app.explain) return;
     const k = e.key.toLowerCase();
     if (k === "y" || k === "1") approve("once");
     else if ((k === "t" || k === "2") && offered.has("task")) approve("task");
@@ -42,6 +44,7 @@
     else if (k === "n" || k === "5") rejecting = true;
     else if (k === "s" || k === "6") stopTask();
     else if (k === "v") full = !full;
+    else if (k === "e" || k === "?") explain();
     else return;
     e.preventDefault();
   }
@@ -103,6 +106,7 @@
       {/if}
       <div class="choices">
         <button class="btn plain" onclick={stopTask} title="The call keeps waiting; decide later with speccoder task approve">Stop Task <kbd>S</kbd></button>
+        <button class="btn plain" onclick={explain} title="What the call is and can reach, which rule asks — facts, no model">Explain <kbd>E</kbd></button>
         <span class="spacer"></span>
         <button class="btn danger" onclick={() => (rejecting = true)}>Don't Allow… <kbd>N</kbd></button>
         {#if offered.has("always")}<button class="btn" onclick={() => (always = true)} title="Add exactly this command to the project's policy">Always Allow… <kbd>A</kbd></button>{/if}

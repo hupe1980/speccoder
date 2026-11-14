@@ -25,6 +25,7 @@
   import CodeView from "./components/CodeView.svelte";
   import Setup from "./components/Setup.svelte";
   import ConfirmSheet from "./components/ConfirmSheet.svelte";
+  import ExplainSheet from "./components/ExplainSheet.svelte";
   import RemedyCard from "./components/RemedyCard.svelte";
   import Composer from "./components/Composer.svelte";
   import NewFeature from "./components/NewFeature.svelte";
@@ -79,17 +80,17 @@
     }
     // Ask: ⌘L opens it (and focuses the question), ⌘⇧L adds the selected
     // task to its context. Not over a decision or a sheet.
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l" && !app.waiting && !app.welcome) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l" && !app.waiting && !app.welcome && !app.explain) {
       e.preventDefault();
       return command(e.shiftKey ? "edit.addToAsk" : "view.ask");
     }
     // Review › Write Tests (⌘⇧T) and Send Comments (⌘⇧↵), as the menu bar.
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key.toLowerCase() === "t" || e.key === "Enter")) {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key.toLowerCase() === "t" || e.key === "Enter") && !app.explain) {
       e.preventDefault();
       return command(e.key === "Enter" ? "review.send" : "review.tests");
     }
     // A sheet, the palette or a decision has the keys while it is open.
-    const sheet = app.shape || app.composer || app.newFeature || app.newProject || app.clone || app.quick || app.bugSheet || app.confirming || app.keys || app.personStep || app.help;
+    const sheet = app.shape || app.composer || app.newFeature || app.newProject || app.clone || app.quick || app.bugSheet || app.confirming || app.keys || app.personStep || app.help || app.explain;
     if (typing || inField(e.target) || app.waiting || app.input || app.palette || sheet) return;
     if (e.key === "?") app.keys = true;
     // `N` (Shift+N): the composer; a browser keeps ⌘N for itself.
@@ -325,6 +326,7 @@
 {#if app.waiting}<AskSheet />{/if}
 {#if app.input}<InputSheet />{/if}
 {#if app.confirming}<ConfirmSheet />{/if}
+{#if app.explain}<ExplainSheet />{/if}
 {#if app.remedy}<RemedyCard />{/if}
 {#if app.palette}<Palette />{/if}
 {#if app.context}<ContextMenu />{/if}
@@ -432,5 +434,15 @@
     .shell.nostatus { grid-template-areas: "head" "main"; }
     .segmented button { padding: 0 0.6rem; }
     main { padding: 1.25rem 1rem 7rem; }
+  }
+  /* A phone: the views take a row of their own, full width, beneath the
+     brand and the buttons — six icons and four buttons do not fit one. */
+  @media (max-width: 600px) {
+    .toolbar { grid-template-columns: auto minmax(0, 1fr); row-gap: 0.4rem; padding: 0.5rem 0.75rem; }
+    .right { grid-column: 2; grid-row: 1; }
+    .segmented { grid-column: 1 / -1; grid-row: 2; }
+    .segmented button { flex: 1; padding: 0; }
+    :global(.shell.shell) { grid-template-rows: auto 1fr 26px; }
+    :global(.shell.shell.nostatus) { grid-template-rows: auto 1fr; }
   }
 </style>

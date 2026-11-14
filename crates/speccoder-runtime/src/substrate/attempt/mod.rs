@@ -486,6 +486,8 @@ impl Skill for Attempt {
                 .as_str()
                 .unwrap_or_default()
         );
+        // Stop finds this run by its task (a Stop that stops, spec 124).
+        crate::substrate::live_run_is(&task_name, cx.run_id());
         let rejected: Vec<crate::tools::policy::Rejection> = decisions_of(&settings, "rejected")?;
         let told = rejected;
         let bundle = &input.peek()["bundle"];

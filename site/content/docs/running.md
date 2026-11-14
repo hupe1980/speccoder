@@ -76,9 +76,26 @@ speccoder task drop T005      # discard them
 
 `restore` merges them when the branch moved since. It changes nothing when they conflict, or when the worktree has uncommitted edits to tracked files.
 
-## The model's account
+## The thread
 
-Each turn, the model's summary of its reasoning and its words beside its calls are shown muted: in the terminal as `∴ …` and quoted text (in full with `-v`; `model thinks:` / `model says:` in screen-reader mode), the latest of each in the dashboard and `report --live`, per turn in the [app](@/docs/web.md)'s inspector, as the agent's thoughts and message in an editor, and afterwards with `speccoder task show T005 --account`. A verdict never rests on it. The summary comes from the provider (Anthropic, OpenAI Responses; an OpenAI-compatible server and Bedrock give none) and is asked for on the attempt's turns only; `[model] reasoning_summary = false` turns it off. With the OpenAI Responses API, the words are the model's commentary, which that API marks apart from its answer; a final turn's commentary is shown too. The account ends with how the attempt ended: the summary of the model's final report, or why it stopped. A model at reasoning effort `none` (OpenAI's default for GPT-5.4) gives no summary.
+Each turn, the model's summary of its reasoning and its words beside its calls are shown muted: in the terminal as `∴ …` and quoted text (in full with `-v`; `model thinks:` / `model says:` in screen-reader mode), the latest of each in the dashboard and `report --live`, as the agent's thoughts and message in an editor. The attempt's **thread** puts them in order with its calls and its evidence — in the [app](@/docs/web.md#board)'s inspector, and with `speccoder task show T005 --thread`:
+
+```text
+∴ So quoting needs its own state.
+▸ Read 3 files · searched 1
+✓ Edited src/csv.rs +12 −3
+✓ Ran cargo test  contained
+“Quoting handled.”
+━━ Acceptance written — 1 scenario, failing first (assertion)
+━━ US1-1 red → green
+━━ Ticked T005 — verified
+```
+
+Thoughts and words are claims; only the `━━` rows are evidence. A verdict never rests on it. The summary comes from the provider (Anthropic, OpenAI Responses; an OpenAI-compatible server and Bedrock give none) and is asked for on the attempt's turns only; `[model] reasoning_summary = false` turns it off. With the OpenAI Responses API, the words are the model's commentary, which that API marks apart from its answer; a final turn's commentary is shown too. The account ends with how the attempt ended: the summary of the model's final report, or why it stopped. A model at reasoning effort `none` (OpenAI's default for GPT-5.4) gives no summary.
+
+## Stopping a run
+
+**Stop** in the app, or the first Ctrl-C of a line-mode run (`--plain`, `--json`, piped; the [dashboard](#the-dashboard) asks on `q` or Ctrl-C), stops the attempt at its next call: the call in flight completes, the model is asked nothing more, no further task starts. The attempt's code is saved under its attempt ref as *stopped by* you (who, how, when) — not failed — and its thread ends *Stopped by Dana* (your git `user.name`); with `best_of`, no further sample is drawn; the next `run` starts a new attempt. A second Ctrl-C quits at once; the next `run` then resumes the attempt from its journal ([recovery](@/docs/recovery.md)).
 
 ## Quick changes
 

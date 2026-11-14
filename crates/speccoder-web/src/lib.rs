@@ -351,6 +351,39 @@ struct RunQuery {
     run: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct ThreadQuery {
+    feature: String,
+    task: String,
+    run: Option<String>,
+}
+
+/// An attempt as one thread (the newest, or `run`).
+async fn thread(State(s): State<Shared>, Query(q): Query<ThreadQuery>) -> Json<Value> {
+    let root = s.root.get();
+    let r = off(move || {
+        speccoder_runtime::service::thread::of(&root, &q.feature, &q.task, q.run.as_deref(), false)
+    })
+    .await;
+    envelope(&s, &r)
+}
+
+#[derive(Debug, Deserialize)]
+struct ExplainQuery {
+    task: String,
+    /// None: the task's waiting call (a task waits on one at a time).
+    call: Option<String>,
+}
+
+/// A waiting call's facts, without a model.
+async fn explain_call(State(s): State<Shared>, Query(q): Query<ExplainQuery>) -> Json<Value> {
+    let root = s.root.get();
+    let r =
+        off(move || speccoder_runtime::service::thread::explain(&root, &q.task, q.call.as_deref()))
+            .await;
+    envelope(&s, &r)
+}
+
 /// The model's account of a run, turn by turn: its reasoning and its words
 /// (a claim).
 async fn account(State(s): State<Shared>, Query(q): Query<RunQuery>) -> Json<Value> {
@@ -1329,6 +1362,8 @@ pub fn router(s: Shared) -> Router {
         .route("/api/shape/judge", post(shape_judge))
         .route("/api/bug", get(bug))
         .route("/api/account", get(account))
+        .route("/api/thread", get(thread))
+        .route("/api/approvals/explain", get(explain_call))
         .route("/api/review", get(review))
         .route("/api/review/comments", get(review_comments))
         .route("/api/approvals", get(approvals))

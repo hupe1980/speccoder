@@ -196,6 +196,8 @@ pub struct App {
     pub note: Option<String>,
     /// The approval shows its whole body (`v`).
     pub view_all: bool,
+    /// `?`: the waiting call's facts shown in place of its body.
+    pub explain: bool,
     /// The approval body's or the evidence's first line shown.
     pub scroll: usize,
     /// The last action's outcome, or a hint.
@@ -228,6 +230,7 @@ impl App {
             typing: None,
             note: None,
             view_all: false,
+            explain: false,
             scroll: 0,
             flash: None,
             hosted: None,
@@ -313,6 +316,7 @@ impl App {
         // It takes precedence over help and the diff.
         self.overlay = Overlay::Ask;
         self.view_all = false;
+        self.explain = false;
         self.scroll = 0;
         self.typing = matches!(ask, Ask::Question(_)).then(|| (Typing::Answer, String::new()));
     }
@@ -325,6 +329,7 @@ impl App {
         self.typing = None;
         self.note = None;
         self.view_all = false;
+        self.explain = false;
         self.scroll = 0;
     }
 
@@ -591,6 +596,12 @@ impl App {
                 }
                 Parsed::View => {
                     self.view_all = !self.view_all;
+                    self.explain = false;
+                    self.scroll = 0;
+                    Action::None
+                }
+                Parsed::Explain => {
+                    self.explain = !self.explain;
                     self.scroll = 0;
                     Action::None
                 }

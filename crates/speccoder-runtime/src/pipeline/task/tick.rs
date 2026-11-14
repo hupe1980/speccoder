@@ -553,6 +553,13 @@ pub(super) fn finish(
         } else {
             String::new()
         };
+        // A person's stop names who, as its own trailer (one line).
+        let gate_extra = match reason.strip_prefix("stopped by ") {
+            Some(by) if outcome == "stopped" && !by.contains('\n') => {
+                format!("{gate_extra}Stopped-By: {by}\n")
+            }
+            _ => gate_extra,
+        };
         let record = attempts::Record {
             run,
             outcome: &outcome,

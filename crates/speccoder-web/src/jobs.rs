@@ -130,12 +130,14 @@ impl Hub {
         }
     }
 
-    /// Asks the running job to stop before its next task; a call waiting for
-    /// the person is answered with "stop" (it keeps waiting, resumably).
+    /// Asks the running job to stop: its attempt ends before its next model
+    /// turn or tool call (the call in flight completes), no further task
+    /// starts, and a call waiting for the person is answered with "stop".
     pub fn stop(&self) {
         if let Some(c) = self.cancel.lock().ok().and_then(|c| c.clone()) {
             c.store(true, Ordering::SeqCst);
         }
+        let _ = speccoder_runtime::service::thread::stop(&self.root.get(), "web");
         let who = Who::local_in(&self.root.get(), Via::Web);
         if let Some(w) = self.waiting.lock().ok().and_then(|mut w| w.take()) {
             let _ = w.reply.send(match w.event["type"].as_str() {

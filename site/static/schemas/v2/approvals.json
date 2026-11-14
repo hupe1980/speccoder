@@ -144,6 +144,13 @@
             "null"
           ]
         },
+        "attempt": {
+          "description": "The waiting attempt's own run (its record), when it is suspended.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "batched": {
           "description": "It waits in its run's batch: the asking budget was used.",
           "type": "boolean"

@@ -2732,6 +2732,100 @@ pub fn extension_trust_prompt(e: &speccoder_core::extensions::Extension) -> Vec<
     out
 }
 
+/// An attempt's thread as lines: the model's words indented and quoted
+/// (claims), each call one line, the evidence as rules.
+#[must_use]
+pub fn thread(t: &speccoder_core::thread::Thread) -> Vec<String> {
+    use speccoder_core::thread::{Row, RowKind};
+    fn call(r: &Row) -> String {
+        let mark = match r.outcome.as_deref() {
+            Some("failed") => "✗",
+            Some("refused") => "⊘",
+            Some("waiting") => "…",
+            _ => "✓",
+        };
+        let mut s = format!(
+            "{mark} {} {}",
+            r.verb.as_deref().unwrap_or("Called"),
+            r.object.as_deref().unwrap_or_default()
+        );
+        if let (Some(a), Some(d)) = (r.added, r.removed) {
+            s.push_str(&format!(" +{a} −{d}"));
+        }
+        if r.outcome.as_deref() == Some("waiting") {
+            s.push_str("  waits for you");
+        }
+        if let Some(d) = r.decided.as_deref() {
+            s.push_str("  ");
+            s.push_str(if d == "you" { "you approved" } else { d });
+        }
+        s
+    }
+    let mut out = Vec::new();
+    if t.more > 0 {
+        out.push(format!("  … {} earlier", t.more));
+    }
+    for r in &t.rows {
+        match r.kind {
+            RowKind::Thought => out.push(format!(
+                "  ∴ {}",
+                r.conclusion
+                    .as_deref()
+                    .unwrap_or(&r.text)
+                    .replace('\n', " ")
+            )),
+            RowKind::Words => out.push(format!("  “{}”", r.text.replace('\n', " "))),
+            RowKind::Call | RowKind::Approval => out.push(format!("  {}", call(r))),
+            RowKind::Fold => out.push(format!("  ▸ {}", r.text)),
+            RowKind::Divider => out.push(format!("  ━━ {}", r.text)),
+        }
+    }
+    out
+}
+
+/// A waiting call's facts, as lines: what it is and can reach, why it asks,
+/// where its arguments came from — then the model's words, marked as its.
+#[must_use]
+pub fn explanation(x: &speccoder_core::thread::Explanation) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(p) = &x.program {
+        out.push(match &x.path {
+            Some(path) if path != p => format!("program   {p} ({path})"),
+            _ => format!("program   {p}"),
+        });
+    }
+    if !x.hosts.is_empty() {
+        out.push(format!("reaches   {}", x.hosts.join(", ")));
+    }
+    if !x.outside.is_empty() {
+        out.push(format!("outside   {}", x.outside.join(", ")));
+    }
+    if !x.reach.is_empty() {
+        out.push(format!("sandbox   {}", x.reach));
+    }
+    out.push(format!("asks      because {}", x.rule));
+    for p in &x.provenance {
+        out.push(format!("from      {p}"));
+    }
+    if !x.task.is_empty() {
+        out.push(
+            format!("task      {} {}", x.task, x.title)
+                .trim_end()
+                .to_owned(),
+        );
+    }
+    for s in &x.scenarios {
+        out.push(format!("checks    {s}"));
+    }
+    if let Some(s) = &x.said {
+        out.push(format!("the model said: “{s}” (its claim)"));
+    }
+    if let Some(r) = &x.reasoning {
+        out.push(format!("the model thought: {r} (its claim)"));
+    }
+    out
+}
+
 /// ✓ passed, ✗ blocked, – not run.
 const fn gate_mark(state: speccoder_core::hooks::GateState) -> &'static str {
     match state {

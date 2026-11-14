@@ -6,6 +6,32 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **The thread**: an attempt as one column in the app's inspector — the
+  model's thoughts and words muted as its claims, each call one line with
+  its outcome (*contained*, *you approved*, *refused*) and its output or
+  diff in place, reads folded, the evidence (red → green, held-out, the
+  tick or the stop) the only bold rows. Live while it runs, the same after
+  a reload, with *↓ N new*, the task's other attempts and a nudge box
+  ([the thread](https://hupe1980.github.io/speccoder/docs/running/#the-thread)).
+- **Explain** on a call waiting for you (the approval sheet `e`, Needs
+  You, the thread, `?` at the terminal prompt): the program, what its
+  arguments reach, the rule that asks, where they came from, the model's
+  last words, the task's scenarios — with no model asked. **Ask About This
+  Call** opens Ask with the call attached; Ask never recommends a decision.
+
+### Changed
+
+- **Stop stops the attempt**: the app's Stop and the first Ctrl-C of a
+  line-mode run end the running attempt at its next call (agentplane
+  0.61's stop); it is saved as stopped by you, never failed. A second
+  Ctrl-C quits at once.
+- `speccoder task show T --account` is now `--thread`.
+- A command the sandbox contained is recorded as such in its call's
+  result.
+- agentplane 0.61.0.
+
 ## [0.15.0] - 2026-11-14
 
 ### Added

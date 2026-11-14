@@ -217,6 +217,7 @@
                 {#each i.actions as a, n (key(a))}
                   <button class="btn small" class:primary={n === 0} class:ghost={n > 1} disabled={!!a.blocked || !!app.job?.running} title={`${a.blocked ?? a.why}\n$ ${a.command}`} onclick={() => decide(i, a)}>{verb(i, a)}</button>
                 {/each}
+                {#if i.kind === "approval" && i.task}<button class="btn small ghost" onclick={() => (app.explain = { task: `${i.feature}/${i.task}`, call: "" })} title="What the call is and can reach, which rule asks — facts, no model"><Icon name="info" size={10} weight={2.4} /> Explain</button>{/if}
                 <button class="btn small ghost" onclick={() => open(i)} title="Show it with its evidence"><Icon name="chevron" size={10} weight={2.6} /> Open</button>
               </div>
             </li>
@@ -257,7 +258,7 @@
   .group { display: grid; gap: 0.45rem; }
   .gtitle { font: 650 1.02rem/1.2 var(--display); letter-spacing: -0.01em; }
   .group.blocked_on_you .gtitle { color: var(--attention); }
-  .kind { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.05rem 0.45rem 0.05rem 0.35rem; border-radius: 999px; font-weight: 650; color: var(--fill-c, var(--text-2)); background: color-mix(in srgb, var(--fill-c, var(--muted)) 13%, transparent); }
+  .kind { white-space: nowrap; display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.05rem 0.45rem 0.05rem 0.35rem; border-radius: 999px; font-weight: 650; color: var(--fill-c, var(--text-2)); background: color-mix(in srgb, var(--fill-c, var(--muted)) 13%, transparent); }
   .risks { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.15rem; }
   .risk { padding: 0.05rem 0.5rem; border-radius: 999px; font: 600 0.72rem/1.5 var(--rounded); color: var(--attention); background: var(--attention-bg); }
   .risk.verified { color: var(--verified); background: color-mix(in srgb, var(--verified) 12%, transparent); display: inline-flex; align-items: center; gap: 0.2rem; }
@@ -284,7 +285,7 @@
   .what { display: grid; gap: 0.18rem; min-width: 0; }
   li.yours { grid-template-columns: 1fr; gap: 0.35rem; }
   li.yours .feat { justify-self: start; font-size: 0.74rem; }
-  .where { display: flex; gap: 0.45rem; align-items: center; font-size: 0.74rem; color: var(--muted); }
+  .where { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; font-size: 0.74rem; color: var(--muted); }
   .feat { padding: 0 0.45rem; border-radius: 999px; background: var(--fill); color: var(--text-2); font-weight: 600; }
   .task { color: var(--text-2); }
   .found { margin-top: 0.45rem; }
@@ -300,5 +301,5 @@
   .center { display: grid; place-items: center; padding: 3rem; }
   .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--fill-2); border-top-color: var(--muted); animation: spin 800ms linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  @media (max-width: 640px) { li { grid-template-columns: 1fr; } .acts { justify-content: flex-start; max-width: none; } }
+  @media (max-width: 640px) { li { grid-template-columns: 1fr; } li:has(.pick) { grid-template-columns: auto minmax(0, 1fr); } li:has(.pick) .acts { grid-column: 2; } .acts { justify-content: flex-start; max-width: none; } }
 </style>

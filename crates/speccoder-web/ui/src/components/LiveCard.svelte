@@ -52,15 +52,16 @@
     </header>
     {#if r.agent}<AgentStrip agent={r.agent} />{/if}
     {#if r.last_call}<p class="row"><Icon name="terminal" size={12} /><span class="mono">{r.last_call}</span></p>{/if}
-    {#if r.thinking}<p class="row thought"><span class="therefore" aria-hidden="true">∴</span><span>{r.thinking}</span></p>{/if}
-    {#if r.said}<p class="row said">“{r.said}”</p>{/if}
+    {#if r.thinking || r.said}
+      <button class="row thought link" onclick={show} title="Open the attempt's thread">{#if r.thinking}<span class="therefore" aria-hidden="true">∴</span><span>{r.thinking}</span>{:else}<span class="said">“{r.said}”</span>{/if}<span class="open muted">Thread →</span></button>
+    {/if}
     <p class="row tokens muted">{tokens(r.input_tokens)} in · {tokens(r.output_tokens)} out{#if r.usd != null}{" · "}${r.usd.toFixed(4)}{/if}{#if r.contained}{" · "}<span title="Commands the sandbox confined ran without asking">{r.contained} contained</span>{/if}</p>
     <footer>
       <button class="btn small" onclick={show}><Icon name="grid" size={12} /> Show on Board</button>
       {#if interrupted}
         <button class="btn small tinted" onclick={resume}><Icon name="play" size={11} /> Resume</button>
       {:else}
-        <span class="hint muted small">It holds this project: another run here is refused until it finishes.</span>
+        <span class="hint muted small">It holds this project: another run here is refused until it finishes. To stop it, press Ctrl-C there once.</span>
       {/if}
     </footer>
   </div>
@@ -91,6 +92,9 @@
   .row { margin: 0; display: flex; gap: 0.45rem; align-items: baseline; font-size: 0.8rem; color: var(--text-2); min-width: 0; }
   .row .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .thought { color: color-mix(in srgb, #bf5af2 60%, var(--text-2)); }
+  .link { all: unset; box-sizing: border-box; cursor: pointer; display: flex; gap: 0.45rem; align-items: baseline; font-size: 0.8rem; border-radius: 6px; }
+  .link:focus-visible { outline: 2px solid var(--focus); }
+  .link .open { margin-left: auto; flex: none; font-size: 0.74rem; }
   .therefore { font-weight: 700; }
   .said { font-style: italic; }
   .tokens { font-size: 0.74rem; }

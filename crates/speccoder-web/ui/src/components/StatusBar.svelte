@@ -84,7 +84,7 @@
     {#if sandbox}
       <button class:warn={sandbox.level !== "pass"} onclick={() => (app.view = "settings")} title="The OS sandbox commands run in: {sandbox.detail}"><Icon name={sandbox.level === "pass" ? "lock" : "exclaim"} size={12} />{sandbox.level === "pass" ? sandbox.detail : "no sandbox"}</button>
     {/if}
-    <button class:attn={waiting > 0} onclick={() => (app.view = "inbox")} title="Blocked on you"><Icon name="bell" size={12} />{waiting}</button>
+    <button class="bell" class:attn={waiting > 0} onclick={() => (app.view = "inbox")} title="Blocked on you"><Icon name="bell" size={12} />{waiting}</button>
     <span class="conn" class:off={!app.connected} role="status" title={app.connected ? "Connected to the host" : "Reconnecting to the host…"}><span class="dot"></span>{app.connected ? "" : "Reconnecting"}</span>
   </div>
 </footer>
@@ -98,6 +98,9 @@
   }
   .side { display: flex; align-items: stretch; min-width: 0; overflow: hidden; }
   .right { justify-content: flex-end; }
+  /* A phone: only what calls for you stays on the right; spend, model and
+     sandbox are a click away in Settings and the palette. */
+  @media (max-width: 600px) { .right > :not(.bell):not(.conn):not(.live):not(.warn) { display: none; } }
   button {
     display: inline-flex; align-items: center; gap: 0.32rem; padding: 0 0.55rem; border: 0; background: none; color: inherit; font: inherit;
     white-space: nowrap; cursor: pointer; border-radius: 5px; margin: 2px 0;

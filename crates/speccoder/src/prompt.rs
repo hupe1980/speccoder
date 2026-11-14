@@ -97,7 +97,7 @@ fn looked(text: String) -> String {
 fn footer(p: &Presentation) -> String {
     let keys: Vec<String> = p.options.iter().map(|o| o.key.to_string()).collect();
     format!(
-        "  {} or 1-6 · add a note: \"y <note>\" · v view all · esc later  > ",
+        "  {} or 1-6 · add a note: \"y <note>\" · v view all · ? explain · esc later  > ",
         keys.join(" ")
     )
 }
@@ -162,6 +162,8 @@ pub enum Parsed {
     Later,
     /// Show the whole body.
     View,
+    /// The call's facts, without a model (`?`).
+    Explain,
     /// A choice not offered for this call.
     NotOffered(&'static str),
     /// Not an answer.
@@ -182,6 +184,7 @@ pub fn parse(line: &str, offered: &[String]) -> Parsed {
     match head.to_lowercase().as_str() {
         "esc" | "later" | "l" => Parsed::Later,
         "v" | "view" => Parsed::View,
+        "?" | "explain" => Parsed::Explain,
         "s" | "stop" | "6" => Parsed::Stop,
         "y" | "yes" | "1" => Parsed::Approve {
             scope: Scope::Once,
@@ -258,6 +261,12 @@ pub fn ask_with(input: &mut dyn BufRead, out: &mut dyn Write, p: &Presentation) 
             }
             Parsed::View => {
                 let _ = write!(out, "{}", render_full(p));
+            }
+            Parsed::Explain => {
+                let x = speccoder_runtime::thread::explain_presented(p);
+                for line in crate::human::explanation(&x) {
+                    let _ = writeln!(out, "  {line}");
+                }
             }
             Parsed::NotOffered(why) => {
                 let _ = writeln!(out, "  {why}");

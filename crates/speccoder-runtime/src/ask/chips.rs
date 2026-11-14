@@ -37,6 +37,50 @@ pub struct ChipRef {
     pub from_view: bool,
 }
 
+/// A call that waits for a person: its facts, the way Explain shows them,
+/// and what Ask is for here — to explain, never to decide.
+fn call(root: &Path, task: &str, call: &str) -> Result<(String, String), String> {
+    let state = crate::worktree::state_dir().ok_or("no state directory")?;
+    let x = crate::thread::explain(root, &state, task, Some(call))?;
+    let mut lines = vec![
+        format!("A call waits for the person's decision: {}", x.question),
+        format!("Task {} {}", x.task, x.title),
+    ];
+    if let Some(p) = &x.program {
+        lines.push(format!(
+            "Program: {p}{}",
+            x.path
+                .as_deref()
+                .map(|p| format!(" ({p})"))
+                .unwrap_or_default()
+        ));
+    }
+    if !x.hosts.is_empty() {
+        lines.push(format!("Hosts its arguments name: {}", x.hosts.join(", ")));
+    }
+    if !x.outside.is_empty() {
+        lines.push(format!(
+            "Paths outside the workspace: {}",
+            x.outside.join(", ")
+        ));
+    }
+    lines.push(format!("What it can reach: {}", x.reach));
+    lines.push(format!("Why it asks: {}", x.rule));
+    lines.extend(x.provenance.iter().map(|p| format!("Its arguments: {p}")));
+    lines.extend(
+        x.scenarios
+            .iter()
+            .map(|s| format!("The task is checked by: {s}")),
+    );
+    if let Some(s) = &x.said {
+        lines.push(format!("The model said (a claim): {s}"));
+    }
+    lines.push(
+        "Explain what this call would do and what it could reach, citing what you read. Do not recommend approving or rejecting it and give no confidence score: the decision is the person's.".to_owned(),
+    );
+    Ok((format!("call {}", x.question), lines.join("\n")))
+}
+
 /// `r`'s content and its chip (numbered `id`).
 ///
 /// # Errors
@@ -53,6 +97,15 @@ pub fn resolve(root: &Path, id: &str, r: &ChipRef) -> Result<(Chip, String), Str
                 .ok_or("a task chip names its task")?,
         )?,
         "file_range" => file(root, &r.reference)?,
+        "call" => call(
+            root,
+            r.reference["task"]
+                .as_str()
+                .ok_or("a call chip names its task")?,
+            r.reference["call"]
+                .as_str()
+                .ok_or("a call chip names its call")?,
+        )?,
         _ => {
             let text = r
                 .text

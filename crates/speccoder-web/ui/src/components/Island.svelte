@@ -96,8 +96,12 @@
           {#if app.task}<span class="task">{app.task.title}</span>{/if}
         </div>
         {#if app.agent}<AgentStrip agent={app.agent} dark filter={only} onfilter={(f) => (only = f)} onfix={askFirst} />{/if}
-        {#if app.thinking}<p class="thinking" class:live={app.job?.running} title="Where the model's reasoning landed — its account, not evidence"><span class="therefore" aria-hidden="true">∴</span> {app.thinking}</p>{/if}
-        {#if app.said}<p class="now" title="What the model says it is doing — its account, not evidence">“{app.said}”</p>{/if}
+        {#if app.thinking || app.said}
+          <button class="thread-link" onclick={() => app.task && app.selectTask(app.task.id)} title="Open the attempt's thread: its words, every call, and the evidence">
+            {#if app.thinking}<span class="thinking" class:live={app.job?.running}><span class="therefore" aria-hidden="true">∴</span> {app.thinking}</span>{:else}<span class="now">“{app.said}”</span>{/if}
+            <span class="open">Thread →</span>
+          </button>
+        {/if}
         <ol class="pipeline" aria-label="Pipeline">
           {#each stages as s}
             {@const v = at.get(s)}
@@ -116,7 +120,7 @@
         <div class="foot">
           {#if app.usage.in || app.usage.out}<span class="usage mono">{app.usage.in.toLocaleString()} in · {app.usage.out.toLocaleString()} out{#if app.usage.usd != null}{" · "}${app.usage.usd.toFixed(4)}{/if}</span>{/if}
           {#if running}
-            <button class="btn small danger" onclick={() => app.stop()} title="Stops before the next task; the attempt stays resumable"><Icon name="stop" size={10} />Stop</button>
+            <button class="btn small danger" onclick={() => app.stop()} title="Stops the attempt at its next call — the call in flight completes — and starts no further task"><Icon name="stop" size={10} />Stop</button>
           {:else}
             {#if nextAgent}<button class="btn small" onclick={tryWith} title="speccoder run --task {failedRun?.task} --agent {nextAgent.id}">Try with {nextAgent.name}</button>{/if}
             <button class="btn small" onclick={() => { dismissed = app.job?.id ?? null; open = false; }}>Dismiss</button>
@@ -130,7 +134,11 @@
 <style>
   .now { margin: 0; font-size: 0.8rem; line-height: 1.4; font-style: italic; color: rgba(235, 235, 245, 0.7); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .log .thought { font-family: var(--text-font, -apple-system, system-ui, sans-serif); color: #d0a8ff; white-space: normal; }
-  .thinking { margin: 0.1rem 0 0.35rem; font-size: 0.8rem; line-height: 1.4; color: rgba(235, 235, 245, 0.72); }
+  .thread-link { all: unset; box-sizing: border-box; cursor: pointer; display: flex; gap: 0.5rem; align-items: baseline; width: 100%; margin: 0.1rem 0 0.35rem; border-radius: 8px; }
+  .thread-link:focus-visible { outline: 2px solid #4aa3ff; }
+  .thread-link .open { margin-left: auto; flex: none; font-size: 0.74rem; color: rgba(235, 235, 245, 0.55); }
+  .thread-link:hover .open { color: #fff; }
+  .thinking { display: block; font-size: 0.8rem; line-height: 1.4; color: rgba(235, 235, 245, 0.72); }
   .thinking .therefore { color: #d0a8ff; font-weight: 700; }
   /* While the model works, its reasoning line breathes in the colours the
      running card wears. */

@@ -73,7 +73,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 
 | Command | What it does |
 |---|---|
-| `speccoder run [--task T] [--max-tasks N] [--cap 2M] [--parallel N] [--converge] [--no-prompt] [--ignore-checklists]` | Work through the ready tasks, or one; resumes where it stopped ([running](@/docs/running.md)) |
+| `speccoder run [--task T] [--max-tasks N] [--cap 2M] [--parallel N] [--converge] [--no-prompt] [--ignore-checklists]` | Work through the ready tasks, or one; resumes where it stopped ([running](@/docs/running.md)). Ctrl-C once stops at the next call, twice quits ([stopping](@/docs/running.md#stopping-a-run)) |
 | `speccoder run --agent copilot` | This run's attempts by that [agent](@/docs/integrations.md#external-agents) (`native`: speccoder's own); `speccoder.toml` is unchanged |
 | `speccoder run --task T --fresh-acceptance` | Set the task's held attempt aside and write its acceptance tests anew |
 | `speccoder run --allow-failing-baseline` | Attempt although a check cannot run on the untouched code (`CHECK-BROKEN`) |
@@ -96,7 +96,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder task acceptance-at T --story US [--revoke]` | Write the story's oracle before this Setup or Foundational task ([plan checks](@/docs/planning.md#plan-checks)) |
 | `speccoder story accept SCENARIO --reason R` | Accept a scenario its test author called untestable: the story's last task no longer waits for it; your reason is committed on the feature's branch ([what judges each task](@/docs/evidence.md#what-judges-each-task)) |
 | `speccoder story check US` | Write the story's oracle when it has none, run it once on the feature's branch, and say which scenarios the code holds ([what judges each task](@/docs/evidence.md#what-judges-each-task)) |
-| `speccoder task show T [--account]` | The task's state and evidence; `--account` adds what the model said in its last attempt (a claim) |
+| `speccoder task show T [--thread]` | The task's state and evidence; `--thread` adds its last attempt's [thread](@/docs/running.md#the-thread): the model's words, each call, the evidence |
 
 ## Review
 

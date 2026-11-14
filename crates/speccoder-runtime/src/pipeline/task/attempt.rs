@@ -530,8 +530,30 @@ pub(super) fn run(
                         substrate::exhausted(limit)
                     } else if let agentplane::prelude::RunStatus::Quarantined(why) = &outcome.status
                     {
-                        output["status"] = serde_json::json!("quarantined");
-                        why.clone()
+                        // A person's stop that could not be unwound (the step
+                        // changed the worktree, which speccoder saves and
+                        // undoes itself): stopped, by that person (AP-43).
+                        match rt.block_on(substrate::stopped_by(
+                            &s.plane_dir,
+                            &outcome.run_id.to_string(),
+                        )) {
+                            Some(by) => {
+                                output["status"] = serde_json::json!("stopped");
+                                output["stopped_by"] = serde_json::json!(by);
+                                format!("stopped by {by}")
+                            }
+                            None => {
+                                output["status"] = serde_json::json!("quarantined");
+                                why.clone()
+                            }
+                        }
+                    } else if let agentplane::prelude::RunStatus::Cancelled { actor, .. } =
+                        &outcome.status
+                    {
+                        // A person stopped it (spec 124): stopped, never failed.
+                        output["status"] = serde_json::json!("stopped");
+                        output["stopped_by"] = serde_json::json!(actor.actor());
+                        format!("stopped by {}", actor.actor())
                     } else {
                         substrate::why_not(&outcome.status)
                     };
@@ -709,6 +731,8 @@ pub(super) fn run(
                 "interrupted".to_owned()
             } else if output["status"] == "budget_exhausted" {
                 "budget_exhausted".to_owned()
+            } else if output["status"] == "stopped" {
+                "stopped".to_owned()
             } else {
                 "failed".to_owned()
             };
@@ -1268,7 +1292,8 @@ pub(super) fn run(
             attempt_no += 1;
         };
         report.earlier = earlier;
-        if run_config.best_of <= 1 {
+        // A stop ends the attempt: no further sample is drawn.
+        if run_config.best_of <= 1 || attempt_status == "stopped" {
             break (report, attempt_status);
         }
         let end = match worktree::checkpoint(wt_root, tmp) {

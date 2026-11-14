@@ -16,6 +16,7 @@ mod follow;
 mod github;
 mod help;
 mod human;
+mod interrupt;
 mod markdown;
 mod new;
 mod output;
@@ -1194,7 +1195,10 @@ fn main() {
                     interactive(*no_prompt).then(|| std::sync::Arc::new(prompt::Terminal) as _);
                 // Live progress on stderr, unless stdout must stay one JSON object.
                 let (progress, attention) = live_progress(&cli, &notify, events.as_ref());
-                let result = job.run(approver, progress, None);
+                // Ctrl-C once stops the attempt at its next call; twice quits.
+                let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                interrupt::two_step(path, std::sync::Arc::clone(&cancel));
+                let result = job.run(approver, progress, Some(cancel));
                 if let Some(a) = &attention {
                     a.finish(&result);
                 }
@@ -3083,49 +3087,27 @@ fn task_action(
         },
         T::Restore { task } => speccoder_runtime::controls::restore(path, feature, task),
         T::Drop { task } => speccoder_runtime::controls::drop_set_aside(path, feature, task),
-        T::Show { task, account } => {
+        T::Show { task, thread } => {
             let shown = speccoder_runtime::status::show(path, feature, task);
-            if !*account {
+            if !*thread {
                 return shown;
             }
-            // The attempt the tick came from, else the last one tried.
-            let run = match shown.data() {
-                Some(speccoder_core::CommandData::Report(r)) => r.tasks.first().and_then(|t| {
-                    t.run_id
-                        .clone()
-                        .or_else(|| t.last_attempt.as_ref().and_then(|a| a.run_id.clone()))
-                }),
-                _ => None,
+            let unit = match shown.data() {
+                Some(speccoder_core::CommandData::Report(r)) => r.feature.clone(),
+                _ => return shown,
             };
-            let account = match run
-                .as_deref()
-                .map(|r| speccoder_runtime::evidence::account_of(path, r))
+            let lines = match speccoder_runtime::service::thread::of(path, &unit, task, None, true)
+                .data()
             {
-                Some(Ok(turns)) if !turns.is_empty() => turns
-                    .iter()
-                    .map(|t| {
-                        let block = |label: &str, text: &str| {
-                            format!("    {label:<9} {}", text.replace('\n', "\n              "))
-                        };
-                        let mut lines = vec![format!("  turn {}", t.turn)];
-                        lines.extend(t.reasoning.as_deref().map(|r| block("thinking", r)));
-                        lines.extend(t.said.as_deref().map(|w| block("says", &format!("“{w}”"))));
-                        lines.extend(
-                            t.answer
-                                .as_deref()
-                                .map(|a| block("answers", &format!("“{a}”"))),
-                        );
-                        lines.join("\n")
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-                Some(Ok(_)) => "  (it neither reasoned aloud nor said anything)".to_owned(),
-                Some(Err(e)) => format!("  (the journal cannot be read: {e})"),
-                None => "  (no attempt has run)".to_owned(),
+                Some(speccoder_core::CommandData::Thread(t)) if !t.rows.is_empty() => {
+                    human::thread(t).join("\n")
+                }
+                Some(speccoder_core::CommandData::Thread(_)) => "  (no attempt has run)".to_owned(),
+                _ => "  (the attempt's record cannot be read)".to_owned(),
             };
             let status = shown.status();
             let message = format!(
-                "{}\nThe model's account — its reasoning and its words; a claim, not evidence:\n{account}",
+                "{}\nIts last attempt — the model's words are claims, the ━━ rows evidence:\n{lines}",
                 shown.message()
             );
             shown.reworded(status, &message)

@@ -37,6 +37,7 @@ pub mod stage;
 pub mod step;
 pub mod story;
 pub mod strength;
+pub mod thread;
 pub mod tour;
 pub mod verify;
 pub mod verify_branch;

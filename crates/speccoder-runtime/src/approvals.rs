@@ -1211,6 +1211,7 @@ fn waiting_on(
                         object: request.object.as_ref().map(object_view),
                         sources: present::source_lines(&request),
                         run: request.run.clone(),
+                        attempt: Some(t.run.to_string()),
                         batched: request.batched,
                         tool: request.tool.clone(),
                         arguments: request.arguments.clone(),

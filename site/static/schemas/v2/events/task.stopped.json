@@ -41,6 +41,13 @@
         "null"
       ]
     },
+    "stopped_by": {
+      "description": "Who stopped it, when a person did (`outcome` is `stopped`).",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "summary": {
       "description": "One sentence, ready for a chat message.",
       "type": "string"

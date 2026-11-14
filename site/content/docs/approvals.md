@@ -33,7 +33,7 @@ In a foreground run at a terminal (the [dashboard](@/docs/running.md#the-dashboa
   3. Yes, for this run: this file, any content, in any task             (r)
   5. No, and tell the model why …                                       (n)
   6. Stop this task here (it waits; decide later)                       (s)
-  y t r n s or 1-6 · add a note: "y <note>" · v view all · esc later  >
+  y t r n s or 1-6 · add a note: "y <note>" · v view all · ? explain · esc later  >
 ```
 
 **Object** is exactly what the decision covers ([below](#what-a-decision-covers)); a command shows its argv hash (`#1a2b3c4d5e6f`), an MCP tool its definition's digest (`@9f8e7d6c5b4a`). If a name you approved earlier now reaches something else, a `changed since approved:` line says what. `v` shows everything; the model's text is printed with control characters escaped.
@@ -46,6 +46,7 @@ In a foreground run at a terminal (the [dashboard](@/docs/running.md#the-dashboa
 | `a` | **Always Allow**: runs the command once and adds exactly its argv to `[commands] allow` (`[sandbox] network_allow` for a network call). Only for a command that is not high risk without the network |
 | `n` | Rejects; the reason is required and the model is told it (`n no new dependencies`) |
 | `s` | Stops the task: the attempt waits for `task approve` or `task reject` |
+| `?` | **Explain**: the facts of the call, no model asked — the program and its path, the hosts and outside paths its arguments name, the rule that asks, where its arguments came from — then the same prompt |
 | `esc` | Decides later: the call keeps waiting; the dashboard footer offers it again (`enter`) |
 
 A note after the key (`y use the 0.1 series`) reaches the model with the call's result; the attempt continues in the same turn. The dashboard overlay takes the same keys (`tab` adds a note), the [web interface](@/docs/web.md#when-a-run-needs-you) shows them as a sheet, and an editor gets ACP permission options (Always Allow is `allow_always`). Always Allow writes `speccoder.toml`; commit it to put it in force.

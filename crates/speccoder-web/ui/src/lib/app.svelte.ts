@@ -106,7 +106,7 @@ class AppState {
   loading = $state(true);
 
   job = $state<{ id: number; command: string; running: boolean; result: Reply | null } | null>(null);
-  task = $state<{ id: string; title: string } | null>(null);
+  task = $state<{ id: string; title: string; feature?: string } | null>(null);
   stages = $state<StageView[]>([]);
   calls = $state<string[]>([]);
   /** What the model said last, its first line: a claim. */
@@ -133,6 +133,10 @@ class AppState {
   }
   /** Where the model's latest reasoning summary landed, its last line: a claim. */
   thinking = $state<string | null>(null);
+  /** Counts the running attempt's turns, calls and stages: a thread refetches on it. */
+  pulse = $state(0);
+  /** A waiting call to explain: its task (feature/task) and call id. */
+  explain = $state<{ task: string; call: string } | null>(null);
   usage = $state<{ in: number; out: number; usd: number | null }>({ in: 0, out: 0, usd: null });
   /** Writing a requirement's tests at review: the stage it is in. */
   oracleStage = $state<{ requirement: string; stage: string; n: number; of: number } | null>(null);
@@ -612,9 +616,10 @@ class AppState {
 
   #progress(ev: any) {
     if (String(ev.event).startsWith("ask_")) return ask.event(ev);
+    if (["said", "reasoning", "tool_call", "stage", "approval_requested", "approval_decided", "task_finished", "task_ticked", "task_stopped"].includes(ev.event)) this.pulse++;
     switch (ev.event) {
       case "task_started":
-        this.task = { id: ev.task, title: ev.title };
+        this.task = { id: ev.task, title: ev.title, feature: ev.feature };
         this.stages = [];
         this.agent = null;
         break;

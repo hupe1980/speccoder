@@ -1055,7 +1055,16 @@ fn ask(f: &mut Frame<'_>, app: &App, area: Rect) {
             Span::raw(a(&format!("   risk {}", crate::prompt::risk_bar(&r.risk)))),
         ]),
     ];
-    let body = if app.view_all { &p.full } else { &p.body };
+    // `?`: the call's facts instead of its body, no model asked.
+    let explained;
+    let body = if app.explain {
+        explained = crate::human::explanation(&speccoder_runtime::thread::explain_presented(p));
+        &explained
+    } else if app.view_all {
+        &p.full
+    } else {
+        &p.body
+    };
     // Room for the body: the box less the fixed lines around it.
     let fixed = 9
         + p.options.len()
@@ -1126,7 +1135,7 @@ fn ask(f: &mut Frame<'_>, app: &App, area: Rect) {
     let keys: Vec<String> = p.options.iter().map(|o| o.key.to_string()).collect();
     lines.push(Line::styled(
         a(&format!(
-            "  {} or 1-6 · tab note · v view all · esc later",
+            "  {} or 1-6 · tab note · v view all · ? explain · esc later",
             keys.join(" ")
         )),
         st(Token::Muted),

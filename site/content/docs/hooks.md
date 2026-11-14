@@ -103,7 +103,7 @@ An [extension](@/docs/extensions.md#gates-and-observers) brings hooks of its own
 An observer hears two events:
 
 - `task.ticked`: a tick commit on a feature's branch;
-- `task.stopped`: an attempt saved without a tick.
+- `task.stopped`: an attempt saved without a tick; `stopped_by` names the person when someone stopped it.
 
 Each is a [CloudEvents 1.0](https://cloudevents.io) event. Its `id` (`tick:<commit>`, `attempt:<commit>`) is the same every time it is sent, so a receiver can drop a repeat. Its `data` carries ids, counts and `summary`, one sentence ready for a chat message:
 

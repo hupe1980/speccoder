@@ -74,6 +74,7 @@ pub mod skills;
 pub mod status;
 pub mod strength;
 pub mod substrate;
+pub mod thread;
 pub mod tools;
 pub mod tour;
 pub mod user_config;

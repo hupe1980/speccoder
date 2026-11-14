@@ -16,7 +16,7 @@ speccoder journals every model call and tool call before it acts on the result, 
 
 | Killed | Next run |
 |---|---|
-| During an attempt (Ctrl-C, a crash, a closed laptop) | **Resumes the attempt** from the journal: finished model and tool calls are read back, not repeated, and the worktree is kept as the attempt left it |
+| During an attempt (Ctrl-C twice, a crash, a closed laptop) | **Resumes the attempt** from the journal: finished model and tool calls are read back, not repeated, and the worktree is kept as the attempt left it |
 | While a tool call was running | Whether that call finished is unknown, so it is not run again: the attempt is saved under its ref and undone, the run stops (`interrupted`), and the next run starts a fresh attempt |
 | After the attempt finished, before the tick | Reads the finished attempt back, judges it and ticks it, without calling the model |
 
@@ -41,7 +41,7 @@ A failed or stopped attempt is saved under `refs/speccoder/attempts/<feature>/<t
 
 A journal this build cannot read (another format, or damage) is moved aside as `journal.<time>.unreadable.redb` and a fresh one started; progress lives in git, so only replay of older runs is lost.
 
-- **While a run writes the journal**, `status`, `report --approvals`, `inbox`, `task show --account` and the app read it at once; a second writer is refused at once.
+- **While a run writes the journal**, `status`, `report --approvals`, `inbox`, `task show --thread` and the app read it at once; a second writer is refused at once.
 - **A run killed before it closed the journal** (Ctrl-C, a closed terminal) leaves it for the next writer — the next run, or any decision — to repair. Until then the listings say `unknown — the last run ended without closing its journal`.
 - Waiting calls that cannot be read show as `unknown`, never as none; a run that cannot read them does not start.
 

@@ -9,8 +9,8 @@
   import { phaseLabel, symbol, word } from "../lib/marks";
   import { judgedWords } from "../lib/story";
   import { KINDS, key, offer, ofTask, stopOf, stopOffers } from "../lib/actions";
-  import type { AccountTurn, Row, Task } from "../lib/types";
-  import Account from "./Account.svelte";
+  import type { Line, Task } from "../lib/types";
+  import Thread from "./Thread.svelte";
   import Diff from "./Diff.svelte";
   import Drift from "./Drift.svelte";
   import Code from "./Code.svelte";
@@ -20,7 +20,7 @@
   import PromoteOffer from "./PromoteOffer.svelte";
 
   let tab = $state<"evidence" | "tour" | "diff">("evidence");
-  let data = $state<{ task: Task; banner: { mark: string; words: string }; rows: Row[] } | null>(null);
+  let data = $state<{ task: Task; banner: { mark: string; words: string }; rows: Line[] } | null>(null);
   // Rows whose whole list is open (the commands that ran without asking).
   let opened = $state(new Set<string>());
   let patch = $state("");
@@ -89,34 +89,8 @@
   });
   // The report's, which compares the tick with the spec now.
   const drift = $derived(app.report?.data?.tasks.find((t) => t.id === app.selected)?.drift ?? null);
-  // The attempt whose narration the journal holds: the tick's, else the last.
-  const run = $derived(data?.task.run_id ?? data?.task.last_attempt?.run_id ?? null);
-  let account = $state<AccountTurn[] | null>(null);
-  let accountOf = $state<string | null>(null);
-  let accountError = $state<string | null>(null);
-  async function loadAccount() {
-    if (!run || accountOf === run) return;
-    accountOf = run;
-    account = null;
-    accountError = null;
-    const r = await get<{ turns?: AccountTurn[]; error?: string }>(`/api/account${q({ run })}`).catch((e) => ({ turns: undefined, error: String(e) }));
-    accountError = r.error ?? null;
-    // An error is said as one, never shown as a model that said nothing;
-    // closing and reopening the section asks again.
-    if (accountError) accountOf = null;
-    account = r.turns ?? [];
-  }
-  // Open unless the person closed it once (a per-viewer preference).
-  const read = () => { try { return localStorage.getItem("speccoder-account") !== "closed"; } catch { return true; } };
-  let accountOpen = $state(read());
-  function toggled(e: Event) {
-    accountOpen = (e.currentTarget as HTMLDetailsElement).open;
-    try { localStorage.setItem("speccoder-account", accountOpen ? "open" : "closed"); } catch { /* storage off */ }
-    if (accountOpen) void loadAccount();
-  }
-  $effect(() => {
-    if (accountOpen && run) void loadAccount();
-  });
+  // The thread follows the task while this page's job runs it.
+  const live = $derived(!!app.job?.running && app.task?.id === app.selected && (app.task?.feature ?? app.feature) === app.feature);
   const icons: Record<string, string> = { run: "play", accept: "check", skip: "skip", nudge: "sparkle", approve: "check", reject: "xmark" };
 </script>
 
@@ -204,16 +178,8 @@
       {#if source?.label === "Last Attempt"}<p class="note"><Icon name="info" size={13} /> The attempt did not pass; its code is kept for you to read, never merged.</p>{/if}
       <Diff {patch} loading={loadingPatch} />
     {/if}
-    {#if run}
-      <details class="account" open={accountOpen} ontoggle={toggled}>
-        <summary><Icon name="sparkle" size={12} weight={2.2} /> The Model's Account <span class="muted">— its reasoning and its words; a claim, not evidence</span></summary>
-        {#if accountError}<p class="muted small">The journal could not be read: {accountError}</p>
-        {:else if account === null}<p class="muted small">Reading the journal…</p>
-        {:else if !account.length}<p class="muted small">The model neither reasoned aloud nor said anything in this attempt.</p>
-        {:else}
-          <Account turns={account} />
-        {/if}
-      </details>
+    {#if app.selected && app.feature}
+      {#key `${app.feature}/${app.selected}`}<Thread feature={app.feature} task={app.selected} {live} />{/key}
     {/if}
     {#if actions.length}
       <div class="acts">
@@ -282,9 +248,6 @@
   .more { border: 0; background: none; color: var(--accent-ink); font-size: 0.76rem; cursor: pointer; padding: 0.1rem 0.2rem; }
   .note { display: flex; align-items: center; gap: 0.35rem; margin: -0.25rem 0.25rem 0; font-size: 0.78rem; color: var(--muted); }
   .note code { font-size: 0.95em; }
-  .account { border-radius: var(--radius); background: var(--surface); padding: 0.6rem 0.85rem; }
-  .account summary { cursor: pointer; font-weight: 600; font-size: 0.88rem; display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
-  .account summary .muted { font-weight: 500; font-size: 0.78rem; }
   .small { font-size: 0.82rem; margin: 0.4rem 0 0; }
   .acts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   .loading { display: grid; place-items: center; padding: 3rem; }

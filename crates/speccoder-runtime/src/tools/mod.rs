@@ -751,6 +751,10 @@ impl WorkspaceTools {
             }
         }
         let secs = a.timeout_secs.unwrap_or(120).clamp(1, MAX_COMMAND_SECS);
+        let contained = self.policy.contains(
+            "run_command",
+            &json!({ "argv": a.argv, "network": a.network }),
+        );
         let env = self.command_env(a.call_id.as_deref());
         let inv = Invocation {
             argv: a.argv,
@@ -792,6 +796,11 @@ impl WorkspaceTools {
         });
         if !drift.is_empty() {
             result["integrity"] = json!(drift);
+        }
+        // Ran without asking because the sandbox confines it: said on the
+        // record, so the attempt's thread can say so afterwards.
+        if contained {
+            result["contained"] = json!(true);
         }
         // Why a command failed is often the sandbox: say what it refused.
         if let Some(sandbox) = sandbox_json(&outcome.sandbox) {

@@ -35,6 +35,7 @@ schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 unicode-width.workspace = true
+tokio.workspace = true
 
 # The desktop window (`speccoder ui --window`): on Linux behind the `app`
 # feature (it needs WebKitGTK installed); on macOS and Windows always, on

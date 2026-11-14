@@ -146,6 +146,7 @@ pub fn stopped(git: &Git, reference: &str, commit: &str) -> Option<TaskStopped> 
         attempt_ref: reference.to_owned(),
         gates: gates(&m),
         run: trailer(&m, "Run").map(str::to_owned),
+        stopped_by: trailer(&m, "Stopped-By").map(str::to_owned),
         summary: String::new(),
     };
     s.summary = stopped_summary(&s);

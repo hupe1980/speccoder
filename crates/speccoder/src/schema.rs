@@ -105,6 +105,10 @@ const fn describe(payload: &str) -> &'static str {
         b"issues" => "issue: the repository's open GitHub issues",
         b"inbox" => "inbox: every decision waiting for a person, across features",
         b"hooks" => "hooks: every hook, its trust and its recent runs",
+        b"thread" => {
+            "thread: an attempt as one thread — the model's words, its calls, the evidence"
+        }
+        b"explanation" => "explanation: a waiting call's facts, without a model",
         b"extensions" => {
             "extensions: every extension, what it contributes and can reach, and its trust"
         }
@@ -204,6 +208,8 @@ published! {
     "inbox", "InboxReport" => core::InboxReport,
     "hooks", "HooksReport" => core::hooks::HooksReport,
     "extensions", "ExtensionsReport" => core::extensions::ExtensionsReport,
+    "thread", "Thread" => core::thread::Thread,
+    "explanation", "Explanation" => core::thread::Explanation,
     "extension_views", "ViewsReport" => core::extensions::ViewsReport,
     "shape", "ShapeReport" => core::ShapeReport,
     "ask", "AskReport" => core::ask::AskReport,
