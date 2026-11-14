@@ -1458,3 +1458,36 @@ fn the_flags_of_spec_promote_and_explore_parse() {
         );
     }
 }
+
+#[test]
+fn projects_lists_the_recent_ones_and_forgets_only_the_entry() {
+    let state = tempfile::tempdir().unwrap();
+    let out = speccoder()
+        .env("SPECCODER_STATE_DIR", state.path())
+        .args(["--json", "projects"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["payload"], "projects");
+    assert_eq!(v["data"]["projects"], serde_json::json!([]));
+    speccoder()
+        .env("SPECCODER_STATE_DIR", state.path())
+        .args(["projects", "forget", "nowhere"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn ui_opens_only_at_a_place_it_knows() {
+    let out = speccoder()
+        .args(["ui", "--no-open", "--at", "board:../x"])
+        .assert()
+        .failure()
+        .get_output()
+        .clone();
+    let err =
+        String::from_utf8_lossy(&out.stderr).to_string() + &String::from_utf8_lossy(&out.stdout);
+    assert!(err.contains("--at board:../x"), "{err}");
+}

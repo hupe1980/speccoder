@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
+  import ProjectSwitch from "./ProjectSwitch.svelte";
   const features = $derived(app.project?.features?.features ?? []);
   const unit = $derived(app.project?.unit ?? "feature");
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -9,6 +10,7 @@
 </script>
 
 <aside class="glass" aria-label="{cap(unit)}s">
+  {#if app.project}<ProjectSwitch />{/if}
   <h2 class="section-title">
     <span>{cap(unit)}s <span class="count">{features.length}</span></span>
     <button class="add" aria-label="New {unit}" title="New {unit}" onclick={() => (app.newFeature = {})}>+</button>

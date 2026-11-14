@@ -45,6 +45,14 @@ A project without `speccoder.toml` opens in the **setup assistant**: what was fo
 - Each row decides in place; **Open** shows it with its evidence (a bug's row opens the [Bug sheet](#bug-sheet)). A disabled button says why on hover.
 - The sidebar and Dock badges count only *Blocked on you*; a desktop notification comes when something new lands there. **Quick Change** (`q`) opens a sheet for a [quick change](@/docs/running.md#quick-changes). The terminal's equivalent is `speccoder inbox`.
 
+### Projects
+
+<figure class="shot"><img class="shot-light" src="../../screenshots/projects-light.webp" alt="Projects: what waits across three projects, each with Decide in, and every project by where it stands" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/projects-dark.webp" alt="Projects: what waits across three projects, each with Decide in, and every project by where it stands" width="1440" height="900" loading="lazy" decoding="async"></figure>
+
+The project's name at the top of the sidebar opens the **switcher**: your projects with what waits in each (`?` when it could not be read), **All Projects…** (⇧⌘P) and **Open Project…**. **All Projects** groups them by where they stand and merges their Needs You into one list. **Decide in ‹project› ▸** opens that project in its own window or tab, with its own key, at the item; only names, counts and speccoder's own titles cross between projects. Needs You names the other projects where something waits (*Also waiting: api 2*). The terminal's equivalent is `speccoder projects`.
+
+A task that stopped because of another project offers **Report to…**: pick the project, say in one line what should happen instead, and the bug is recorded there with this stop as its symptom — one commit of its spec files, nothing run. **Edit There First** opens its bug sheet instead. A project that is running a task is not written to.
+
 ### Overview
 
 <figure class="shot"><img class="shot-light" src="../../screenshots/overview-light.webp" alt="Overview: every feature with its progress and next step" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/overview-dark.webp" alt="Overview: every feature with its progress and next step" width="1440" height="900" loading="lazy" decoding="async"></figure>

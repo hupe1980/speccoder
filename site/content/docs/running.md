@@ -78,6 +78,8 @@ speccoder task drop T005      # discard them
 
 ## The thread
 
+<figure class="shot"><img class="shot-light" src="../../screenshots/thread-light.webp" alt="The thread of an attempt: the model's thought and words muted, reads folded, an edit with its diff, a command you approved, and the tick as the bold row" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/thread-dark.webp" alt="The thread of an attempt: the model's thought and words muted, reads folded, an edit with its diff, a command you approved, and the tick as the bold row" width="1440" height="900" loading="lazy" decoding="async"></figure>
+
 Each turn, the model's summary of its reasoning and its words beside its calls are shown muted: in the terminal as `∴ …` and quoted text (in full with `-v`; `model thinks:` / `model says:` in screen-reader mode), the latest of each in the dashboard and `report --live`, as the agent's thoughts and message in an editor. The attempt's **thread** puts them in order with its calls and its evidence — in the [app](@/docs/web.md#board)'s inspector, and with `speccoder task show T005 --thread`:
 
 ```text

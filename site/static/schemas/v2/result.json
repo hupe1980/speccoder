@@ -2664,6 +2664,10 @@
           "$ref": "#/$defs/Explanation"
         },
         {
+          "description": "`projects`: the recent projects and what waits across them.",
+          "$ref": "#/$defs/ProjectsReport"
+        },
+        {
           "description": "`extensions`: every extension, what it contributes and its trust.",
           "$ref": "#/$defs/ExtensionsReport"
         },
@@ -12463,6 +12467,251 @@
         "question",
         "reach",
         "rule"
+      ]
+    },
+    "ProjectsReport": {
+      "description": "`speccoder projects`: the recent projects and what waits across them.",
+      "type": "object",
+      "properties": {
+        "projects": {
+          "description": "The projects, by state, then the most recently used.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProjectSummary"
+          }
+        },
+        "items": {
+          "description": "Every project's Needs You, merged: blocked first, the oldest first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ItemAcross"
+          }
+        }
+      },
+      "required": [
+        "projects",
+        "items"
+      ]
+    },
+    "ProjectSummary": {
+      "description": "One recent project, rolled up.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its folder.",
+          "type": "string"
+        },
+        "shown": {
+          "description": "Its folder, `~`-abbreviated.",
+          "type": "string"
+        },
+        "state": {
+          "description": "Where it stands.",
+          "$ref": "#/$defs/ProjectState"
+        },
+        "current": {
+          "description": "The page asking is this project's.",
+          "type": "boolean",
+          "default": false
+        },
+        "feature": {
+          "description": "Its current feature.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "live": {
+          "description": "A run going on.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LiveTask"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "waiting": {
+          "description": "Decisions waiting for the person; absent when not all could be read.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "unknown": {
+          "description": "Why something could not be read.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "spend": {
+          "description": "What its current feature has cost so far.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "elsewhere": {
+          "description": "Open in another speccoder now.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Elsewhere"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "shown",
+        "state",
+        "current"
+      ]
+    },
+    "ProjectState": {
+      "description": "Where a project stands, in the order the view shows them.",
+      "oneOf": [
+        {
+          "description": "A decision of the person's holds work up.",
+          "type": "string",
+          "const": "blocked_on_you"
+        },
+        {
+          "description": "A run is going on.",
+          "type": "string",
+          "const": "working"
+        },
+        {
+          "description": "What waits could not be read: it may need the person.",
+          "type": "string",
+          "const": "cant_tell"
+        },
+        {
+          "description": "Work is done and waits to be looked at.",
+          "type": "string",
+          "const": "ready_to_review"
+        },
+        {
+          "description": "Nothing waits, nothing runs.",
+          "type": "string",
+          "const": "idle"
+        },
+        {
+          "description": "Its folder is gone, or no longer a project: only Forget.",
+          "type": "string",
+          "const": "missing"
+        }
+      ]
+    },
+    "LiveTask": {
+      "description": "A run going on in a project.",
+      "type": "object",
+      "properties": {
+        "task": {
+          "description": "Its task.",
+          "type": "string"
+        },
+        "stage": {
+          "description": "The stage it is in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "task"
+      ]
+    },
+    "Elsewhere": {
+      "description": "Another speccoder serving the project now (never its key).",
+      "type": "object",
+      "properties": {
+        "pid": {
+          "description": "Its process.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "since": {
+          "description": "Unix seconds it started.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "pid",
+        "since"
+      ]
+    },
+    "ItemAcross": {
+      "description": "A Needs You item of some project: speccoder's own title and kind,\nnever its detail (which may quote model text or command output).",
+      "type": "object",
+      "properties": {
+        "project": {
+          "description": "The project's name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The project's folder.",
+          "type": "string"
+        },
+        "feature": {
+          "description": "The feature.",
+          "type": "string"
+        },
+        "task": {
+          "description": "The task, when the item is a task's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "The item's kind (`approval`, `question`, …).",
+          "type": "string"
+        },
+        "group": {
+          "description": "`blocked_on_you` or `ready_to_review`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "speccoder's title of it.",
+          "type": "string"
+        },
+        "since": {
+          "description": "Unix seconds it has waited since.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "project",
+        "path",
+        "feature",
+        "kind",
+        "group",
+        "title"
       ]
     },
     "ExtensionsReport": {

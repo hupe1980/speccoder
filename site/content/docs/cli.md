@@ -102,6 +102,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 
 | Command | What it does |
 |---|---|
+| `speccoder projects [forget NAME]` | Your projects by where they stand, with what waits in each (`?` when it could not be read, never 0); `forget` drops one from the list and touches nothing (payload `projects`) |
 | `speccoder inbox` | What waits, in every feature (or `--feature`): *Blocked on you* (oldest first), *Ready to review* (riskiest first, with its reasons), *Working*, *Idle*; each item with its command |
 | `speccoder ask "QUESTION" [--task T]… [--file PATH[:A-B]]… [--continue [ID]] [--list]` | [Ask](@/docs/web.md#ask) about the project: a read-only answer with numbered sources speccoder checked against what was read; a suggested change is printed with its command; at a terminal, `Record this quick change and run it? [y/N]` records it on a yes (never with `--json` or piped input). `--continue` goes on even after Ctrl-C or a long pause, carrying the earlier turns (payload `ask`) |
 | `speccoder report` | Every task and the evidence behind its tick, the requirement trace, and what is open |
@@ -109,7 +110,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder report --approvals` | Calls waiting for a person, and the decisions made |
 | `speccoder report --cost` | Tokens per task, what attempts not kept cost, and money when `[model]` has prices |
 | `speccoder report --markdown` | The report as Markdown, for pull requests and CI summaries |
-| `speccoder ui [--port N] [--no-open] [--window]` | The [web interface](@/docs/web.md) on 127.0.0.1 |
+| `speccoder ui [--port N] [--no-open] [--window] [--at inbox:F/T] [--bug-from TEXT]` | The [web interface](@/docs/web.md) on 127.0.0.1; `--at` opens it at a Needs You item, `--bug-from` with its bug sheet filled ([Projects](@/docs/web.md#projects) uses both) |
 | `speccoder pr [--remote R] [--base B] [--yes] [--dry-run] [--force]` | Push the branch and open a [draft pull request](@/docs/github.md#its-pull-request); `--force` despite failed full-tier checks |
 
 ## Advanced

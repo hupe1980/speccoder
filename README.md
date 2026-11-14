@@ -85,6 +85,7 @@ A run at the terminal (`--plain`; at a terminal it is a live dashboard):
 Then, as you need them:
 
 - 👀 **Watch and decide.** At a terminal, `run` is a live dashboard that asks approvals with one key; [the app](#-the-app) shows the same work. The model's reasoning and words appear beside its calls — its account, never evidence.
+- 🗂️ **Several projects.** **Projects** (or `speccoder projects`) shows what waits in every project; **Decide in ‹project›** opens it in its own window at the item; a stop caused by another project is reported there as a bug in one step.
 - ⚙️ **Automate.** Every command takes `--json` or `--events`, both with [published schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output); every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) and the command that fixes it.
 - 🐙 **Work from GitHub.** `speccoder auth login` once; `speccoder issue start 42` specifies a feature from an issue, `speccoder pr` opens a draft whose description is the evidence. No `gh` needed.
 - 💬 **Ask, explore.** `speccoder ask "why is T004 blocked?"` (⌘L in the app) answers from what it read, each source checked against the reads, and changes nothing; `speccoder spec explore "…"` weighs approaches before there is a spec and starts one from the brief you chose.
@@ -102,6 +103,10 @@ Then, as you need them:
   <tr>
     <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="site/static/screenshots/board-dark.webp"><img alt="The board: the journey from spec to review, the next step, and tasks by verdict" src="site/static/screenshots/board-light.webp"></picture><br><b>Board</b> — the journey, the next step, and every task by verdict.</td>
     <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="site/static/screenshots/report-dark.webp"><img alt="The report: verdicts, the waiting call and every requirement with the task that proves it" src="site/static/screenshots/report-light.webp"></picture><br><b>Report</b> — every requirement with the task that proves it.</td>
+  </tr>
+  <tr>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="site/static/screenshots/thread-dark.webp"><img alt="The thread of an attempt: the model's words muted, each call one line, the tick as the bold row" src="site/static/screenshots/thread-light.webp"></picture><br><b>The thread</b> — what the attempt did, claims muted, evidence bold.</td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="site/static/screenshots/projects-dark.webp"><img alt="Projects: what waits across three projects, each one click away" src="site/static/screenshots/projects-light.webp"></picture><br><b>Projects</b> — what waits in every project, decided in its own window.</td>
   </tr>
 </table>
 

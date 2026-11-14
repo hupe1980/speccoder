@@ -2835,6 +2835,84 @@ const fn gate_mark(state: speccoder_core::hooks::GateState) -> &'static str {
     }
 }
 
+/// `speccoder projects`: each project under its state, with what waits.
+#[must_use]
+pub fn projects(r: &speccoder_core::projects::ProjectsReport) -> Vec<String> {
+    use speccoder_core::projects::ProjectState as S;
+    let word = |s: S| match s {
+        S::BlockedOnYou => "Blocked on you",
+        S::Working => "Working",
+        S::CantTell => "Can't tell — may need you",
+        S::ReadyToReview => "Ready to review",
+        S::Idle => "Idle",
+        S::Missing => "Gone",
+    };
+    let mut out = Vec::new();
+    if r.projects.is_empty() {
+        out.push("No projects yet: open one with `speccoder ui` in its folder.".to_owned());
+        return out;
+    }
+    let mut last = None;
+    for p in &r.projects {
+        if last != Some(p.state) {
+            out.push(word(p.state).to_owned());
+            last = Some(p.state);
+        }
+        let mut line = format!(
+            "  {}{}  {}",
+            p.name,
+            if p.current { " (here)" } else { "" },
+            p.shown
+        );
+        match (p.waiting, &p.unknown) {
+            _ if p.state == S::Missing => line.push_str(&format!(
+                "  {} — `speccoder projects forget {}`",
+                p.unknown.as_deref().unwrap_or("gone"),
+                p.name
+            )),
+            (Some(n), _) if n > 0 => line.push_str(&format!("  {n} waiting")),
+            (None, Some(why)) => line.push_str(&format!("  ? waiting — {why}")),
+            _ => {}
+        }
+        if let Some(l) = &p.live {
+            line.push_str(&format!(
+                "  {}{}",
+                l.task,
+                l.stage
+                    .as_ref()
+                    .map(|s| format!(" · {s}"))
+                    .unwrap_or_default()
+            ));
+        }
+        if let Some(e) = &p.elsewhere {
+            line.push_str(&format!("  open in process {}", e.pid));
+        }
+        out.push(line);
+    }
+    let blocked: Vec<_> = r
+        .items
+        .iter()
+        .filter(|i| i.group == "blocked_on_you")
+        .collect();
+    if !blocked.is_empty() {
+        out.push(String::new());
+        out.push("Waiting for you".to_owned());
+        for i in blocked {
+            out.push(format!(
+                "  {} · {}{} · {}",
+                i.project,
+                i.feature,
+                i.task
+                    .as_ref()
+                    .map(|t| format!(" · {t}"))
+                    .unwrap_or_default(),
+                i.title
+            ));
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

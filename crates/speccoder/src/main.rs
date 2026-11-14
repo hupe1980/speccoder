@@ -554,6 +554,68 @@ fn archive(
     )
 }
 
+/// `speccoder projects`: the recent projects rolled up; `forget` one.
+fn projects(
+    path: &std::path::Path,
+    action: Option<&cli::ProjectsAction>,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandResult, CommandStatus};
+    let Some(state) = speccoder_runtime::worktree::state_dir() else {
+        return no_state("projects");
+    };
+    match action {
+        None => speccoder_runtime::service::projects::list(&state, Some(path)),
+        Some(cli::ProjectsAction::Forget { project }) => {
+            match speccoder_runtime::service::projects::forget(&state, project) {
+                Ok(name) => CommandResult::new(
+                    "projects",
+                    CommandStatus::Ok,
+                    &format!("{name} is no longer listed; nothing of it was touched"),
+                ),
+                Err(e) => CommandResult::new("projects", CommandStatus::NotFound, &e),
+            }
+        }
+    }
+}
+
+/// `?view=…&bug=…` for the page's address, from `--at` and `--bug-from`.
+fn page_query(at: Option<&str>, bug: Option<&str>) -> Result<String, String> {
+    let mut q = Vec::new();
+    if let Some(a) = at {
+        let place = speccoder_core::projects::Place::parse(a).ok_or_else(|| {
+            format!("--at {a}: give `inbox`, `inbox:FEATURE` or `inbox:FEATURE/TASK`")
+        })?;
+        q.push(place.query());
+    }
+    if let Some(b) = bug {
+        let text: String = b
+            .chars()
+            .take(speccoder_runtime::projects::MAX_REPORT)
+            .collect();
+        let mut enc = String::new();
+        for byte in text.bytes() {
+            if byte.is_ascii_alphanumeric() || b"-_.~".contains(&byte) {
+                enc.push(char::from(byte));
+            } else {
+                enc.push_str(&format!("%{byte:02X}"));
+            }
+        }
+        q.push(format!("bug={enc}"));
+    }
+    Ok(q.join("&"))
+}
+
+/// The page's address with `query` before the key's fragment.
+fn at_place(url: &str, query: &str) -> String {
+    if query.is_empty() {
+        return url.to_owned();
+    }
+    match url.split_once('#') {
+        Some((base, frag)) => format!("{base}?{query}#{frag}"),
+        None => format!("{url}?{query}"),
+    }
+}
+
 /// `speccoder ui`: serves the web interface on 127.0.0.1 until interrupted.
 /// The address carries the token in its fragment, which no server sees.
 fn ui(
@@ -562,9 +624,15 @@ fn ui(
     no_open: bool,
     window: bool,
     json: bool,
+    at: Option<&str>,
+    bug: Option<&str>,
 ) -> speccoder_core::CommandResult {
     use speccoder_core::{CommandData, CommandResult, CommandStatus, UiReport};
     let root = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let query = match page_query(at, bug) {
+        Ok(q) => q,
+        Err(e) => return CommandResult::new("ui", CommandStatus::UsageError, &e),
+    };
     if window && !cfg!(window) {
         return CommandResult::new(
             "ui",
@@ -579,7 +647,7 @@ fn ui(
         let served_root = root.clone();
         std::thread::spawn(move || {
             let _ = speccoder_web::serve(&served_root, port, true, |s| {
-                let _ = tx.send((s.url, s.events, s.root));
+                let _ = tx.send((at_place(&s.url, &query), s.events, s.root));
             });
         });
         return match rx.recv() {
@@ -615,7 +683,7 @@ fn ui(
             "  (127.0.0.1 only; the address holds this session's key — do not share it; ctrl-c stops)"
         );
         if !no_open {
-            open_in_browser(&s.url);
+            open_in_browser(&at_place(&s.url, &query));
         }
     });
     if announced.load(std::sync::atomic::Ordering::SeqCst) && served.is_ok() {
@@ -1100,6 +1168,7 @@ fn main() {
     }
     let result = match command {
         Command::Hooks { action } => hooks(path, action.as_ref(), machine),
+        Command::Projects { action } => projects(path, action.as_ref()),
         Command::Extensions { action } => extensions(path, action.as_ref(), machine),
         Command::Help { topic } => {
             help::print(topic);
@@ -1270,7 +1339,17 @@ fn main() {
             port,
             no_open,
             window,
-        } => ui(path, *port, *no_open, *window, cli.json),
+            at,
+            bug_from,
+        } => ui(
+            path,
+            *port,
+            *no_open,
+            *window,
+            cli.json,
+            at.as_deref(),
+            bug_from.as_deref(),
+        ),
         Command::Config { action } => config(
             path,
             action.as_ref(),
@@ -2600,6 +2679,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Suggest { .. } => "suggest",
             C::Doctor { .. } => "doctor",
             C::Hooks { .. } => "hooks",
+            C::Projects { .. } => "projects",
             C::Extensions { .. } => "extensions",
             C::Fix { .. } => "fix",
             C::Spec { .. } => "spec",

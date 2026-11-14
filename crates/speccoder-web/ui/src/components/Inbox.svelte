@@ -10,36 +10,10 @@
   import Code from "./Code.svelte";
   import Findings from "./Findings.svelte";
   import Icon from "./Icon.svelte";
+  import { KINDS as kinds } from "../lib/kinds";
+  import ReportTo from "./ReportTo.svelte";
   import StopCard from "./StopCard.svelte";
 
-  const kinds: Record<string, { title: string; icon: string; tone: string; why: string }> = {
-    unknown: { title: "Could Not Be Read", icon: "exclaim", tone: "needs_approval", why: "Another speccoder holds the journal — calls may be waiting for you that cannot be listed now." },
-    approval: { title: "Waiting for Approval", icon: "hand", tone: "needs_approval", why: "A run is paused until you decide." },
-    bug_confirm: { title: "Confirm a Bug's Reproduction", icon: "exclaim", tone: "needs_approval", why: "It fails on the untouched code by an assertion — does it show the bug? Nothing is fixed before you say so." },
-    bug_cannot_reproduce: { title: "Could Not Reproduce", icon: "xoctagon", tone: "failed", why: "No test of every expected behaviour failed on an assertion; nothing was fixed. Bring a test, reword, or try again." },
-    bug_unchanged_not_holding: { title: "Unchanged Does Not Hold", icon: "exclaim", tone: "failed", why: "A statement of what must keep working is not true today." },
-    bug_repro_weak: { title: "Reproduction Too Weak", icon: "shield", tone: "needs_approval", why: "A fix that only recognises the reproduction's input passes it." },
-    bug_already_satisfied: { title: "Already Fixed", icon: "check", tone: "verified", why: "Every reproduction passes: keep one as a regression test, or drop it." },
-    approval_batch: { title: "Calls Waiting Together", icon: "hand", tone: "needs_approval", why: "The run used its approval budget: further calls wait here, decided together — each once." },
-    ruling: { title: "Rule on the Tests", icon: "shield", tone: "needs_approval", why: "The tests reject an alternative the spec may allow." },
-    gaming: { title: "Suspected Shortcuts", icon: "exclaim", tone: "failed", why: "The monitor saw what looks like gaming the tests." },
-    unverified: { title: "Little Was Verified", icon: "loop", tone: "regression_only", why: "Most ticks rest on the regression checks alone — why, by reason, and what changes it." },
-    stale: { title: "The Spec Changed", icon: "exclaim", tone: "needs_approval", why: "Evidence proves an earlier wording." },
-    ambiguous: { title: "Read Two Ways", icon: "exclaim", tone: "needs_approval", why: "Two test authors read a requirement differently — say which reading is meant, or reword it. Approve and Run waits." },
-    question: { title: "Open Questions", icon: "exclaim", tone: "needs_approval", why: "The spec leaves these undecided — answer before it is built on." },
-    review: { title: "Review the Spec", icon: "doc", tone: "ready", why: "The result will be judged against these words." },
-    revise: { title: "Change Requests", icon: "sparkle", tone: "needs_approval", why: "Revise the spec as you asked, then review it again." },
-    yours: { title: "Yours to Do", icon: "hand", tone: "needs_approval", why: "A step only you can take — do it, give the agent a hint, or skip it." },
-    autopilot_denied: { title: "Refused on Autopilot", icon: "shield", tone: "ready", why: "Calls the autopilot run would have asked you about were refused, not asked: look at each, and allow one when you run again." },
-    gate_blocked: { title: "Blocked by a Gate", icon: "shield", tone: "failed", why: "Your gate did not let the tick through — its own words say why. Fix that, then run again." },
-    hook_untrusted: { title: "Gates to Trust", icon: "shield", tone: "needs_approval", why: "A gate runs only after you trusted exactly what it runs; until then it blocks every tick." },
-    extension_untrusted: { title: "Extensions to Trust", icon: "shield", tone: "needs_approval", why: "Nothing of an extension runs before you trusted one digest over every file it holds." },
-    stuck: { title: "Did Not Pass", icon: "xoctagon", tone: "failed", why: "Decide: run again, leave a note, skip or accept." },
-    aside: { title: "Changes Set Aside", icon: "tray", tone: "needs_approval", why: "Found in the worktree when a run started — keep them on the branch, or let them go." },
-    commit: { title: "Plans to Commit", icon: "doc", tone: "ready", why: "A run reads committed files only." },
-    promote: { title: "Worth a Spec", icon: "sparkle", tone: "ready", why: "Measured, not guessed: it touched more than one requirement's worth. Start a spec from it — its tick is inherited, not verified — or not now." },
-    handoff: { title: "Ready to Hand Off", icon: "arrowup", tone: "verified", why: "Every task is done — review the branch." },
-  };
   // A kind the page does not know is shown under its own name, never dropped.
   const kindOf = (i: InboxItem) => kinds[i.kind] ?? { title: i.kind.replace(/_/g, " "), icon: "info", tone: "needs_approval", why: "" };
   const groupWhy: Record<string, string> = {
@@ -137,6 +111,11 @@
     app.view = i.kind === "handoff" || i.kind === "stale" || i.kind === "unverified" ? "report" : "board";
     if (i.task) void app.selectTask(i.task);
   }
+  // Other projects where something waits (or may): the projects' roll-up.
+  $effect(() => {
+    if (!app.projects) void app.loadProjects();
+  });
+  const elsewhere = $derived((app.projects?.projects ?? []).filter((p) => !p.current && (p.state === "blocked_on_you" || p.state === "cant_tell" || (p.waiting ?? 0) > 0)));
 </script>
 
 <section class="inbox" aria-labelledby="inbox-title">
@@ -147,6 +126,13 @@
         {#if blocked}<strong class="lead">{blocked} blocked on you</strong>{:else}Nothing is blocked on you{/if}{#if ready}{" · "}{ready} ready to review{/if}{#if working.length}{" · "}{working.length} working{/if}
       {:else}Every decision the agents wait on lands here.{/if}
     </p>
+    {#if elsewhere.length}
+      <!-- Other projects with something for you: one quiet line, one click. -->
+      <p class="elsewhere">
+        <span class="muted">Also waiting:</span>
+        {#each elsewhere as p (p.path)}<button class="chip" onclick={() => (app.view = "projects")} title={p.waiting == null ? `${p.name}: ${p.unknown ?? "could not be read"}` : `${p.waiting} waiting in ${p.name}`}>{p.name} <strong>{p.waiting ?? "?"}</strong></button>{/each}
+      </p>
+    {/if}
   </header>
 
   {#if working.length}
@@ -218,6 +204,7 @@
                   <button class="btn small" class:primary={n === 0} class:ghost={n > 1} disabled={!!a.blocked || !!app.job?.running} title={`${a.blocked ?? a.why}\n$ ${a.command}`} onclick={() => decide(i, a)}>{verb(i, a)}</button>
                 {/each}
                 {#if i.kind === "approval" && i.task}<button class="btn small ghost" onclick={() => (app.explain = { task: `${i.feature}/${i.task}`, call: "" })} title="What the call is and can reach, which rule asks — facts, no model"><Icon name="info" size={10} weight={2.4} /> Explain</button>{/if}
+                {#if i.kind === "stuck" && i.task && i.feature}<ReportTo feature={i.feature} task={i.task} />{/if}
                 <button class="btn small ghost" onclick={() => open(i)} title="Show it with its evidence"><Icon name="chevron" size={10} weight={2.6} /> Open</button>
               </div>
             </li>
@@ -250,6 +237,12 @@
 </section>
 
 <style>
+  .elsewhere { margin: 0.5rem 0 0; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; font-size: 0.8rem; }
+  .elsewhere .muted { color: var(--muted); }
+  .elsewhere .chip { border: 0; border-radius: 999px; padding: 0.12rem 0.55rem; background: color-mix(in srgb, var(--attention) 13%, transparent); color: var(--text); font: inherit; font-size: 0.78rem; cursor: pointer; }
+  .elsewhere .chip strong { color: var(--attention); margin-left: 0.15rem; }
+  .elsewhere .chip:hover { background: color-mix(in srgb, var(--attention) 22%, transparent); }
+  .elsewhere .chip:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus); }
   .inbox { max-width: 920px; margin: 0 auto; display: grid; gap: 1.4rem; }
   .titlebar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
   h1 { margin: 0; font: 700 1.9rem/1.15 var(--display); letter-spacing: -0.022em; }

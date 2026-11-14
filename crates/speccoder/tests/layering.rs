@@ -678,6 +678,14 @@ const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
     ),
     ("forget", "removes a recent project from speccoder's list"),
     (
+        "open_project",
+        "starts another recent project's own host (its own process and key): no write here",
+    ),
+    (
+        "report_to_project",
+        "runs the other project's own `speccoder bug --no-run` in its own process, which performs it there; nothing is written here",
+    ),
+    (
         "first_feature",
         "marks the new project's idea as offered once (speccoder's state)",
     ),
@@ -754,7 +762,8 @@ fn every_web_route_that_writes_goes_through_the_dispatcher() {
     // The routes are registered in lib.rs; a handler may live in a module
     // beside it (`welcome.rs`).
     let lib = std::fs::read_to_string(web.join("lib.rs")).unwrap()
-        + &std::fs::read_to_string(web.join("welcome.rs")).unwrap_or_default();
+        + &std::fs::read_to_string(web.join("welcome.rs")).unwrap_or_default()
+        + &std::fs::read_to_string(web.join("projects.rs")).unwrap_or_default();
     let errors: Vec<String> = writes(&lib)
         .into_iter()
         .filter(|(h, perform)| !perform && !WRITES_WITHOUT_A_KIND.iter().any(|(x, _)| x == h))
@@ -1006,25 +1015,37 @@ fn ui_label_scan_finds_a_planted_match() {
 #[test]
 fn needs_you_has_a_place_for_every_kind_the_inbox_lists() {
     let page = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../speccoder-web/ui/src/components/Inbox.svelte"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../speccoder-web/ui/src/lib/kinds.ts"),
     )
     .unwrap();
     let sections = page
-        .split("const kinds")
+        .split("export const KINDS")
         .nth(1)
-        .and_then(|s| s.split("\n  };").next())
+        .and_then(|s| s.split("\n};").next())
         .unwrap();
     let missing: Vec<&str> = speccoder_runtime::inbox::KINDS
         .iter()
-        .filter(|k| !sections.contains(&format!("\n    {k}: {{")))
+        .filter(|k| !sections.contains(&format!("\n  {k}: {{")))
         .copied()
         .collect();
     assert!(
         missing.is_empty(),
-        "Inbox.svelte has no label for {missing:?} (they show under their raw name until it does)"
+        "kinds.ts has no label for {missing:?} (they show under their raw name until it does)"
     );
-    assert!(page.contains("kinds[i.kind] ??"), "no fallback label");
+    // A kind it has no label for is shown under its own name, never dropped.
+    let inbox = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../speccoder-web/ui/src/components/Inbox.svelte"),
+    )
+    .unwrap();
+    assert!(
+        inbox.contains("kinds[i.kind] ??"),
+        "Inbox: no fallback label"
+    );
+    assert!(
+        page.contains("KINDS[kind]?.title ??"),
+        "kinds.ts: no fallback label"
+    );
 }
 
 /// The allow lists an approval would widen: only the runtime's action arms

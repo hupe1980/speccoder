@@ -365,7 +365,15 @@ fn call_row(
 
 /// An edit as a few `-`/`+` lines (at most 20).
 fn mini_diff(old: &str, new: &str) -> String {
-    let lines: Vec<String> = crate::approvals::present::diff(old, new);
+    // An edit's text need not end its last line: a line is a line either way.
+    let line = |t: &str| {
+        if t.is_empty() || t.ends_with('\n') {
+            t.to_owned()
+        } else {
+            format!("{t}\n")
+        }
+    };
+    let lines: Vec<String> = crate::approvals::present::diff(&line(old), &line(new));
     let n = lines.len();
     let mut out: Vec<String> = lines.into_iter().take(20).collect();
     if n > 20 {

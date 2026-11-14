@@ -197,6 +197,8 @@ pub enum CommandData {
     Thread(Box<crate::thread::Thread>),
     /// A waiting call's facts, without a model.
     Explanation(Box<crate::thread::Explanation>),
+    /// `projects`: the recent projects and what waits across them.
+    Projects(Box<crate::projects::ProjectsReport>),
     /// `extensions`: every extension, what it contributes and its trust.
     Extensions(Box<crate::extensions::ExtensionsReport>),
     /// The views an extension places on a feature or the project.
@@ -1087,6 +1089,7 @@ impl CommandData {
             Self::Hooks(_) => "hooks",
             Self::Thread(_) => "thread",
             Self::Explanation(_) => "explanation",
+            Self::Projects(_) => "projects",
             Self::Extensions(_) => "extensions",
             Self::ExtensionViews(_) => "extension_views",
             Self::Shape(_) => "shape",
@@ -1149,6 +1152,7 @@ pub const PAYLOADS: &[&str] = &[
     "extension_views",
     "thread",
     "explanation",
+    "projects",
     "shape",
     "ask",
     "ask_conversations",

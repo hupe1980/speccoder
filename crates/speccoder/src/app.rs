@@ -216,6 +216,7 @@ const COMMANDS: &[&str] = &[
     "view.sidebar",
     "view.statusbar",
     "view.actions",
+    "view.projects",
     "view.ask",
     "view.askNew",
     "edit.addToAsk",
@@ -371,6 +372,7 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
                 Some("Alt+CmdOrCtrl+B"),
             )?,
             &item("view.actions", "Actions…", Some("CmdOrCtrl+K"))?,
+            &item("view.projects", "All Projects", Some("Shift+CmdOrCtrl+P"))?,
             &item("view.ask", "Ask", Some("CmdOrCtrl+L"))?,
             &item(
                 "view.askNew",

@@ -4,7 +4,7 @@
 import { get, post, q, listen } from "./api";
 import { KINDS, kindOf, offer, type Offer } from "./actions";
 import { copyBlock, labelOf, render, shown, type Wrong } from "./steps";
-import type { Action, AgentCard, LiveAgent, Reply, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy, PlanningChainReport, PlanStepResult, Through, WelcomeView, How, Step, View } from "./types";
+import type { Action, AgentCard, LiveAgent, Reply, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy, PlanningChainReport, PlanStepResult, Through, WelcomeView, How, Step, View, ProjectsReport } from "./types";
 import { ask } from "./ask.svelte";
 
 export interface StageView {
@@ -28,6 +28,8 @@ export interface Toast {
   detail?: string;
   /** What went wrong, as a block to copy (an error's Copy button). */
   copy?: string;
+  /** One next step, as a button ("Open api"). */
+  action?: { label: string; run: () => void };
 }
 
 /** The person's own command, or a line for their shell, waiting in its
@@ -152,7 +154,9 @@ class AppState {
   codeCited = $state<{ path: string; from: number; to: number; changed: boolean | null } | null>(null);
   input = $state<{ action: Action | Offer } | null>(null);
   palette = $state(false);
-  view = $state<"inbox" | "overview" | "board" | "code" | "documents" | "report" | "settings" | "setup">("inbox");
+  view = $state<"inbox" | "overview" | "board" | "code" | "documents" | "report" | "settings" | "setup" | "projects">("inbox");
+  /** Every recent project rolled up (spec 097); `null` until read. */
+  projects = $state<ProjectsReport | null>(null);
   /** The Settings section a step opens (`speccoder hooks` → hooks). */
   settingsSection = $state<string | null>(null);
 
@@ -489,6 +493,46 @@ class AppState {
     await post("/api/stop", {});
   }
 
+  #projectsLoading: Promise<void> | null = null;
+  /** Reads every recent project's roll-up; callers at once share one read. */
+  loadProjects(): Promise<void> {
+    this.#projectsLoading ??= get<Reply<ProjectsReport>>("/api/projects")
+      .then((r) => {
+        if (r.data) this.projects = r.data;
+      })
+      .catch(() => {
+        /* the host is away: the connection dot says so */
+      })
+      .finally(() => (this.#projectsLoading = null));
+    return this.#projectsLoading;
+  }
+
+  /** Opens a recent project in its own host (its own window or tab), at a place. */
+  async openProject(path: string, name: string, at?: string) {
+    const r = await post<{ ok: boolean; error?: string; opened?: { outcome: string; pid?: number } }>("/api/projects/open", { path, at });
+    this.#opened(r, name);
+  }
+
+  /** Reports `task`'s stop here to another project: with `expected`, the
+   *  bug is recorded there now (its own command; nothing runs); without,
+   *  its bug sheet opens there with the stop to edit first. */
+  async reportTo(path: string, name: string, feature: string, task: string, expected?: string): Promise<boolean> {
+    const r = await post<{ ok: boolean; error?: string; recorded?: string; opened?: { outcome: string; pid?: number } }>("/api/projects/report", { path, feature, task, expected });
+    if (expected !== undefined) {
+      if (r.ok) this.toast({ tone: "ok", text: `Reported to ${name} — it waits there to be reproduced`, detail: r.recorded, action: { label: `Open ${name}`, run: () => void this.openProject(path, name, "inbox") } });
+      else this.toast({ tone: "warn", text: r.error ?? `${name} could not record it` });
+      return r.ok;
+    }
+    this.#opened(r, name, `${name} opens with its bug sheet filled from this stop`);
+    return r.ok;
+  }
+
+  #opened(r: { ok: boolean; error?: string; opened?: { outcome: string; pid?: number } }, name: string, started = `Opening ${name} in its own ${this.project?.window ? "window" : "tab"}`) {
+    if (!r.ok) this.toast({ tone: "warn", text: r.error ?? `${name} could not be opened` });
+    else if (r.opened?.outcome === "elsewhere") this.toast({ tone: "warn", text: `${name} is open in another speccoder (process ${r.opened.pid}) — decide there` });
+    else this.toast({ tone: "ok", text: started });
+  }
+
   #onEvent(e: any) {
     if (this.#early && (e.type === "output" || e.type === "done")) {
       this.#early.push(e);
@@ -735,7 +779,15 @@ class AppState {
   #restore() {
     const s = new URLSearchParams(location.search);
     const view = s.get("view");
-    if (view === "inbox" || view === "overview" || view === "board" || view === "code" || view === "documents" || view === "report" || view === "settings" || view === "setup") this.view = view;
+    if (view === "inbox" || view === "overview" || view === "board" || view === "code" || view === "documents" || view === "report" || view === "settings" || view === "setup" || view === "projects") this.view = view;
+    // A stop another project reported here: its draft, once.
+    const bug = s.get("bug");
+    if (bug) {
+      this.bugSheet = { symptom: bug.slice(0, 2000) };
+      s.delete("bug");
+      const rest = s.toString();
+      history.replaceState(null, "", location.pathname + (rest ? `?${rest}` : ""));
+    }
     this.feature = s.get("feature") ?? this.feature;
     this.selected = s.get("task");
     this.codeFile = s.get("file");

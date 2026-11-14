@@ -30,6 +30,8 @@ const PROJECTLESS: &[&str] = &[
     "/api/welcome",
     "/api/open",
     "/api/recent/forget",
+    "/api/projects",
+    "/api/projects/open",
     "/api/folders",
     "/api/new/plan",
     "/api/github/repos",

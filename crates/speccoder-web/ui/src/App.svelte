@@ -26,6 +26,7 @@
   import Setup from "./components/Setup.svelte";
   import ConfirmSheet from "./components/ConfirmSheet.svelte";
   import ExplainSheet from "./components/ExplainSheet.svelte";
+  import Projects from "./components/Projects.svelte";
   import RemedyCard from "./components/RemedyCard.svelte";
   import Composer from "./components/Composer.svelte";
   import NewFeature from "./components/NewFeature.svelte";
@@ -122,6 +123,7 @@
       case "view.sidebar": app.sidebar = !app.sidebar; return;
       case "view.statusbar": app.statusbar = !app.statusbar; return;
       case "view.actions": app.palette = true; return;
+      case "view.projects": app.view = "projects"; return;
       case "view.ask": return ask.toggle(!ask.open || !document.activeElement?.closest(".ask"));
       case "view.askNew": ask.fresh(); return ask.toggle(true);
       case "file.explore": app.explore = {}; return;
@@ -252,7 +254,7 @@
   });
 </script>
 
-<svelte:window onkeydown={keydown} />
+<svelte:window onkeydown={keydown} onfocus={() => app.projects && void app.loadProjects()} />
 
 <div class="shell" class:nosidebar={!app.sidebar || !!app.welcome} class:nostatus={!app.statusbar || !!app.welcome} class:asking={ask.open && !app.welcome} style="--ask-w:{ask.width}px">
   <header class="toolbar glass">
@@ -308,7 +310,7 @@
       <Welcome />
     {:else}
       {#if app.project?.sample}<SamplePlayback sample={app.project.sample} />{/if}
-      {#if app.view === "setup" || needsSetup}<Setup />{:else if app.view === "inbox"}<Inbox />{:else if app.view === "overview"}<Overview />{:else if app.view === "settings"}<Settings />{:else if app.view === "code" && !report}<CodeView />{:else}<Hero compact={app.view !== "board"} />{/if}
+      {#if app.view === "setup" || needsSetup}<Setup />{:else if app.view === "inbox"}<Inbox />{:else if app.view === "projects"}<Projects />{:else if app.view === "overview"}<Overview />{:else if app.view === "settings"}<Settings />{:else if app.view === "code" && !report}<CodeView />{:else}<Hero compact={app.view !== "board"} />{/if}
       {#if report && !needsSetup && app.view !== "setup" && app.view !== "overview" && app.view !== "inbox" && app.view !== "settings"}
         {#if app.view === "board"}<Board />{/if}
         {#if app.view === "code"}<CodeView />{/if}
@@ -423,7 +425,7 @@
      names stay as tooltips and accessible names), then the appearance
      switch and the project's name go. Nothing overflows or overlaps. */
   @media (max-width: 1440px) { .search { width: auto; } .search span { display: none; } }
-  @media (max-width: 1180px) {
+  @media (max-width: 1280px) {
     .segmented button { padding: 0 0.8rem; }
     .segmented .label { display: none; }
     .search kbd { display: none; }

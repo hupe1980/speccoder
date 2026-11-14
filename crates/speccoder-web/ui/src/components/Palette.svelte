@@ -19,6 +19,7 @@
     ["theme.auto", "appearance: automatic", "follow the system"],
     ["view.sidebar", "toggle the sidebar"],
     ["view.statusbar", "toggle the status bar"],
+    ["view.projects", "all projects", "every project and what waits in it; one click to each"],
     ["view.ask", "open Ask", "a read-only conversation about the project (⌘L)"],
     ["view.askNew", "new Ask conversation", "a fresh conversation; the earlier ones stay in the list (⌥⌘N in Ask)"],
     ["edit.addToAsk", "add the selected task to Ask", "as context for the next question (⌘⇧L)"],

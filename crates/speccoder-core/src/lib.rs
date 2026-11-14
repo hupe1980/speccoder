@@ -26,6 +26,7 @@ pub mod new_project;
 pub mod next;
 pub mod oracle;
 pub mod predicate;
+pub mod projects;
 pub mod regression;
 pub mod retry;
 pub mod scope;

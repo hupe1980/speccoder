@@ -6,6 +6,7 @@
 
 pub mod fixes;
 pub mod jobs;
+mod projects;
 pub mod security;
 mod welcome;
 
@@ -38,6 +39,8 @@ pub struct Root(Arc<RootCell>);
 struct RootCell {
     start: PathBuf,
     bound: std::sync::OnceLock<PathBuf>,
+    /// The port it serves on, once it listens.
+    port: std::sync::OnceLock<u16>,
 }
 
 impl Root {
@@ -47,6 +50,7 @@ impl Root {
         let cell = RootCell {
             start: start.to_path_buf(),
             bound: std::sync::OnceLock::new(),
+            port: std::sync::OnceLock::new(),
         };
         if bound {
             let _ = cell.bound.set(start.to_path_buf());
@@ -88,7 +92,50 @@ impl Root {
                 self.get().display(),
                 project.display()
             )
-        })
+        })?;
+        self.announce();
+        Ok(())
+    }
+
+    /// Says, for the view across projects, that this process serves its
+    /// project now (process, port, start — never the key).
+    fn announce(&self) {
+        if let (Some(root), Some(port), Some(state)) = (
+            self.bound(),
+            self.0.port.get(),
+            speccoder_runtime::service::worktree::state_dir(),
+        ) {
+            speccoder_runtime::service::projects::present(&state, &root, *port);
+        }
+    }
+
+    /// The host listens on `port`. A project it was started in is one of
+    /// the recent projects (a bind's caller remembers its own; speccoder's
+    /// copy of the sample, under its state, is not the person's).
+    fn serving(&self, port: u16) {
+        let _ = self.0.port.set(port);
+        self.announce();
+        if let (Some(root), Some(state)) = (
+            self.bound(),
+            speccoder_runtime::service::worktree::state_dir(),
+        ) && !root.starts_with(&state)
+        {
+            let name = root
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            speccoder_runtime::service::welcome::remember(&state, &root, &name, false);
+        }
+    }
+
+    /// The host stops serving.
+    fn leaving(&self) {
+        if let (Some(root), Some(state)) = (
+            self.bound(),
+            speccoder_runtime::service::worktree::state_dir(),
+        ) {
+            speccoder_runtime::service::projects::absent(&state, &root);
+        }
     }
 }
 
@@ -1404,6 +1451,9 @@ pub fn router(s: Shared) -> Router {
         .route("/api/welcome", get(welcome::view))
         .route("/api/open", post(welcome::open))
         .route("/api/recent/forget", post(welcome::forget))
+        .route("/api/projects", get(projects::list))
+        .route("/api/projects/open", post(projects::open_project))
+        .route("/api/projects/report", post(projects::report_to_project))
         .route("/api/folders", get(welcome::folders))
         .route("/api/new/plan", get(welcome::plan))
         .route("/api/new/first-feature", post(welcome::first_feature))
@@ -1468,6 +1518,8 @@ pub fn serve(
             return Err("no random source for the token".to_owned());
         };
         let root = Root::new(root, welcome::is_project(root));
+        root.serving(port);
+        let leaving = root.clone();
         let shared = Shared {
             root: root.clone(),
             token: token.clone(),
@@ -1495,10 +1547,12 @@ pub fn serve(
             let _ = stop.send(());
             tokio::time::sleep(GRACE).await;
         };
-        tokio::select! {
+        let r = tokio::select! {
             served = server => served.map_err(|e| e.to_string()),
             () = signal => Ok(()),
-        }
+        };
+        leaving.leaving();
+        r
     })
 }
 

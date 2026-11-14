@@ -59,6 +59,7 @@ pub mod planning_chain;
 pub mod pre_frozen;
 pub mod prepare;
 pub mod progress;
+pub mod projects;
 pub mod quick;
 pub mod resume;
 pub mod review;

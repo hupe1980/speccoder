@@ -35,6 +35,22 @@ pub mod progress {
     pub use crate::progress::{Event, Progress, read_live};
 }
 
+/// Several projects, one view (spec 097).
+pub mod projects {
+    pub use crate::projects::{
+        MAX_REPORT, Opened, absent, file_report, forget, open, presence_of, present, report_text,
+    };
+
+    /// The recent projects rolled up, as `speccoder projects` gives them.
+    #[must_use]
+    pub fn list(
+        state: &std::path::Path,
+        here: Option<&std::path::Path>,
+    ) -> speccoder_core::CommandResult {
+        crate::projects::report(state, here)
+    }
+}
+
 /// An attempt's thread, and a waiting call's facts.
 pub mod thread {
     use speccoder_core::{CommandData, CommandResult, CommandStatus};

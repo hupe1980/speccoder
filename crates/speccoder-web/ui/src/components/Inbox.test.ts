@@ -6,6 +6,15 @@ import { flushSync, mount, unmount } from "svelte";
 
 const host = vi.hoisted(() => ({
   app: {
+    projects: {
+      projects: [
+        { name: "here", path: "/p/here", shown: "", state: "idle", current: true },
+        { name: "api", path: "/p/api", shown: "", state: "blocked_on_you", current: false, waiting: 2 },
+        { name: "lib", path: "/p/lib", shown: "", state: "cant_tell", current: false, unknown: "held" },
+      ],
+      items: [],
+    },
+    loadProjects: vi.fn(async () => {}),
     job: null as { running: boolean } | null,
     feature: "001-greet-function",
     view: "inbox",
@@ -112,6 +121,19 @@ describe("Inbox", () => {
     const act = (kind: string, input: string | null) => ({ ...action(kind, `speccoder task ${kind} ${task}`, kind), id: { kind, subject: task }, input, run: { kind, task } });
     return item("approval", "blocked_on_you", "001-x", { task, tool, title: `${task} waits for your approval`, actions: [act("approve", null), act("reject", "Why (the model is told)")] });
   };
+
+  it("names the other projects where something waits, one click from them", () => {
+    host.app.inbox = { data: { features: 1, groups: [], working: [], idle: [], items: [] } };
+    shown = mount(Inbox, { target: document.body });
+    flushSync();
+    const strip = document.querySelector(".elsewhere")!;
+    expect(strip.textContent).toContain("api 2");
+    expect(strip.textContent).toContain("lib ?");
+    expect(strip.textContent).not.toContain("here");
+    strip.querySelector("button")!.click();
+    expect(host.app.view).toBe("projects");
+    host.app.view = "inbox";
+  });
 
   it("puts what blocks work first, the riskiest review next, then working and idle", () => {
     host.app.inbox = {

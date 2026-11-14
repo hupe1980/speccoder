@@ -282,6 +282,12 @@ pub enum Command {
         /// Open it in speccoder's own window (on Linux, a build with `--features app`).
         #[arg(long)]
         window: bool,
+        /// Open it at a place: `inbox`, `inbox:FEATURE`, `inbox:FEATURE/TASK`.
+        #[arg(long, value_name = "PLACE")]
+        at: Option<String>,
+        /// Open its bug sheet with this text (a stop reported from another project).
+        #[arg(long, value_name = "TEXT")]
+        bug_from: Option<String>,
     },
     /// Ask about the project — specs, code, runs, evidence: an answer whose sources speccoder checks. Changes nothing.
     Ask {
@@ -381,6 +387,12 @@ pub enum Command {
         /// Only the writing check (no model).
         #[arg(long)]
         check: bool,
+    },
+    /// Every project you used speccoder in: what waits in each, what runs, what it cost; `forget` one.
+    #[command(hide = true)]
+    Projects {
+        #[command(subcommand)]
+        action: Option<ProjectsAction>,
     },
     /// Your hooks: gates that can stop a tick or a pull request, observers that hear ticks and stops; trust and test them.
     #[command(hide = true)]
@@ -984,6 +996,16 @@ pub enum PresetAction {
         /// Run it without asking.
         #[arg(long)]
         yes: bool,
+    },
+}
+
+/// `speccoder projects` actions; without one, the list.
+#[derive(Debug, Subcommand)]
+pub enum ProjectsAction {
+    /// Remove a project from the list (its name or folder); nothing of it is touched.
+    Forget {
+        /// The project.
+        project: String,
     },
 }
 

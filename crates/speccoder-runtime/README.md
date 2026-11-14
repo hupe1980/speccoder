@@ -13,6 +13,8 @@ Entry points:
 - `ask::turn_with` — one Ask turn: a read-only answer whose sources are checked against what it read.
 - `explore::explore_in`, `explore::choose` — an idea explored read-only, and the brief chosen from it.
 - `hooks` — the person's gates and observers: trust by digest, gates in the checks' sandbox, events delivered at least once from git.
+- `thread::of`, `thread::explain` — an attempt as one thread from its journal and git; a waiting call's facts, no model asked.
+- `projects` — the recent projects rolled up read-only; another opened in its own host; a stop reported to another project.
 - `extensions` — Agent Plugins folders and Spec Kit extensions: one digest each, trust, add from a folder or a commit, views run read-only in the sandbox.
 
 This is an internal crate of speccoder. Its version follows speccoder's, and its API may change in any minor release; depend on it only together with speccoder.

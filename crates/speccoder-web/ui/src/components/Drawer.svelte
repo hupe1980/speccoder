@@ -11,6 +11,7 @@
   import { KINDS, key, offer, ofTask, stopOf, stopOffers } from "../lib/actions";
   import type { Line, Task } from "../lib/types";
   import Thread from "./Thread.svelte";
+  import ReportTo from "./ReportTo.svelte";
   import Diff from "./Diff.svelte";
   import Drift from "./Drift.svelte";
   import Code from "./Code.svelte";
@@ -106,6 +107,8 @@
     <div class="verdict s-{data.banner.mark}">
       <span class="sym"><Icon name={symbol(data.banner.mark)} size={20} weight={2} /></span>
       <span><strong>{verdictTitle}</strong>{#if verdictWords}<span class="words">{verdictWords}</span>{/if}</span>
+      <!-- A stop caused by another project: its bug sheet, filled from this stop. -->
+      {#if !data.task.commit && data.task.last_attempt?.reference?.startsWith("refs/") && data.task.last_attempt.outcome !== "needs_approval" && app.feature && app.selected}<span class="to"><ReportTo feature={app.feature} task={app.selected} /></span>{/if}
     </div>
     {#if drift}<Drift {drift} />{/if}
     {#if grew}<PromoteOffer item={grew} />{/if}
@@ -197,6 +200,7 @@
 </aside>
 
 <style>
+  .to { margin-left: auto; }
   .rulings { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   .judged { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.5rem; align-items: start; margin: 0 0 0.8rem; padding: 0.6rem 0.75rem; border-radius: 10px; background: var(--fill); font-size: 0.84rem; }
   .judged.offer { background: color-mix(in srgb, var(--attention, #ff9f0a) 10%, var(--surface)); }

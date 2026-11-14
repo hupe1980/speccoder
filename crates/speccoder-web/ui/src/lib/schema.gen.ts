@@ -950,7 +950,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -1624,6 +1624,14 @@ export interface EarlierAttempt {
   digest: Digest;
   /** Token usage of the attempt. */
   usage: unknown;
+}
+
+/** Another speccoder serving the project now (never its key). */
+export interface Elsewhere {
+  /** Its process. */
+  pid: number;
+  /** Unix seconds it started. */
+  since: number;
 }
 
 /**
@@ -3278,6 +3286,29 @@ export interface Item {
 }
 
 /**
+ * A Needs You item of some project: speccoder's own title and kind,
+ * never its detail (which may quote model text or command output).
+ */
+export interface ItemAcross {
+  /** The project's name. */
+  project: string;
+  /** The project's folder. */
+  path: string;
+  /** The feature. */
+  feature: string;
+  /** The task, when the item is a task's. */
+  task?: string | null;
+  /** The item's kind (`approval`, `question`, …). */
+  kind: string;
+  /** `blocked_on_you` or `ready_to_review`. */
+  group: string;
+  /** speccoder's title of it. */
+  title: string;
+  /** Unix seconds it has waited since. */
+  since?: number | null;
+}
+
+/**
  * One step of a feature's journey: `spec`, `plan`, `tasks`, `commit`,
  * `run`, `review`.
  */
@@ -3341,6 +3372,14 @@ export interface ListingRun {
   duration_ms: number;
   /** How it ended. */
   status: CheckStatus;
+}
+
+/** A run going on in a project. */
+export interface LiveTask {
+  /** Its task. */
+  task: string;
+  /** The stage it is in. */
+  stage?: string | null;
 }
 
 /** A pass-to-pass member on the final tree. */
@@ -4161,6 +4200,43 @@ export interface ProjectSnapshot {
    * change's requirements.
    */
   openspec?: OpenSpecMeta | null;
+}
+
+/** Where a project stands, in the order the view shows them. */
+export type ProjectState = "blocked_on_you" | "working" | "cant_tell" | "ready_to_review" | "idle" | "missing";
+
+/** One recent project, rolled up. */
+export interface ProjectSummary {
+  /** Its name. */
+  name: string;
+  /** Its folder. */
+  path: string;
+  /** Its folder, `~`-abbreviated. */
+  shown: string;
+  /** Where it stands. */
+  state: ProjectState;
+  /** The page asking is this project's. */
+  current: boolean;
+  /** Its current feature. */
+  feature?: string | null;
+  /** A run going on. */
+  live?: LiveTask | null;
+  /** Decisions waiting for the person; absent when not all could be read. */
+  waiting?: number | null;
+  /** Why something could not be read. */
+  unknown?: string | null;
+  /** What its current feature has cost so far. */
+  spend?: Usage | null;
+  /** Open in another speccoder now. */
+  elsewhere?: Elsewhere | null;
+}
+
+/** `speccoder projects`: the recent projects and what waits across them. */
+export interface ProjectsReport {
+  /** The projects, by state, then the most recently used. */
+  projects: ProjectSummary[];
+  /** Every project's Needs You, merged: blocked first, the oldest first. */
+  items: ItemAcross[];
 }
 
 /** A change the model suggests, as code made it a person's action. */

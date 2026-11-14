@@ -643,9 +643,13 @@ fn ctrl_c_stops_the_web_host_with_a_page_listening() {
     use std::io::Write;
     let graph =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../speccoder-speckit/tests/fixtures/graph");
+    // Its own state and home: serving a project records it there.
+    let state = tempfile::tempdir().unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_speccoder"))
         .args(["--json", "ui", "--no-open", "-C"])
         .arg(&graph)
+        .env("SPECCODER_STATE_DIR", state.path())
+        .env("HOME", state.path())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()

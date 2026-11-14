@@ -14,6 +14,7 @@
         <strong>{t.text}</strong>
         {#if t.detail}<span class="mono detail">{t.detail}</span>{/if}
       </span>
+      {#if t.action}{@const a = t.action}<button class="btn small act" onclick={() => { a.run(); app.toasts = app.toasts.filter((x) => x.id !== t.id); }}>{a.label}</button>{/if}
       {#if t.copy}<button class="x c" title="Copy what went wrong" aria-label="Copy what went wrong" onclick={() => t.copy && app.copy(t.copy, "Copied what went wrong", "Paste it into an issue or a chat.")}><Icon name="copy" size={11} /></button>{/if}
       <button class="x" aria-label="Dismiss" onclick={() => (app.toasts = app.toasts.filter((x) => x.id !== t.id))}><Icon name="xmark" size={10} weight={2.6} /></button>
     </div>
@@ -34,6 +35,7 @@
   .text { display: grid; min-width: 0; }
   strong { font-weight: 600; font-size: 0.92rem; }
   .detail { font-size: 0.76rem; color: var(--muted); overflow-wrap: anywhere; }
+  .act { flex: none; }
   .x.c { width: 24px; height: 24px; }
   .x { width: 20px; height: 20px; border-radius: 50%; border: 0; background: var(--fill); color: var(--muted); display: grid; place-items: center; cursor: pointer; }
 </style>

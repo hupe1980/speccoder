@@ -8,6 +8,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Several projects, one view**: the sidebar's project switcher and
+  **All Projects** (⇧⌘P; `speccoder projects`) show every project by
+  where it stands, with what waits, the live task and the current
+  feature's spend — a count that could not be read is `?`, never 0 —
+  and one **Needs You across projects** list; Needs You names the other
+  projects where something waits. **Decide in ‹project›** opens that
+  project in its own window or tab, with its own key, at the item
+  ([Projects](https://hupe1980.github.io/speccoder/docs/web/#projects)).
+- **Report to another project**: a task that stopped because of another
+  project asks one line — what should happen instead — and records the
+  bug there through that project's own `bug` (one commit of its spec
+  files; nothing runs until it is reproduced there); **Edit There First**
+  opens its bug sheet filled from the stop instead.
+- `speccoder ui --at inbox:F/T` and `--bug-from TEXT`.
 - **The thread**: an attempt as one column in the app's inspector — the
   model's thoughts and words muted as its claims, each call one line with
   its outcome (*contained*, *you approved*, *refused*) and its output or
@@ -25,9 +39,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - **Stop stops the attempt**: the app's Stop and the first Ctrl-C of a
   line-mode run end the running attempt at its next call (agentplane
-  0.61's stop); it is saved as stopped by you, never failed. A second
-  Ctrl-C quits at once.
+  0.61's stop); it is saved as stopped by you, never failed, and
+  `task.stopped` carries `stopped_by`. A second Ctrl-C quits at once.
 - `speccoder task show T --account` is now `--thread`.
+- A project `speccoder ui` serves is remembered among the recent
+  projects, as one opened from the welcome is.
 - A command the sandbox contained is recorded as such in its call's
   result.
 - agentplane 0.61.0.

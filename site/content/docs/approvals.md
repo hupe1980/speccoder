@@ -49,6 +49,10 @@ In a foreground run at a terminal (the [dashboard](@/docs/running.md#the-dashboa
 | `?` | **Explain**: the facts of the call, no model asked — the program and its path, the hosts and outside paths its arguments name, the rule that asks, where its arguments came from — then the same prompt |
 | `esc` | Decides later: the call keeps waiting; the dashboard footer offers it again (`enter`) |
 
+**Explain** (`?` here, `e` in the app) shows the facts speccoder holds about the call, without asking a model:
+
+<figure class="shot"><img class="shot-light" src="../../screenshots/explain-light.webp" alt="Explain on a waiting curl call: the program and its path, the host it reaches, why it asks, the task, and the model's words before it asked, marked as a claim" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/explain-dark.webp" alt="Explain on a waiting curl call: the program and its path, the host it reaches, why it asks, the task, and the model's words before it asked, marked as a claim" width="1440" height="900" loading="lazy" decoding="async"></figure>
+
 A note after the key (`y use the 0.1 series`) reaches the model with the call's result; the attempt continues in the same turn. The dashboard overlay takes the same keys (`tab` adds a note), the [web interface](@/docs/web.md#when-a-run-needs-you) shows them as a sheet, and an editor gets ACP permission options (Always Allow is `allow_always`). Always Allow writes `speccoder.toml`; commit it to put it in force.
 
 Every interface's Approve and Reject name the call they show and its object. If that call expired or was decided, or another call waits now, the decision is refused (`CALL-CHANGED`).
