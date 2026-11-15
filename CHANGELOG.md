@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-15
+
 ### Added
 
 - **Feedback between projects**: `[upstream.<name>]` declares a project
@@ -1085,7 +1087,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/hupe1980/speccoder/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/hupe1980/speccoder/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/hupe1980/speccoder/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/hupe1980/speccoder/compare/v0.13.0...v0.14.0
