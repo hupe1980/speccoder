@@ -38,7 +38,7 @@
 <div class="switch">
   <button class="current" bind:this={trigger} aria-haspopup="menu" aria-expanded={open} onclick={toggle} title="Switch project">
     <span class="name">{name}</span>
-    {#if elsewhere || unknown}<span class="badge" title="Waiting for you in other projects">{elsewhere}{unknown ? "+" : ""}</span>{/if}
+    {#if elsewhere || unknown}<span class="badge" title={unknown ? "Waiting for you in other projects — some could not be read" : "Waiting for you in other projects"}>{elsewhere ? `${elsewhere}${unknown ? "+" : ""}` : "?"}</span>{/if}
     <Icon name="down" size={11} weight={2.4} />
   </button>
   {#if open}

@@ -19,9 +19,15 @@ adheres to [Semantic Versioning](https://semver.org/).
   report, list, withdraw, and for the upstream's agent the requests and
   resolve (a commit of its own); each session starts with what was
   answered since. `speccoder feedback` lists it all.
-- A project only on GitHub gets each item as a prepared issue: **Open on
-  GitHub** (filled in, no sign-in) or **File Issue…** (shown first, filed
-  once).
+- An upstream with a GitHub repository gets each item as a prepared
+  issue: **Open on GitHub** (filled in, no sign-in) or **File Issue…**
+  (shown first, filed once).
+
+### Fixed
+
+- **Projects** opens in a project whose setup is not done yet.
+- The project switcher shows `?` when nothing is known to wait but a
+  project could not be read.
 
 ## [0.16.0] - 2026-11-15
 

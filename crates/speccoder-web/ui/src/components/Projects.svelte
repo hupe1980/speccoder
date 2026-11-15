@@ -77,7 +77,7 @@
       <section aria-labelledby="w-title">
         <h2 id="w-title" class="section-title">Needs You Across Projects <span class="count">{blocked.length + review.length}</span></h2>
         {#if !blocked.length && !review.length}
-          <p class="quiet">Nothing waits in any project{#if r.projects.some((p) => p.state === "cant_tell")} that could be read{/if}.</p>
+          <p class="quiet">{r.projects.some((p) => p.state === "cant_tell") ? "Nothing waits in any project that could be read." : "Nothing waits in any project."}</p>
         {/if}
         <ul class="items">
           {#each [...blocked, ...review] as i (i.path + i.feature + (i.task ?? "") + i.kind + i.title)}

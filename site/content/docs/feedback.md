@@ -40,6 +40,8 @@ Each session starts with the news: the items an upstream fixed or declined, and 
 
 ## The other project decides
 
+<figure class="shot"><img class="shot-light" src="../../screenshots/feedback-light.webp" alt="Projects › Feedback between projects in the upstream: what app asks of it, app's words marked as theirs, with Start a Spec, Record as Bug and Decline" width="1440" height="1080" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/feedback-dark.webp" alt="Projects › Feedback between projects in the upstream: what app asks of it, app's words marked as theirs, with Start a Spec, Record as Bug and Decline" width="1440" height="1080" loading="lazy" decoding="async"></figure>
+
 When the upstream is a speccoder project on this machine, its Needs You shows *web asks 2 things of this project*. **Projects › Feedback between projects** lists each item, the asking project's text, and three actions:
 
 - **Start a Spec** opens the New feature sheet with the item.
