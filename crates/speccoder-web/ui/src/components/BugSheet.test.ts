@@ -8,6 +8,8 @@ import { bugReport } from "../test/fixtures";
 
 const host = vi.hoisted(() => ({
   app: {
+    pendingFeedback: null as unknown,
+    settleFeedback: vi.fn(async () => {}),
     bugSheet: null as { key?: string; symptom?: string; issue?: number } | null,
     job: null as { running: boolean; result: unknown } | null,
     perform: vi.fn(async (_offer: unknown) => {}),

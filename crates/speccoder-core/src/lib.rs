@@ -17,6 +17,7 @@ pub mod event;
 pub mod evidence;
 pub mod explore;
 pub mod extensions;
+pub mod feedback;
 pub mod graph;
 pub mod hooks;
 pub mod inbox;

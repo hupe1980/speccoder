@@ -8,6 +8,11 @@
 import type { Envelope, FeatureEntry, IssueEntry as GitHubIssue } from "./schema.gen";
 
 export type {
+  FeedbackReport,
+  Upstream,
+  Tracked,
+  Request as FeedbackRequest,
+  Status as FeedbackStatus,
   ProjectsReport,
   ProjectSummary,
   ProjectState,

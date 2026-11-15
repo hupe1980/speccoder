@@ -678,6 +678,18 @@ const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
     ),
     ("forget", "removes a recent project from speccoder's list"),
     (
+        "decide",
+        "a person's decision on another project's request, kept in this project's own state",
+    ),
+    (
+        "withdraw",
+        "removes an item from this project's own outbox file, at the person's click",
+    ),
+    (
+        "file",
+        "files a prepared GitHub issue with the person's sign-in after the page's confirm (as `github_login` signs in)",
+    ),
+    (
         "open_project",
         "starts another recent project's own host (its own process and key): no write here",
     ),
@@ -763,7 +775,8 @@ fn every_web_route_that_writes_goes_through_the_dispatcher() {
     // beside it (`welcome.rs`).
     let lib = std::fs::read_to_string(web.join("lib.rs")).unwrap()
         + &std::fs::read_to_string(web.join("welcome.rs")).unwrap_or_default()
-        + &std::fs::read_to_string(web.join("projects.rs")).unwrap_or_default();
+        + &std::fs::read_to_string(web.join("projects.rs")).unwrap_or_default()
+        + &std::fs::read_to_string(web.join("feedback.rs")).unwrap_or_default();
     let errors: Vec<String> = writes(&lib)
         .into_iter()
         .filter(|(h, perform)| !perform && !WRITES_WITHOUT_A_KIND.iter().any(|(x, _)| x == h))

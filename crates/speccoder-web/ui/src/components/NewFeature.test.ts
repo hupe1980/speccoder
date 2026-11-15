@@ -9,6 +9,8 @@ import { button, press, settle, type, violations } from "../test/dom";
 
 const host = vi.hoisted(() => ({
   app: {
+    pendingFeedback: null as unknown,
+    settleFeedback: vi.fn(async () => {}),
     newFeature: {} as Record<string, unknown> | null,
     project: {
       format: "Spec Kit",

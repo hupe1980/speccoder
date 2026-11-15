@@ -2913,6 +2913,57 @@ pub fn projects(r: &speccoder_core::projects::ProjectsReport) -> Vec<String> {
     out
 }
 
+/// `speccoder feedback`: each upstream's items with where they stand, then
+/// what other projects ask of this one.
+#[must_use]
+pub fn feedback(r: &speccoder_core::feedback::FeedbackReport) -> Vec<String> {
+    use speccoder_runtime::service::feedback::word;
+    let mut out = Vec::new();
+    if r.upstreams.is_empty() && r.requests.is_empty() {
+        out.push("No upstreams declared: add [upstream.<name>] with `path` or `repo` to speccoder.toml; your agent reports through `speccoder mcp`.".to_owned());
+        return out;
+    }
+    for u in &r.upstreams {
+        let to = u.path.as_deref().or(u.repo.as_deref()).unwrap_or_default();
+        out.push(format!("Asked of {} ({to}) — {}", u.name, u.outbox));
+        if u.items.is_empty() {
+            out.push(format!(
+                "  nothing open{}",
+                if u.exists { "" } else { " (no outbox yet)" }
+            ));
+        }
+        for i in &u.items {
+            // Only on GitHub: nothing reads the outbox until it is filed.
+            let status = match (&i.status, &u.path) {
+                (speccoder_core::feedback::Status::NotSeen, None) => {
+                    "not filed yet — Open on GitHub in the app".to_owned()
+                }
+                (s, _) => word(s),
+            };
+            out.push(format!(
+                "  {} {}  {}{}",
+                i.item.id,
+                i.item.title,
+                status,
+                if i.changed { "  (changed since)" } else { "" }
+            ));
+        }
+    }
+    if !r.requests.is_empty() {
+        out.push("Asked of this project".to_owned());
+        for q in &r.requests {
+            out.push(format!(
+                "  {} · {} {}  {}",
+                q.source,
+                q.item.id,
+                q.item.title,
+                word(&q.status)
+            ));
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

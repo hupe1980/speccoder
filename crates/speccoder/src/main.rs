@@ -18,6 +18,7 @@ mod help;
 mod human;
 mod interrupt;
 mod markdown;
+mod mcp_server;
 mod new;
 mod output;
 mod progress;
@@ -1169,6 +1170,16 @@ fn main() {
     let result = match command {
         Command::Hooks { action } => hooks(path, action.as_ref(), machine),
         Command::Projects { action } => projects(path, action.as_ref()),
+        Command::Feedback => match speccoder_runtime::worktree::state_dir() {
+            Some(state) => speccoder_runtime::service::feedback::report(&state, path),
+            None => no_state("feedback"),
+        },
+        Command::Mcp => match mcp_server::serve(path) {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                speccoder_core::CommandResult::new("mcp", speccoder_core::CommandStatus::Error, &e)
+            }
+        },
         Command::Extensions { action } => extensions(path, action.as_ref(), machine),
         Command::Help { topic } => {
             help::print(topic);
@@ -2680,6 +2691,8 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Doctor { .. } => "doctor",
             C::Hooks { .. } => "hooks",
             C::Projects { .. } => "projects",
+            C::Feedback => "feedback",
+            C::Mcp => "mcp",
             C::Extensions { .. } => "extensions",
             C::Fix { .. } => "fix",
             C::Spec { .. } => "spec",

@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Feedback between projects**: `[upstream.<name>]` declares a project
+  this one depends on, with an outbox file of open items
+  (`### AP-43 — …` under `## Open`). The upstream's Needs You lists what
+  is asked of it — **Start a Spec**, **Record as Bug**, **Decline…** —
+  and each item's status comes back: not seen, taken up, fixed in a
+  commit, declined. Nothing is written into the other project
+  ([feedback](https://hupe1980.github.io/speccoder/docs/feedback/)).
+- `speccoder mcp`: the feedback tools for your coding agent over MCP —
+  report, list, withdraw, and for the upstream's agent the requests and
+  resolve (a commit of its own); each session starts with what was
+  answered since. `speccoder feedback` lists it all.
+- A project only on GitHub gets each item as a prepared issue: **Open on
+  GitHub** (filled in, no sign-in) or **File Issue…** (shown first, filed
+  once).
+
 ## [0.16.0] - 2026-11-15
 
 ### Added

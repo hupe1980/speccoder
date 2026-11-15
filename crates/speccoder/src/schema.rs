@@ -110,6 +110,9 @@ const fn describe(payload: &str) -> &'static str {
         }
         b"explanation" => "explanation: a waiting call's facts, without a model",
         b"projects" => "projects: the recent projects rolled up, and what waits across them",
+        b"feedback" => {
+            "feedback: what this project asks of the projects it depends on, and what others ask of it"
+        }
         b"extensions" => {
             "extensions: every extension, what it contributes and can reach, and its trust"
         }
@@ -212,6 +215,7 @@ published! {
     "thread", "Thread" => core::thread::Thread,
     "explanation", "Explanation" => core::thread::Explanation,
     "projects", "ProjectsReport" => core::projects::ProjectsReport,
+    "feedback", "FeedbackReport" => core::feedback::FeedbackReport,
     "extension_views", "ViewsReport" => core::extensions::ViewsReport,
     "shape", "ShapeReport" => core::ShapeReport,
     "ask", "AskReport" => core::ask::AskReport,

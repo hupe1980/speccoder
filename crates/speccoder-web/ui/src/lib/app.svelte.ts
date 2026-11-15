@@ -155,6 +155,9 @@ class AppState {
   input = $state<{ action: Action | Offer } | null>(null);
   palette = $state(false);
   view = $state<"inbox" | "overview" | "board" | "code" | "documents" | "report" | "settings" | "setup" | "projects">("inbox");
+  /** Another project's request a sheet was opened for: recorded as taken up
+   *  only when that sheet is submitted (spec 125). */
+  pendingFeedback = $state<{ source: string; id: string; decision: "taken_up" | "bug" } | null>(null);
   /** Every recent project rolled up (spec 097); `null` until read. */
   projects = $state<ProjectsReport | null>(null);
   /** The Settings section a step opens (`speccoder hooks` → hooks). */
@@ -491,6 +494,15 @@ class AppState {
 
   async stop() {
     await post("/api/stop", {});
+  }
+
+  /** The sheet opened for a request was submitted: its decision, recorded. */
+  async settleFeedback() {
+    const fb = this.pendingFeedback;
+    this.pendingFeedback = null;
+    if (!fb) return;
+    const r = await post<{ ok: boolean; error?: string }>("/api/feedback/decide", fb);
+    if (!r.ok) this.toast({ tone: "warn", text: r.error ?? "The decision was not recorded" });
   }
 
   #projectsLoading: Promise<void> | null = null;

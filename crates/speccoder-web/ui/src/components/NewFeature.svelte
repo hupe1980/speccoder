@@ -115,6 +115,11 @@
   function close() {
     app.newFeature = null;
   }
+  // Closed without starting: a request it was opened for stays undecided.
+  function cancel() {
+    app.pendingFeedback = null;
+    close();
+  }
 
   async function start() {
     if (blocked || starting) return;
@@ -124,6 +129,7 @@
       return;
     }
     starting = true;
+    void app.settleFeedback();
     const cmd = featureCommands(create, description, through, issue)[issue ? 1 : 0] ?? "";
     app.following = true;
     app.view = "documents";
@@ -161,6 +167,8 @@
    *  a comment on its requirement — not sent; the person sends it. */
   async function extend(m: SimilarMatch) {
     const t = text.trim();
+    // Taken up by an existing unit: that counts.
+    void app.settleFeedback();
     if (!planning?.revises || !m.at) {
       await navigator.clipboard?.writeText(t).catch(() => {});
       close();
@@ -189,7 +197,7 @@
   function key(e: KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault();
-      close();
+      cancel();
     } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       void start();
@@ -197,7 +205,7 @@
   }
 </script>
 
-<div class="d-scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} onkeydown={key}>
+<div class="d-scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && cancel()} onkeydown={key}>
   <div class="d-sheet wide" role="dialog" aria-modal="true" aria-labelledby="nf-title" aria-describedby="nf-lead" use:trap={explored ? "button.primary" : "textarea"}>
     <header class="d-head">
       <span class="d-badge" aria-hidden="true"><Icon name="sparkle" size={20} weight={2.2} /></span>
@@ -219,7 +227,7 @@
         <span class="d-note">The brief you chose, word for word — the spec records where it came from. To change it, choose again in the exploration.</span>
       </div>
     {:else if create}
-      <button type="button" class="link explore-first" onclick={() => { app.explore = { idea: text }; close(); }}><Icon name="sparkle" size={12} /> Not sure yet? Explore first</button>
+      <button type="button" class="link explore-first" onclick={() => { app.explore = { idea: text }; cancel(); }}><Icon name="sparkle" size={12} /> Not sure yet? Explore first</button>
     {/if}
 
     {#if handed}
@@ -282,13 +290,13 @@
 
     {#if blocked}
       <p class="d-warn attention" role="note">
-        {blocked}{#if noKey} — <button class="btn small ghost" onclick={() => { close(); app.view = "settings"; }}>Settings › Model</button>{/if}
+        {blocked}{#if noKey} — <button class="btn small ghost" onclick={() => { cancel(); app.view = "settings"; }}>Settings › Model</button>{/if}
       </p>
     {/if}
 
     <div class="d-row">
       <span class="d-hint">⌘⏎ starts</span>
-      <button class="btn" onclick={close}>Cancel</button>
+      <button class="btn" onclick={cancel}>Cancel</button>
       <button class="btn primary" disabled={!!blocked || starting} onclick={start}>
         {#if starting}Starting…{:else}Start <kbd>⌘⏎</kbd>{/if}
       </button>

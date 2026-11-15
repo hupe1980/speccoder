@@ -1297,6 +1297,48 @@
           "tables": []
         },
         {
+          "name": "upstream",
+          "title": "Upstreams",
+          "about": "Projects this one depends on and asks things of: an outbox file of open items the other project reads, by its folder here or its GitHub repository.",
+          "named": true,
+          "keys": [
+            {
+              "key": "path",
+              "kind": "string",
+              "about": "Its folder, relative to this project",
+              "default": null,
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": false
+            },
+            {
+              "key": "repo",
+              "kind": "string",
+              "about": "Its GitHub repository, owner/name",
+              "default": null,
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": false
+            },
+            {
+              "key": "outbox",
+              "kind": "string",
+              "about": "The file of open items: .speccoder/outbox/<name>.md when unset",
+              "default": null,
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": false
+            }
+          ],
+          "tables": []
+        },
+        {
           "name": "hooks",
           "title": "Hooks",
           "about": "Your own commands around a run: a gate (at) stops a tick or a pull request unless it exits 0; an observer (on) hears ticks and stops. Each runs only after you trusted its exact bytes.",

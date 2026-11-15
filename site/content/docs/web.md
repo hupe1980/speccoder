@@ -51,6 +51,8 @@ A project without `speccoder.toml` opens in the **setup assistant**: what was fo
 
 The project's name at the top of the sidebar opens the **switcher**: your projects with what waits in each (`?` when it could not be read), **All Projects…** (⇧⌘P) and **Open Project…**. **All Projects** groups them by where they stand and merges their Needs You into one list. **Decide in ‹project› ▸** opens that project in its own window or tab, with its own key, at the item; only names, counts and speccoder's own titles cross between projects. Needs You names the other projects where something waits (*Also waiting: api 2*). The terminal's equivalent is `speccoder projects`.
 
+**Feedback between projects**, below them, lists what this project asks of the projects it depends on and what others ask of it ([feedback](@/docs/feedback.md)).
+
 A task that stopped because of another project offers **Report to…**: pick the project, say in one line what should happen instead, and the bug is recorded there with this stop as its symptom — one commit of its spec files, nothing run. **Edit There First** opens its bug sheet instead. A project that is running a task is not written to.
 
 ### Overview

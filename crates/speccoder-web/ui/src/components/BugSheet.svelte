@@ -67,6 +67,7 @@
         { group: "work", label: run ? "record and reproduce the bug" : "record the bug", why: "your words become the triad; nothing is fixed before you confirm a failing reproduction", command: command(f) },
       ),
     );
+    void app.settleFeedback();
   }
 
   async function decide(reject: boolean) {
@@ -85,7 +86,11 @@
     );
   }
 
-  const close = () => (app.bugSheet = null);
+  const close = () => {
+    // Closed without recording: a request it was opened for stays undecided.
+    app.pendingFeedback = null;
+    app.bugSheet = null;
+  };
   function keydown(e: KeyboardEvent) {
     if (e.key === "Escape") close();
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !bug) {

@@ -4,6 +4,7 @@
 //! holds no logic of its own: what it shows and offers comes from the
 //! runtime, as for the CLI.
 
+mod feedback;
 pub mod fixes;
 pub mod jobs;
 mod projects;
@@ -1452,6 +1453,11 @@ pub fn router(s: Shared) -> Router {
         .route("/api/open", post(welcome::open))
         .route("/api/recent/forget", post(welcome::forget))
         .route("/api/projects", get(projects::list))
+        .route("/api/feedback", get(feedback::list))
+        .route("/api/feedback/decide", post(feedback::decide))
+        .route("/api/feedback/prepared", get(feedback::prepared))
+        .route("/api/feedback/issue", post(feedback::file))
+        .route("/api/feedback/withdraw", post(feedback::withdraw))
         .route("/api/projects/open", post(projects::open_project))
         .route("/api/projects/report", post(projects::report_to_project))
         .route("/api/folders", get(welcome::folders))

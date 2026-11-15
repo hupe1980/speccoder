@@ -29,9 +29,10 @@ const host = vi.hoisted(() => ({
     selectTask: vi.fn(async () => {}),
   },
   post: vi.fn(async () => ({})),
+  get: vi.fn(async () => ({ status: "ok", message: "", data: { upstreams: [], requests: [] } })),
 }));
 vi.mock("../lib/app.svelte", () => ({ app: host.app }));
-vi.mock("../lib/api", async (actual) => ({ ...(await actual<typeof import("../lib/api")>()), post: host.post }));
+vi.mock("../lib/api", async (actual) => ({ ...(await actual<typeof import("../lib/api")>()), post: host.post, get: host.get }));
 
 import Projects from "./Projects.svelte";
 

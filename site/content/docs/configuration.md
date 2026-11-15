@@ -262,6 +262,16 @@ Server names are lowercase letters, digits and single `_` inside, and not `fs`, 
 
 A table has `at` or `on`, not both. Nothing runs until you trust it (`speccoder hooks trust`); see [Hooks](@/docs/hooks.md).
 
+## `[upstream.<name>]`
+
+A project this one depends on and asks things of ([feedback between projects](@/docs/feedback.md)). Give `path`, `repo`, or both.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `path` | — | Its folder, relative to this project |
+| `repo` | — | Its GitHub repository, `owner/name` |
+| `outbox` | `.speccoder/outbox/<name>.md` | The file of open items: a path inside this project (no `..`, nothing absolute, no link out) |
+
 ## Your settings
 
 How speccoder looks and notifies you is your setting, not the project's. It lives in `$XDG_CONFIG_HOME/speccoder/config.toml` (else `~/.config/speccoder/config.toml`); a `[ui]` table in `speccoder.toml` is refused (exit 13).

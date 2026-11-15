@@ -27,6 +27,8 @@ export const KINDS: Record<string, { title: string; icon: string; tone: string; 
   aside: { title: "Changes Set Aside", icon: "tray", tone: "needs_approval", why: "Found in the worktree when a run started — keep them on the branch, or let them go." },
   commit: { title: "Plans to Commit", icon: "doc", tone: "ready", why: "A run reads committed files only." },
   promote: { title: "Worth a Spec", icon: "sparkle", tone: "ready", why: "Measured, not guessed: it touched more than one requirement's worth. Start a spec from it — its tick is inherited, not verified — or not now." },
+  request: { title: "Asked of This Project", icon: "tray", tone: "ready", why: "Another project you depend on is asked for something — take it up, record it as a bug, or decline it." },
+  feedback: { title: "Feedback Answered", icon: "check", tone: "ready", why: "A project you asked something of fixed or declined it." },
   handoff: { title: "Ready to Hand Off", icon: "arrowup", tone: "verified", why: "Every task is done — review the branch." },
 };
 

@@ -98,6 +98,11 @@
       app.settingsSection = "extensions";
       return;
     }
+    // Between projects: their feedback, on the Projects page.
+    if (i.kind === "request" || i.kind === "feedback") {
+      app.view = "projects";
+      return;
+    }
     if (i.kind.startsWith("bug_") && i.task) {
       app.bugSheet = { key: `${i.feature}/${i.task}` };
       return;

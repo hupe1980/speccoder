@@ -592,6 +592,41 @@ pub fn announce(
     Ok(out)
 }
 
+/// Creates an issue in `slug` (`owner/name`) on github.com: its number and
+/// address.
+///
+/// # Errors
+///
+/// Not signed in, or GitHub's refusal.
+pub fn create_issue(
+    ctx: &Ctx,
+    slug: &str,
+    title: &str,
+    body: &str,
+) -> Result<(u64, String), String> {
+    let api = ctx.signed_in("github.com")?;
+    let v = api.rest(
+        reqwest::Method::POST,
+        &format!("/repos/{slug}/issues"),
+        Some(&json!({ "title": title, "body": body })),
+    )?;
+    let n = v["number"]
+        .as_u64()
+        .ok_or("GitHub answered without an issue number")?;
+    Ok((n, v["html_url"].as_str().unwrap_or_default().to_owned()))
+}
+
+/// Whether issue `number` of `slug` is `open` or `closed`.
+///
+/// # Errors
+///
+/// Not signed in, or GitHub's refusal.
+pub fn issue_state(ctx: &Ctx, slug: &str, number: u64) -> Result<String, String> {
+    let api = ctx.signed_in("github.com")?;
+    let v = api.get(&format!("/repos/{slug}/issues/{number}"))?;
+    Ok(v["state"].as_str().unwrap_or("unknown").to_owned())
+}
+
 /// The issue number in `reference` (`42`, `#42`, its address).
 #[must_use]
 pub fn issue_number(reference: &str) -> Option<u64> {

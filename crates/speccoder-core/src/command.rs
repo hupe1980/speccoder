@@ -199,6 +199,8 @@ pub enum CommandData {
     Explanation(Box<crate::thread::Explanation>),
     /// `projects`: the recent projects and what waits across them.
     Projects(Box<crate::projects::ProjectsReport>),
+    /// `feedback`: what this project asks of others, and others of it.
+    Feedback(Box<crate::feedback::FeedbackReport>),
     /// `extensions`: every extension, what it contributes and its trust.
     Extensions(Box<crate::extensions::ExtensionsReport>),
     /// The views an extension places on a feature or the project.
@@ -1090,6 +1092,7 @@ impl CommandData {
             Self::Thread(_) => "thread",
             Self::Explanation(_) => "explanation",
             Self::Projects(_) => "projects",
+            Self::Feedback(_) => "feedback",
             Self::Extensions(_) => "extensions",
             Self::ExtensionViews(_) => "extension_views",
             Self::Shape(_) => "shape",
@@ -1153,6 +1156,7 @@ pub const PAYLOADS: &[&str] = &[
     "thread",
     "explanation",
     "projects",
+    "feedback",
     "shape",
     "ask",
     "ask_conversations",

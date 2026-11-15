@@ -388,6 +388,12 @@ pub enum Command {
         #[arg(long)]
         check: bool,
     },
+    /// What this project asks of the projects it depends on (`[upstream.<name>]`), where each item stands, and what others ask of it.
+    #[command(hide = true)]
+    Feedback,
+    /// Serve the feedback tools to your coding agent over stdio (MCP): report, list, withdraw, requests, resolve.
+    #[command(hide = true)]
+    Mcp,
     /// Every project you used speccoder in: what waits in each, what runs, what it cost; `forget` one.
     #[command(hide = true)]
     Projects {

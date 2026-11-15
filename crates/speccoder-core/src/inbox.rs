@@ -178,6 +178,10 @@ pub enum Kind {
     Aside,
     /// A quick change or bug that grew: start a spec from it.
     Promote,
+    /// Another project asks something of this one (its outbox).
+    Request,
+    /// An upstream decided on what this project asks: fixed or declined.
+    Feedback,
     /// Planning files a run cannot read yet.
     Commit,
     /// Every task done: review and hand it off.
@@ -186,7 +190,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, the most urgent first.
-    pub const ALL: [Self; 26] = [
+    pub const ALL: [Self; 28] = [
         Self::Unknown,
         Self::Approval,
         Self::ApprovalBatch,
@@ -211,6 +215,8 @@ impl Kind {
         Self::BugAlreadySatisfied,
         Self::Aside,
         Self::Promote,
+        Self::Request,
+        Self::Feedback,
         Self::Commit,
         Self::Handoff,
     ];
@@ -243,6 +249,8 @@ impl Kind {
             Self::BugAlreadySatisfied => "bug_already_satisfied",
             Self::Aside => "aside",
             Self::Promote => "promote",
+            Self::Request => "request",
+            Self::Feedback => "feedback",
             Self::Commit => "commit",
             Self::Handoff => "handoff",
         }
@@ -277,6 +285,8 @@ impl Kind {
             | Self::BugAlreadySatisfied
             | Self::Aside
             | Self::Promote
+            | Self::Request
+            | Self::Feedback
             | Self::Handoff => Group::ReadyToReview,
         }
     }
@@ -298,7 +308,7 @@ impl Kind {
 
     /// Every recorded name, the most urgent first.
     #[must_use]
-    pub fn names() -> [&'static str; 26] {
+    pub fn names() -> [&'static str; 28] {
         Self::ALL.map(Self::as_str)
     }
 }
@@ -340,6 +350,8 @@ mod tests {
                             | "gate_blocked"
                             | "hook_untrusted"
                             | "extension_untrusted"
+                            | "request"
+                            | "feedback"
                     )
             })
             .collect();

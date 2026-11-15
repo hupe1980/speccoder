@@ -9,6 +9,7 @@
   import type { ItemAcross, ProjectState, ProjectSummary } from "../lib/types";
   import Icon from "./Icon.svelte";
   import { kindTitle } from "../lib/kinds";
+  import Feedback from "./Feedback.svelte";
 
   // Read on arrival, after every job here, and every 30 s while shown.
   $effect(() => {
@@ -128,6 +129,7 @@
       </section>
     </div>
   {/if}
+  {#if app.project}<Feedback />{/if}
 </section>
 
 <style>

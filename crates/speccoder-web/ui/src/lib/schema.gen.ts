@@ -950,7 +950,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | FeedbackReport | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -2685,6 +2685,17 @@ export interface FeaturesReport {
   action: string;
   /** Every feature, in order. */
   features: FeatureEntry[];
+}
+
+/**
+ * `speccoder feedback`: what this project asks of others, and what others
+ * ask of it.
+ */
+export interface FeedbackReport {
+  /** The upstreams this project declares. */
+  upstreams: Upstream[];
+  /** Open items other recent projects ask of this one. */
+  requests: Request[];
 }
 
 /** One judged test file. */
@@ -4715,6 +4726,26 @@ export interface Reproduction {
 /** Who wrote a reproduction. */
 export type ReproductionSource = "author" | "person";
 
+/** What another project asks of this one. */
+export interface Request {
+  /** The asking project's name. */
+  source: string;
+  /** Its folder. */
+  path: string;
+  /** `AP-43`, or `FB-3` for a heading without an id of its own. */
+  id: string;
+  /** The heading's words after the id. */
+  title: string;
+  /** The item's text, up to the next heading. */
+  text: string;
+  /** Over title and text: a change since a decision shows. */
+  digest: string;
+  /** What this project decided, if anything. */
+  status: Status;
+  /** It changed since this project decided. */
+  changed: boolean;
+}
+
 /** One cited requirement, as the tick saw it and as the spec has it now. */
 export interface RequirementDrift {
   /** `FR-003`. */
@@ -6178,6 +6209,55 @@ export interface StatementsShown {
   satisfied: string[];
 }
 
+/** Where an item stands, as the other project decided it. */
+export type Status =
+  /** The other project has not decided on it. */
+  | {
+    state: "not_seen";
+  }
+  /** Taken up as a spec (a unit). */
+  | {
+    state: "taken_up";
+    /** The unit. */
+    unit: string;
+  }
+  /** Recorded as a bug task. */
+  | {
+    state: "bug";
+    /** `unit/task`. */
+    task: string;
+  }
+  /** Fixed in a commit of the other project. */
+  | {
+    state: "fixed";
+    /** The commit. */
+    commit: string;
+    /** An agent said so (not a person, not a tick). */
+    by_agent: boolean;
+  }
+  /** Declined, with the reason given. */
+  | {
+    state: "declined";
+    /** Why. */
+    reason: string;
+  }
+  /** Filed as a GitHub issue. */
+  | {
+    state: "filed";
+    /** `owner/name`. */
+    repo: string;
+    /** Its number. */
+    number: number;
+    /** `open`, `closed`, or unknown. */
+    issue_state?: string | null;
+  }
+  /** The other project could not be read. */
+  | {
+    state: "unknown";
+    /** Why. */
+    why: string;
+  };
+
 /** Result of `speccoder report`: what the branch's history shows. */
 export interface StatusReport {
   /** Feature directory name. */
@@ -6702,6 +6782,22 @@ export interface TraceRow {
   inherited?: Inherited | null;
 }
 
+/** An item with where it stands. */
+export interface Tracked {
+  /** `AP-43`, or `FB-3` for a heading without an id of its own. */
+  id: string;
+  /** The heading's words after the id. */
+  title: string;
+  /** The item's text, up to the next heading. */
+  text: string;
+  /** Over title and text: a change since a decision shows. */
+  digest: string;
+  /** Its status. */
+  status: Status;
+  /** It changed since the other project decided on it. */
+  changed: boolean;
+}
+
 /** The person's three statements about a bug. */
 export interface Triad {
   /** What happens now (the symptom). */
@@ -6789,6 +6885,22 @@ export interface Unverified {
   regression_only: number;
   /** The reasons, the most frequent first. */
   counts: ReasonCount[];
+}
+
+/** An upstream a project declares, and what it asks of it. */
+export interface Upstream {
+  /** Its name (`[upstream.<name>]`). */
+  name: string;
+  /** Its folder, when local. */
+  path?: string | null;
+  /** Its GitHub repository (`owner/name`). */
+  repo?: string | null;
+  /** The outbox file, project-relative. */
+  outbox: string;
+  /** The outbox exists. */
+  exists: boolean;
+  /** Its open items. */
+  items: Tracked[];
 }
 
 /** Token counts, and USD when prices are configured. */

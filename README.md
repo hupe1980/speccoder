@@ -86,6 +86,7 @@ Then, as you need them:
 
 - 👀 **Watch and decide.** At a terminal, `run` is a live dashboard that asks approvals with one key; [the app](#-the-app) shows the same work. The model's reasoning and words appear beside its calls — its account, never evidence.
 - 🗂️ **Several projects.** **Projects** (or `speccoder projects`) shows what waits in every project; **Decide in ‹project›** opens it in its own window at the item; a stop caused by another project is reported there as a bug in one step.
+- 📮 **Feedback between projects.** Your agent asks the projects you depend on for fixes through `speccoder mcp`; they see it in Needs You, and you see each item's status — or get it as a ready GitHub issue.
 - ⚙️ **Automate.** Every command takes `--json` or `--events`, both with [published schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output); every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) and the command that fixes it.
 - 🐙 **Work from GitHub.** `speccoder auth login` once; `speccoder issue start 42` specifies a feature from an issue, `speccoder pr` opens a draft whose description is the evidence. No `gh` needed.
 - 💬 **Ask, explore.** `speccoder ask "why is T004 blocked?"` (⌘L in the app) answers from what it read, each source checked against the reads, and changes nothing; `speccoder spec explore "…"` weighs approaches before there is a spec and starts one from the brief you chose.

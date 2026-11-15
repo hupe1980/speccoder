@@ -102,6 +102,8 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 
 | Command | What it does |
 |---|---|
+| `speccoder feedback` | What this project asks of the projects it depends on, with where each item stands, and what others ask of it ([feedback](@/docs/feedback.md); payload `feedback`) |
+| `speccoder mcp` | The feedback tools for your coding agent over MCP (stdio): report, list, withdraw, requests, resolve |
 | `speccoder projects [forget NAME]` | Your projects by where they stand, with what waits in each (`?` when it could not be read, never 0); `forget` drops one from the list and touches nothing (payload `projects`) |
 | `speccoder inbox` | What waits, in every feature (or `--feature`): *Blocked on you* (oldest first), *Ready to review* (riskiest first, with its reasons), *Working*, *Idle*; each item with its command |
 | `speccoder ask "QUESTION" [--task T]… [--file PATH[:A-B]]… [--continue [ID]] [--list]` | [Ask](@/docs/web.md#ask) about the project: a read-only answer with numbered sources speccoder checked against what was read; a suggested change is printed with its command; at a terminal, `Record this quick change and run it? [y/N]` records it on a yes (never with `--json` or piped input). `--continue` goes on even after Ctrl-C or a long pause, carrying the earlier turns (payload `ask`) |

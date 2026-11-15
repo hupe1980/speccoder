@@ -35,6 +35,14 @@ pub mod progress {
     pub use crate::progress::{Event, Progress, read_live};
 }
 
+/// Feedback between projects (spec 125).
+pub mod feedback {
+    pub use crate::feedback::{
+        Declared, Prepared, asked, decide, file_issue, items, ledger, prepared, report,
+        report_item, requests, resolve, upstreams, withdraw, word,
+    };
+}
+
 /// Several projects, one view (spec 097).
 pub mod projects {
     pub use crate::projects::{

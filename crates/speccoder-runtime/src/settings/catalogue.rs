@@ -744,6 +744,27 @@ pub const CATALOGUE: &[Section] = &[
         ],
     },
     Section {
+        name: "upstream",
+        title: "Upstreams",
+        about: "Projects this one depends on and asks things of: an outbox file of open items the other project reads, by its folder here or its GitHub repository.",
+        named: true,
+        keys: &[
+            k(
+                "path",
+                Kind::Str,
+                None,
+                "Its folder, relative to this project",
+            ),
+            k("repo", Kind::Str, None, "Its GitHub repository, owner/name"),
+            k(
+                "outbox",
+                Kind::Str,
+                None,
+                "The file of open items: .speccoder/outbox/<name>.md when unset",
+            ),
+        ],
+    },
+    Section {
         name: "hooks",
         title: "Hooks",
         about: "Your own commands around a run: a gate (at) stops a tick or a pull request unless it exits 0; an observer (on) hears ticks and stops. Each runs only after you trusted its exact bytes.",

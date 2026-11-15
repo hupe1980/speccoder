@@ -85,6 +85,7 @@ pub fn inbox_with(path: &Path, feature: Option<&str>, state: Option<&Path>) -> C
         && let Some(s) = state
     {
         items.extend(extension_items(path, s));
+        items.extend(feedback_items(path, s));
     }
     sort(&mut items);
     let working = working(path, state);
@@ -1781,6 +1782,74 @@ fn gate_item(
 
 /// One Needs You item per extension that waits for trust (or changed
 /// since), with what it contributes in its detail.
+/// Feedback between projects: what others ask of this project (new or
+/// changed since decided) and what upstreams decided on what it asks
+/// (fixed or declined) — one item per project.
+fn feedback_items(path: &Path, state: &Path) -> Vec<InboxItem> {
+    use speccoder_core::feedback::Status;
+    let item = |kind: Kind, title: String, detail: String| InboxItem {
+        kind: kind.as_str().to_owned(),
+        group: kind.group().as_str().to_owned(),
+        risk: Vec::new(),
+        tool: None,
+        feature: String::new(),
+        task: None,
+        title,
+        detail,
+        since: None,
+        actions: Vec::new(),
+        unverified: None,
+        findings: Vec::new(),
+    };
+    let mut out = Vec::new();
+    let mut by_source: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for r in crate::feedback::requests(state, path) {
+        if matches!(r.status, Status::NotSeen) || r.changed {
+            by_source
+                .entry(r.source.clone())
+                .or_default()
+                .push(format!("{} — {}", r.item.id, r.item.title));
+        }
+    }
+    for (source, lines) in by_source {
+        out.push(item(
+            Kind::Request,
+            format!(
+                "{source} asks {} of this project",
+                count(lines.len(), "thing", "things")
+            ),
+            lines.join(" · "),
+        ));
+    }
+    for up in crate::feedback::asked(state, path) {
+        let news: Vec<String> = up
+            .items
+            .iter()
+            .filter(|i| matches!(i.status, Status::Fixed { .. } | Status::Declined { .. }))
+            .map(|i| {
+                format!(
+                    "{} — {}: {}",
+                    i.item.id,
+                    i.item.title,
+                    crate::feedback::word(&i.status)
+                )
+            })
+            .collect();
+        if !news.is_empty() {
+            out.push(item(
+                Kind::Feedback,
+                format!(
+                    "{} answered {}",
+                    up.name,
+                    count(news.len(), "item", "items")
+                ),
+                news.join(" · "),
+            ));
+        }
+    }
+    out
+}
+
 fn extension_items(path: &Path, state: &Path) -> Vec<InboxItem> {
     let dir = crate::hooks::dir(state, path);
     crate::extensions::load(path)

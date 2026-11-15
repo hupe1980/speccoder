@@ -410,6 +410,12 @@ fn human_body(
             }
             writeln!(out, "{}", result.message())
         }
+        (CommandStatus::Ok, Some(CommandData::Feedback(r))) => {
+            for line in crate::human::feedback(r) {
+                writeln!(out, "{line}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (CommandStatus::Ok, Some(CommandData::Projects(r))) => {
             for line in crate::human::projects(r) {
                 writeln!(out, "{line}")?;

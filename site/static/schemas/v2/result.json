@@ -2668,6 +2668,10 @@
           "$ref": "#/$defs/ProjectsReport"
         },
         {
+          "description": "`feedback`: what this project asks of others, and others of it.",
+          "$ref": "#/$defs/FeedbackReport"
+        },
+        {
           "description": "`extensions`: every extension, what it contributes and its trust.",
           "$ref": "#/$defs/ExtensionsReport"
         },
@@ -12712,6 +12716,308 @@
         "kind",
         "group",
         "title"
+      ]
+    },
+    "FeedbackReport": {
+      "description": "`speccoder feedback`: what this project asks of others, and what others\nask of it.",
+      "type": "object",
+      "properties": {
+        "upstreams": {
+          "description": "The upstreams this project declares.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Upstream"
+          }
+        },
+        "requests": {
+          "description": "Open items other recent projects ask of this one.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Request"
+          }
+        }
+      },
+      "required": [
+        "upstreams",
+        "requests"
+      ]
+    },
+    "Upstream": {
+      "description": "An upstream a project declares, and what it asks of it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Its name (`[upstream.<name>]`).",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its folder, when local.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "repo": {
+          "description": "Its GitHub repository (`owner/name`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outbox": {
+          "description": "The outbox file, project-relative.",
+          "type": "string"
+        },
+        "exists": {
+          "description": "The outbox exists.",
+          "type": "boolean"
+        },
+        "items": {
+          "description": "Its open items.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Tracked"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "outbox",
+        "exists",
+        "items"
+      ]
+    },
+    "Tracked": {
+      "description": "An item with where it stands.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`AP-43`, or `FB-3` for a heading without an id of its own.",
+          "type": "string"
+        },
+        "title": {
+          "description": "The heading's words after the id.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The item's text, up to the next heading.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "Over title and text: a change since a decision shows.",
+          "type": "string"
+        },
+        "status": {
+          "description": "Its status.",
+          "$ref": "#/$defs/Status"
+        },
+        "changed": {
+          "description": "It changed since the other project decided on it.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "text",
+        "digest",
+        "status",
+        "changed"
+      ]
+    },
+    "Status": {
+      "description": "Where an item stands, as the other project decided it.",
+      "oneOf": [
+        {
+          "description": "The other project has not decided on it.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "not_seen"
+            }
+          },
+          "required": [
+            "state"
+          ]
+        },
+        {
+          "description": "Taken up as a spec (a unit).",
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "taken_up"
+            },
+            "unit": {
+              "description": "The unit.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "unit"
+          ]
+        },
+        {
+          "description": "Recorded as a bug task.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "bug"
+            },
+            "task": {
+              "description": "`unit/task`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "task"
+          ]
+        },
+        {
+          "description": "Fixed in a commit of the other project.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "fixed"
+            },
+            "commit": {
+              "description": "The commit.",
+              "type": "string"
+            },
+            "by_agent": {
+              "description": "An agent said so (not a person, not a tick).",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "state",
+            "commit",
+            "by_agent"
+          ]
+        },
+        {
+          "description": "Declined, with the reason given.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "declined"
+            },
+            "reason": {
+              "description": "Why.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "reason"
+          ]
+        },
+        {
+          "description": "Filed as a GitHub issue.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "filed"
+            },
+            "repo": {
+              "description": "`owner/name`.",
+              "type": "string"
+            },
+            "number": {
+              "description": "Its number.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "issue_state": {
+              "description": "`open`, `closed`, or unknown.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "state",
+            "repo",
+            "number"
+          ]
+        },
+        {
+          "description": "The other project could not be read.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "unknown"
+            },
+            "why": {
+              "description": "Why.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "why"
+          ]
+        }
+      ]
+    },
+    "Request": {
+      "description": "What another project asks of this one.",
+      "type": "object",
+      "properties": {
+        "source": {
+          "description": "The asking project's name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its folder.",
+          "type": "string"
+        },
+        "id": {
+          "description": "`AP-43`, or `FB-3` for a heading without an id of its own.",
+          "type": "string"
+        },
+        "title": {
+          "description": "The heading's words after the id.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The item's text, up to the next heading.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "Over title and text: a change since a decision shows.",
+          "type": "string"
+        },
+        "status": {
+          "description": "What this project decided, if anything.",
+          "$ref": "#/$defs/Status"
+        },
+        "changed": {
+          "description": "It changed since this project decided.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "source",
+        "path",
+        "id",
+        "title",
+        "text",
+        "digest",
+        "status",
+        "changed"
       ]
     },
     "ExtensionsReport": {
