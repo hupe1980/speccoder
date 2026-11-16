@@ -66,11 +66,15 @@ pub fn is_aside(path: &str, docs: &BTreeSet<String>) -> bool {
 /// The `## [Unreleased]` section's list items; `None`: no such section.
 #[must_use]
 pub fn unreleased_entries(changelog: &str) -> Option<usize> {
-    let mut lines = changelog.lines();
-    lines.find(|l| {
-        let l = l.trim_start().to_ascii_lowercase();
+    section_entries(changelog, |l| {
         l.starts_with("## [unreleased]") || l.trim_end() == "## unreleased"
-    })?;
+    })
+}
+
+/// The list items of the first section whose lowercased heading matches.
+fn section_entries(changelog: &str, heading: impl Fn(&str) -> bool) -> Option<usize> {
+    let mut lines = changelog.lines();
+    lines.find(|l| heading(&l.trim_start().to_ascii_lowercase()))?;
     Some(
         lines
             .take_while(|l| !l.starts_with("## "))
@@ -82,7 +86,9 @@ pub fn unreleased_entries(changelog: &str) -> Option<usize> {
     )
 }
 
-/// The changelog line: `None` without a changelog.
+/// The changelog line: `None` without a changelog. `cut`: the project's
+/// version when no release tag has it yet — a release being made, whose
+/// entries moved from `[Unreleased]` into its own section.
 #[must_use]
 pub fn changelog(
     file: &str,
@@ -90,11 +96,11 @@ pub fn changelog(
     changed: &[String],
     docs: &BTreeSet<String>,
     base: Option<&str>,
+    cut: Option<&str>,
 ) -> Option<DoneLine> {
     let text = text?;
     let part = DonePart::Changelog;
-    let has = |n: usize| format!("[Unreleased] has {n} {}", plural(n, "entry", "entries"));
-    let Some(entries) = unreleased_entries(text) else {
+    let Some(unreleased) = unreleased_entries(text) else {
         // Only a Keep a Changelog file (`## [1.2.0]` headings) promises an
         // [Unreleased] section; another tool's changelog is not judged.
         if !text.lines().any(|l| l.starts_with("## [")) {
@@ -115,6 +121,18 @@ pub fn changelog(
             )]),
         );
     };
+    // Right after a release is cut, its section holds the entries.
+    let release = (unreleased == 0).then_some(cut).flatten().and_then(|v| {
+        let h = format!("## [{}]", v.to_ascii_lowercase());
+        section_entries(text, |l| l.starts_with(&h))
+            .filter(|n| *n > 0)
+            .map(|n| (v, n))
+    });
+    let (entries, section) = match release {
+        Some((v, n)) => (n, format!("[{v}]")),
+        None => (unreleased, "[Unreleased]".to_owned()),
+    };
+    let has = |n: usize| format!("{section} has {n} {}", plural(n, "entry", "entries"));
     let Some(base) = base else {
         return Some(if entries > 0 {
             DoneLine::new(part, DoneState::Done, has(entries))
@@ -599,6 +617,7 @@ mod tests {
             &changed,
             &docs,
             Some("v0.1.0"),
+            None,
         )
         .unwrap();
         assert_eq!(l.state, DoneState::NotDone);
@@ -627,6 +646,7 @@ mod tests {
             &changed,
             &docs,
             Some("main"),
+            None,
         )
         .unwrap();
         assert_eq!(l.state, DoneState::Done, "{l:?}");
@@ -641,16 +661,45 @@ mod tests {
         );
         let ch = vec!["src/a.rs".to_owned()];
         assert_eq!(
-            changelog("C", Some(&filled), &ch, &docs, None)
+            changelog("C", Some(&filled), &ch, &docs, None, None)
                 .unwrap()
                 .state,
             DoneState::Done
         );
-        let none = changelog("C", Some("# Changelog\n## [0.1.0]\n"), &ch, &docs, None).unwrap();
+        let none = changelog(
+            "C",
+            Some("# Changelog\n## [0.1.0]\n"),
+            &ch,
+            &docs,
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(none.state, DoneState::NotDone);
-        let nobase = changelog("C", Some(CHANGELOG), &ch, &docs, None).unwrap();
+        let nobase = changelog("C", Some(CHANGELOG), &ch, &docs, None, None).unwrap();
         assert_eq!(nobase.state, DoneState::CantTell);
-        assert!(changelog("C", None, &ch, &docs, None).is_none());
+        assert!(changelog("C", None, &ch, &docs, None, None).is_none());
+    }
+
+    #[test]
+    fn a_release_just_cut_is_judged_by_its_own_section() {
+        let docs = BTreeSet::new();
+        let cut = "# Changelog\n\n## [Unreleased]\n\n## [0.2.0] - 2026-02-01\n\n- a thing\n- another\n\n## [0.1.0] - 2026-01-01\n\n- first\n";
+        let ch = vec!["src/a.rs".to_owned(), "CHANGELOG.md".to_owned()];
+        let l = changelog(
+            "CHANGELOG.md",
+            Some(cut),
+            &ch,
+            &docs,
+            Some("v0.1.0"),
+            Some("0.2.0"),
+        )
+        .unwrap();
+        assert_eq!(l.state, DoneState::Done, "{l:?}");
+        assert_eq!(l.summary, "[0.2.0] has 2 entries");
+        // A version already released is no cut: [Unreleased] must say it.
+        let l = changelog("CHANGELOG.md", Some(cut), &ch, &docs, Some("v0.1.0"), None).unwrap();
+        assert_eq!(l.state, DoneState::NotDone);
     }
 
     #[test]
@@ -770,16 +819,17 @@ mod tests {
             &ch,
             &docs,
             Some("main"),
+            None,
         )
         .unwrap();
         assert_eq!(other.state, DoneState::CantTell);
         let old = "## [Unreleased]\n\n- earlier\n\n## [0.1.0]\n";
-        let l = changelog("C", Some(old), &ch, &docs, Some("main")).unwrap();
+        let l = changelog("C", Some(old), &ch, &docs, Some("main"), None).unwrap();
         assert_eq!(l.state, DoneState::NotDone, "{l:?}");
         assert!(l.summary.contains("no entry from these changes"));
         let touched = vec!["src/a.rs".to_owned(), "C".to_owned()];
         assert_eq!(
-            changelog("C", Some(old), &touched, &docs, Some("main"))
+            changelog("C", Some(old), &touched, &docs, Some("main"), None)
                 .unwrap()
                 .state,
             DoneState::Done

@@ -31,7 +31,7 @@ It exits 23 (`DONE-NOT-DONE`) while a line is not done, so it works as a CI step
 
 | Line | Not done when |
 |---|---|
-| **Changelog** | Files other than tests, docs and CI changed since the base, and `CHANGELOG.md` was not changed with them: an entry from earlier work does not count. A changelog not in [Keep a Changelog](https://keepachangelog.com) form is not judged |
+| **Changelog** | Files other than tests, docs and CI changed since the base, and `CHANGELOG.md` was not changed with them: an entry from earlier work does not count. Right after a release is cut (a version no tag has yet), that version's section counts instead of `[Unreleased]`. A changelog not in [Keep a Changelog](https://keepachangelog.com) form is not judged |
 | **Links** | A relative or site-internal link in the docs points at no file, page or heading. External links are counted, not fetched |
 | **Screenshots** | A [declared screenshot](@/docs/configuration.md#screenshots-name) is older than a source it shows, committed or not |
 | **Tone** | A docs page has version history (`new in 0.4`, `since v1.2`), a date, or backlog words (`coming soon`, `in a future release`, `TODO:`) outside code |

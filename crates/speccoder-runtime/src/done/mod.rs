@@ -692,6 +692,10 @@ pub fn judge(
         &facts.changed,
         &docs,
         base,
+        facts
+            .version
+            .as_deref()
+            .filter(|v| facts.last.as_deref() != Some(*v)),
     ));
     if !facts.pages.is_empty() {
         out.push(lines::links(&facts.pages, |p, t| links.resolve(p, t)));
