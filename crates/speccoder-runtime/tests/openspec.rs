@@ -595,9 +595,9 @@ fn openspecs_own_cli_is_a_second_opinion() {
 fn openspecs_planning_skills_are_hosted_and_its_apply_is_refused() {
     let r = repo("sample", NO_ACCEPTANCE);
     // The person trusted the checkout's skills (spec 126).
-    let state = speccoder_runtime::worktree::state_dir().unwrap();
-    let _ = speccoder_runtime::agent_files::trust_all(r.path(), &state, "t", "terminal");
-    let listed = speccoder_runtime::hosting::list(r.path());
+    let state = tempfile::tempdir().unwrap();
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
+    let listed = speccoder_runtime::hosting::list_in(r.path(), Some(state.path()));
     let Some(CommandData::Skills(k)) = listed.data() else {
         panic!("{listed:?}")
     };
@@ -615,9 +615,6 @@ fn openspecs_planning_skills_are_hosted_and_its_apply_is_refused() {
             "openspec-update-change"
         ]
     );
-    let state = tempfile::tempdir().unwrap();
-    // The person trusted the checkout's agent files (spec 126).
-    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     for name in ["apply-change", "archive-change", "sync-specs"] {
         let res = speccoder_runtime::hosting::run_with(

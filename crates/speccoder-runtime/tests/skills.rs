@@ -14,7 +14,7 @@ use serde_json::json;
 use speccoder_core::{CommandData, CommandResult, CommandStatus, SkillRunReport};
 use speccoder_runtime::RunOptions;
 use speccoder_runtime::approvals::{Answer, Approver};
-use speccoder_runtime::hosting::{list, run_with};
+use speccoder_runtime::hosting::{list_in, run_with};
 
 const SKILL: &str = "---\nname: \"demo-specify\"\ndescription: \"Write a feature spec.\"\nuser-invocable: true\n---\n\n## User Input\n\n$ARGUMENTS\n\nWrite specs/002-login/spec.md for the feature; ask the user about anything unclear.\n";
 
@@ -106,9 +106,9 @@ impl Approver for Answers {
 fn skills_are_listed_and_implement_is_refused() {
     let r = repo();
     // The person trusted the checkout's skills (spec 126).
-    let state = speccoder_runtime::worktree::state_dir().unwrap();
-    let _ = speccoder_runtime::agent_files::trust_all(r.path(), &state, "t", "terminal");
-    let res = list(r.path());
+    let state = tempfile::tempdir().unwrap();
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
+    let res = list_in(r.path(), Some(state.path()));
     let Some(CommandData::Skills(k)) = res.data() else {
         panic!("{}", res.message())
     };
@@ -121,9 +121,6 @@ fn skills_are_listed_and_implement_is_refused() {
         names,
         [("demo-specify", false), ("speckit-implement", true)]
     );
-    let state = tempfile::tempdir().unwrap();
-    // The person trusted the checkout's agent files (spec 126).
-    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let f = FakeProvider::new();
     let d: Arc<dyn ModelProvider> = f.clone();
     let res = run_with(

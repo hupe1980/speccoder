@@ -31,13 +31,19 @@ fn root_of(path: &Path) -> Result<PathBuf, Box<CommandResult>> {
 /// `speccoder spec`: the installed skills.
 #[must_use]
 pub fn list(path: &Path) -> CommandResult {
+    list_in(path, crate::worktree::state_dir().as_deref())
+}
+
+/// [`list`] against `state`: without one, no trust is known.
+#[must_use]
+pub fn list_in(path: &Path, state: Option<&Path>) -> CommandResult {
     let root = match root_of(path) {
         Ok(r) => r,
         Err(r) => return *r,
     };
     let format = crate::format::at(&root);
-    let found = match crate::worktree::state_dir() {
-        Some(state) => skills::discover_trusted(&root, format.planning(), &state),
+    let found = match state {
+        Some(state) => skills::discover_trusted(&root, format.planning(), state),
         None => skills::discover_with(&root, format.planning()),
     };
     let message = if found.is_empty() {
