@@ -3058,6 +3058,71 @@ fn ago(then: u64, now: u64) -> String {
     }
 }
 
+/// `claim`: the feature's claims, one line each — whose, since when,
+/// until when — then the notices.
+#[must_use]
+pub fn claims(r: &speccoder_core::claims::ClaimsReport, look: &crate::style::Look) -> Vec<String> {
+    use crate::style::{Glyph, Token};
+    use speccoder_core::claims::{ClaimState, relative};
+    let place = match (&r.remote, r.live) {
+        (Some(remote), true) => format!("on {remote}"),
+        (Some(remote), false) => format!("on {remote}, as last fetched"),
+        (None, _) => "on this machine".to_owned(),
+    };
+    let mut out = vec![format!("Claims on {} ({place})", r.feature)];
+    let who = |v: &speccoder_core::claims::ClaimView| match (&v.claim, v.state) {
+        (_, ClaimState::Mine) => "you".to_owned(),
+        (Some(c), _) => c.holder.clone(),
+        (None, _) => "?".to_owned(),
+    };
+    let story_w = r.claims.iter().map(|v| v.story.len()).max().unwrap_or(0);
+    let who_w = r
+        .claims
+        .iter()
+        .map(|v| who(v).chars().count())
+        .max()
+        .unwrap_or(0);
+    for v in &r.claims {
+        let (glyph, what) = match (&v.claim, v.state) {
+            (None, _) | (_, ClaimState::Unreadable) => (
+                Glyph::Skipped,
+                "not a claim speccoder can read — anyone may take it".to_owned(),
+            ),
+            (Some(c), ClaimState::Done | ClaimState::Mine) if c.done.is_some() => (
+                Glyph::Verified,
+                format!("done on {}, held until it is merged", c.branch),
+            ),
+            (Some(c), ClaimState::Stale) => (
+                Glyph::Skipped,
+                format!("ran out {} — anyone may take it", relative(c.until, r.at)),
+            ),
+            (Some(c), state) => (
+                if state == ClaimState::Mine {
+                    Glyph::Running
+                } else {
+                    Glyph::Attention
+                },
+                format!(
+                    "since {} · until {}",
+                    relative(c.since, r.at),
+                    relative(c.until, r.at)
+                ),
+            ),
+        };
+        out.push(format!(
+            "  {} {:<story_w$}  {:<who_w$}  {}",
+            look.cell(glyph),
+            v.story,
+            who(v),
+            look.paint(Token::Muted, &what),
+        ));
+    }
+    for n in &r.notices {
+        out.push(look.paint(Token::Muted, &format!("  {n}")));
+    }
+    out
+}
+
 /// `speccoder forecast`: one line per sibling, problems first.
 pub fn forecast(
     r: &speccoder_core::forecast::ForecastReport,

@@ -73,7 +73,7 @@ fn scripted_sample() -> Asset {
     git(&r, &["add", "-A"]);
     git(&r, &["commit", "-q", "-m", "wordcount"]);
     let state = tempfile::tempdir().unwrap();
-    // The person trusted the checkout's skill (spec 126).
+    // The person trusted the checkout's skill.
     let _ = speccoder_runtime::agent_files::trust_all(&r, state.path(), "t", "terminal");
     let f = FakeProvider::new();
     f.will_call_tool(

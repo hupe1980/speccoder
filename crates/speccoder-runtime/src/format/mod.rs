@@ -350,6 +350,10 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
         Vec::new()
     }
 
+    /// Settings speccoder gives a project it made, after the format's own
+    /// init ran ([`Self::init_steps`]).
+    fn after_init(&self, _root: &Path) {}
+
     /// Writes what [`Adapter::init_steps`] names in speccoder's state
     /// before they run (Spec Kit: the bundled preset, extracted).
     ///

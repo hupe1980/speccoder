@@ -1,4 +1,4 @@
-//! A checkout's agent files (spec 126): what a checkout tells agents —
+//! A checkout's agent files: what a checkout tells agents —
 //! instructions, skills, an executor's settings — and whether a person
 //! trusted each one as it is now. Agents read only trusted bytes.
 

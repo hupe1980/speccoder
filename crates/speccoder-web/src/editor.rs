@@ -1,4 +1,4 @@
-//! The person's editor over the web host (spec 128): the editors found
+//! The person's editor over the web host: the editors found
 //! here and the chosen one, choosing one, and opening a project file at a
 //! line in it. The page names a project-relative path; the host resolves
 //! and checks it, and runs only the chosen window editor's launcher.

@@ -1,4 +1,4 @@
-// The person's editor, one click away (spec 128): open a project file at a
+// The person's editor, one click away: open a project file at a
 // line in it through the host; with no editor yet, the Choose Editor sheet
 // asks once and the open goes on.
 

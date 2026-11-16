@@ -57,7 +57,37 @@ pub fn collect(names: &[String], diags: &mut Vec<Diagnostic>) -> Vec<FeatureRef>
         })
         .collect();
     features.sort_by_key(key);
+    // Two features with one number: made on two branches at once.
+    for pair in features.windows(2) {
+        if let [a, b] = pair
+            && same_number(&a.prefix, &b.prefix)
+        {
+            diags.push(
+                Diagnostic::new(
+                    Severity::Warning,
+                    "discover.same-number",
+                    format!("{} and {} share the number {}", a.name, b.name, a.prefix),
+                )
+                .at(b.dir.clone())
+                .hint("select them by name; with \"feature_numbering\": \"timestamp\" in .specify/init-options.json new features never share one"),
+            );
+        }
+    }
     features
+}
+
+fn same_number(a: &str, b: &str) -> bool {
+    match (a.parse::<u128>(), b.parse::<u128>()) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => a == b,
+    }
+}
+
+/// The name without its prefix (`export` of `20261116-101500-export`).
+fn slug(f: &FeatureRef) -> &str {
+    f.name
+        .strip_prefix(f.prefix.as_str())
+        .map_or(f.name.as_str(), |r| r.trim_start_matches('-'))
 }
 
 /// Whether `arg` names `f`: its full name, its prefix, or the same number.
@@ -93,7 +123,44 @@ pub fn select(
     };
 
     if let Some(arg) = argument {
-        return match features.iter().find(|f| matches(f, arg)) {
+        // The full name first; then the number; then the name without it.
+        let exact = features.iter().find(|f| f.name == arg);
+        let numbered: Vec<&FeatureRef> = features.iter().filter(|f| matches(f, arg)).collect();
+        let named: Vec<&FeatureRef> = features
+            .iter()
+            .filter(|f| slug(f).eq_ignore_ascii_case(arg))
+            .collect();
+        let found = match (exact, numbered.as_slice(), named.as_slice()) {
+            (Some(f), _, _) => Some(f),
+            (None, [f], _) | (None, [], [f]) => Some(*f),
+            (None, [_, _, ..], _) | (None, [], [_, _, ..]) => {
+                let many = if numbered.len() > 1 {
+                    &numbered
+                } else {
+                    &named
+                };
+                diags.push(
+                    Diagnostic::new(
+                        Severity::Error,
+                        "select.ambiguous",
+                        format!(
+                            "`{arg}` names {}",
+                            many.iter()
+                                .map(|f| f.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(" and ")
+                        ),
+                    )
+                    .hint(format!(
+                        "pick one by its full name: `speccoder feature {}`",
+                        many[0].name
+                    )),
+                );
+                return none;
+            }
+            (None, [], []) => None,
+        };
+        return match found {
             Some(f) => Selection {
                 reason: SelectionReason::Argument,
                 feature: Some(f.name.clone()),
@@ -195,6 +262,32 @@ mod tests {
         assert_eq!(prefix("12345678-auth"), Some("12345678"));
         assert_eq!(prefix("notes"), None);
         assert_eq!(prefix("001"), None);
+    }
+
+    #[test]
+    fn one_number_twice_is_said_and_never_guessed() {
+        let names = ["005-a", "005-b", "20261116-101500-export"].map(String::from);
+        let mut diags = Vec::new();
+        let features = collect(&names, &mut diags);
+        assert_eq!(diags[0].code, "discover.same-number");
+        let mut diags = Vec::new();
+        let s = select(&features, Some("005"), None, None, &mut diags);
+        assert_eq!(s.feature, None);
+        assert_eq!(diags[0].code, "select.ambiguous");
+        assert!(
+            diags[0].message.contains("005-a and 005-b"),
+            "{}",
+            diags[0].message
+        );
+        let mut diags = Vec::new();
+        let by_name = |arg| select(&features, Some(arg), None, None, &mut Vec::new()).feature;
+        assert_eq!(by_name("005-b").as_deref(), Some("005-b"));
+        assert_eq!(by_name("export").as_deref(), Some("20261116-101500-export"));
+        assert_eq!(by_name("Export").as_deref(), Some("20261116-101500-export"));
+        assert_eq!(
+            select(&features, Some("nope"), None, None, &mut diags).feature,
+            None
+        );
     }
 
     #[test]

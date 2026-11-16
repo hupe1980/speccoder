@@ -1,4 +1,4 @@
-//! The attempt's thread, a Stop that stops, and Explain (spec 124), with a
+//! The attempt's thread, a Stop that stops, and Explain, with a
 //! scripted model.
 
 // Test code: panicking on unexpected input is the failure report.

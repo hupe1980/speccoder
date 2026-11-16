@@ -1,4 +1,4 @@
-//! `speccoder mcp`: the feedback tools (spec 125) for a project's coding
+//! `speccoder mcp`: the feedback tools for a project's coding
 //! agent — any MCP client — over stdio. What this project asks of the
 //! projects it depends on (`feedback_upstreams`, `feedback_report`,
 //! `feedback_withdraw`) and what others ask of it (`feedback_requests`,

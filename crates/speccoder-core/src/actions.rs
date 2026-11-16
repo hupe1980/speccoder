@@ -317,6 +317,16 @@ pub enum Runnable {
         /// The story (`US3`).
         story: String,
     },
+    /// Claim a story of the feature, release it, or (`force`) take over or
+    /// remove another person's claim.
+    Claim {
+        /// The story (`US2`).
+        story: String,
+        /// Release instead of claim.
+        release: bool,
+        /// Another person's claim.
+        force: bool,
+    },
     /// Rule that a task's tests are wrong (the input is the reason): one
     /// scenario's oracle tests, or — none named — the task's own test
     /// outside a story. The next run writes them again.
@@ -664,6 +674,8 @@ pub enum ActionKind {
     RuleScenario,
     /// [`Runnable::CheckStory`].
     CheckStory,
+    /// [`Runnable::Claim`].
+    Claim,
     /// [`Runnable::AcceptUntestable`].
     AcceptUntestable,
     /// [`Runnable::PresetAdd`].
@@ -734,6 +746,7 @@ impl ActionKind {
         Self::AcceptanceAt,
         Self::RuleScenario,
         Self::CheckStory,
+        Self::Claim,
         Self::AcceptUntestable,
         Self::PresetAdd,
         Self::PlanThrough,
@@ -793,6 +806,7 @@ impl ActionKind {
             Self::AcceptanceAt => "acceptance_at",
             Self::RuleScenario => "rule_scenario",
             Self::CheckStory => "check_story",
+            Self::Claim => "claim",
             Self::AcceptUntestable => "accept_untestable",
             Self::PresetAdd => "preset_add",
             Self::PlanThrough => "plan_through",
@@ -959,6 +973,11 @@ impl ActionKind {
             Self::CheckStory => Runnable::CheckStory {
                 story: "US3".to_owned(),
             },
+            Self::Claim => Runnable::Claim {
+                story: "US2".to_owned(),
+                release: false,
+                force: true,
+            },
             Self::AcceptUntestable => Runnable::AcceptUntestable {
                 scenario: "US2-2".to_owned(),
             },
@@ -1063,6 +1082,7 @@ impl Runnable {
             Self::AcceptanceAt { .. } => ActionKind::AcceptanceAt,
             Self::RuleScenario { .. } => ActionKind::RuleScenario,
             Self::CheckStory { .. } => ActionKind::CheckStory,
+            Self::Claim { .. } => ActionKind::Claim,
             Self::AcceptUntestable { .. } => ActionKind::AcceptUntestable,
             Self::PresetAdd { .. } => ActionKind::PresetAdd,
             Self::PlanThrough { .. } => ActionKind::PlanThrough,
@@ -1131,7 +1151,7 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         Runnable::Explore { resume, .. } => resume.clone(),
         Runnable::ExploreChoose { session, .. } => Some(session.clone()),
         Runnable::OracleTests { req, .. } => Some(req.clone()),
-        Runnable::CheckStory { story } => Some(story.clone()),
+        Runnable::CheckStory { story } | Runnable::Claim { story, .. } => Some(story.clone()),
         Runnable::HookTrust { name, .. }
         | Runnable::HookTest { name }
         | Runnable::ExtensionTrust { name, .. } => Some(name.clone()),

@@ -183,6 +183,24 @@ pub(super) fn ended(
     }
 }
 
+/// The feature and story of `task`, when it belongs to one.
+fn story_of(path: &Path, feature: Option<&str>, task: &str) -> Option<(String, String)> {
+    let inspected = crate::inspect(path, feature);
+    let Some(CommandData::Inspect(s)) = inspected.data() else {
+        return None;
+    };
+    let f = s.feature.as_ref()?;
+    let story = f
+        .tasks
+        .as_ref()?
+        .tasks
+        .iter()
+        .find(|t| t.id == task)?
+        .story
+        .clone()?;
+    Some((f.feature.name.clone(), story))
+}
+
 pub(crate) fn run_task(
     path: &Path,
     feature: Option<&str>,
@@ -218,6 +236,27 @@ pub(crate) fn run_task(
             });
         }
         return crate::bug::run_with(path, Some(&slug), None, state, provider, secret, options);
+    }
+    // A task run on its own claims its story first: another
+    // person's claim stops it before anything is spent.
+    if !options.claimed
+        && let Some((unit, story)) = story_of(path, feature, task)
+    {
+        match crate::claims::Run::new(path, &unit).hold(&story) {
+            crate::claims::Hold::Go(line) => {
+                if let (Some(text), Some(p)) = (line, &options.progress) {
+                    p.event(&progress::Event::Notice { text });
+                }
+            }
+            crate::claims::Hold::Stop(stop) => {
+                return CommandResult::new(
+                    "run",
+                    CommandStatus::NeedsHuman,
+                    &format!("{task}: {}", stop.message()),
+                )
+                .caused_by(&stop);
+            }
+        }
     }
     let first = run_task_once(
         path,

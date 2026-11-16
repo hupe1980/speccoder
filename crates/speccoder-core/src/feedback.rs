@@ -1,4 +1,4 @@
-//! Feedback between projects (spec 125): an outbox file a project's agent
+//! Feedback between projects: an outbox file a project's agent
 //! (or its person) writes for another project it depends on — open items
 //! as `### AP-43 — title` under `## Open` — and each item's status as the
 //! other project decided it. speccoder reads the file as written and

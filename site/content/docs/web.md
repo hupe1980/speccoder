@@ -65,6 +65,7 @@ A project without `speccoder.toml` opens in the **setup assistant**: what was fo
 | **Review the Spec** | The result will be judged against these words. |
 | **Change Requests** | Revise the spec as you asked, then review it again. |
 | **Yours to Do** | A step only you can take — do it, give the agent a hint, or skip it. |
+| **Someone Else's Story** | The next task belongs to a story another person [claimed](@/docs/claims.md). Talk to them, or **Take It Over** (after a confirmation: they are not told). |
 | **Refused on Autopilot** | Calls the autopilot run would have asked you about were refused, not asked: look at each, and allow one when you run again. |
 | **Blocked by a Gate** | Your gate did not let the tick through — its own words say why. Fix that, then run again. |
 | **Gates to Trust** | A gate runs only after you trusted exactly what it runs; until then it blocks every tick. |
@@ -92,7 +93,7 @@ A task that stopped because of another project offers **Report to…**: pick the
 
 <figure class="shot"><img class="shot-light" src="../../screenshots/overview-light.webp" alt="Overview: every feature with its progress and next step" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/overview-dark.webp" alt="Overview: every feature with its progress and next step" width="1440" height="900" loading="lazy" decoding="async"></figure>
 
-Per feature: its ring of verdicts, stage, tasks done, requirements proven, spend and calls waiting, and *Conflicts with N branches* from its last [merge forecast](@/docs/forecast.md); a card opens its board. Below, the open [GitHub issues](@/docs/github.md#a-feature-from-an-issue), each with **Start Feature** (and **Fix as Bug** when labelled `bug`); an issue a spec already names shows that feature and **Comment**. Not signed in, the card offers **Sign In**.
+Per feature: its ring of verdicts, stage, tasks done, requirements proven, spend and calls waiting, *Conflicts with N branches* from its last [merge forecast](@/docs/forecast.md), and *Dana has US2* for each story another person [claimed](@/docs/claims.md); a card opens its board. Below, the open [GitHub issues](@/docs/github.md#a-feature-from-an-issue), each with **Start Feature** (and **Fix as Bug** when labelled `bug`); an issue a spec already names shows that feature and **Comment**. Not signed in, the card offers **Sign In**.
 
 ### Board
 

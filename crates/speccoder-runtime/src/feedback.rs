@@ -1,4 +1,4 @@
-//! Feedback between projects (spec 125). A project declares the projects
+//! Feedback between projects. A project declares the projects
 //! it depends on as `[upstream.<name>]` with an outbox file of open items;
 //! the upstream lists what its downstream projects ask of it and keeps its
 //! decisions in its own state; the downstream reads them for each item's

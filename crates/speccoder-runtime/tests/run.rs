@@ -3290,7 +3290,7 @@ fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
 }
 
 /// A pull request opens only when the definition of done holds on the
-/// branch; `--force` hands off with the open lines in the body (spec 127).
+/// branch; `--force` hands off with the open lines in the body.
 #[test]
 fn pr_stops_until_the_definition_of_done_holds() {
     use speccoder_runtime::handoff::{PrOptions, pr};
@@ -3853,7 +3853,7 @@ fn the_repository_instructions_reach_the_attempt_and_the_test_author() {
         ],
     );
     let state = tempfile::tempdir().unwrap();
-    // The person trusted the checkout's agent files (spec 126).
+    // The person trusted the checkout's agent files.
     let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));

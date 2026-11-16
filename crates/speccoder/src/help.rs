@@ -19,6 +19,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
 pub const ADVANCED: &[&str] = &[
     "done",
     "forecast",
+    "claim",
     "open",
     "projects",
     "feedback",

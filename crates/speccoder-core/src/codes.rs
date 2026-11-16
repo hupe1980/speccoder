@@ -714,6 +714,33 @@ pub const CATALOG: &[Entry] = &[
         ["speccoder forecast"]
     ),
     entry!(
+        "CLAIMED",
+        P,
+        S::NeedsHuman,
+        "another person holds this story",
+        "A story is claimed by whoever starts it, as a ref on the shared remote: one person or agent per story. The claim names who holds it and until when; a done claim holds until its branch is merged. Talk to them, or take it over — they are not told.",
+        ["speccoder claim", "speccoder claim US1 --force"]
+    ),
+    entry!(
+        "CLAIM-NO-IDENTITY",
+        E,
+        S::ConfigError,
+        "git does not know who you are",
+        "A claim names its holder by git's user.name and user.email; neither is set here.",
+        [
+            "git config user.email you@example.com",
+            "git config user.name \"Your Name\""
+        ]
+    ),
+    entry!(
+        "CLAIM-UNREACHABLE",
+        E,
+        S::Error,
+        "the remote that keeps claims cannot be reached",
+        "Claims live on the shared remote; reading or changing one needs it. A run goes on without claiming and says so.",
+        ["git fetch", "speccoder claim"]
+    ),
+    entry!(
         "RETURN-BLOCKED",
         P,
         S::NeedsHuman,

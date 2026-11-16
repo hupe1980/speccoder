@@ -194,7 +194,7 @@ pub fn open_from(asset: &Asset, state: &Path, fresh: bool) -> CommandResult {
         {
             return failed(&format!("the sample's journal could not be placed: {e}"));
         }
-        // Its agent files are speccoder's own (spec 126).
+        // Its agent files are speccoder's own.
         crate::agent_files::record_all_written(&dir, state);
     }
     let runs: Vec<SampleRun> = manifest

@@ -243,7 +243,7 @@ pub fn mask(text: &str) -> String {
 
 /// [`mask`], and every well-known secret shape too: for what speccoder
 /// writes into history or sends away — commit messages, a pull request's
-/// body, an outbox, MCP replies (spec 126). What a tool reads stays
+/// body, an outbox, MCP replies. What a tool reads stays
 /// [`mask`]ed only, so a test fixture's fake token reads as written.
 #[must_use]
 pub fn mask_out(text: &str) -> String {
@@ -306,7 +306,7 @@ pub fn register_env() {
 }
 
 /// Registers what a project's secret files give to mask, in any process
-/// (spec 126): the environment ([`register_env`]), each worktree's copied
+///: the environment ([`register_env`]), each worktree's copied
 /// files (its include record), and the checkout's own ignored `.env*`.
 pub fn register_project(root: &Path) {
     register_env();

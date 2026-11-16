@@ -1,4 +1,4 @@
-// The Pull Request card with the definition of done (spec 127): what is
+// The Pull Request card with the definition of done: what is
 // open and how to close it before Open Draft PR; a stop at it offers Open
 // Anyway, which hands off with the open lines in the body.
 

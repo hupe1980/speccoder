@@ -300,6 +300,9 @@ pub fn run_feature_with(
         }
     }
     let mut planned = false;
+    // The stories this run holds: claimed before their first
+    // task, renewed hourly, marked done after their last.
+    let mut claims: Option<crate::claims::Run> = None;
     while budget > 0 {
         if options
             .cancel
@@ -430,6 +433,26 @@ pub fn run_feature_with(
             .and_then(|f| f.tasks.as_ref())
             .map(|t| t.tasks.iter().collect())
             .unwrap_or_default();
+        let claims = claims.get_or_insert_with(|| crate::claims::Run::new(path, &w.feature));
+        // A story this run holds whose every task is ticked: done on the
+        // branch, held until it is merged.
+        let mut stories: std::collections::BTreeMap<&str, bool> = std::collections::BTreeMap::new();
+        for t in &parsed {
+            if let Some(s) = t.story.as_deref() {
+                *stories.entry(s).or_insert(true) &= t.done;
+            }
+        }
+        let finished: Vec<&str> = stories
+            .into_iter()
+            .filter_map(|(s, all)| all.then_some(s))
+            .collect();
+        if !finished.is_empty()
+            && let Ok(Some(head)) =
+                crate::git::Git::at(std::path::Path::new(w.path.as_deref().unwrap_or_default()))
+                    .head()
+        {
+            claims.done(&finished, &head);
+        }
         let saved = crate::attempts::list(&project, &w.feature);
         let stopped = |id: &str| {
             saved
@@ -594,6 +617,30 @@ pub fn run_feature_with(
             }
             continue;
         }
+        // The story is claimed before its task: another person's claim
+        // stops the run here, before anything is spent on it.
+        if let Some(story) = parsed
+            .iter()
+            .find(|t| t.id == next.id)
+            .and_then(|t| t.story.clone())
+        {
+            match claims.hold(&story) {
+                crate::claims::Hold::Go(line) => {
+                    if let (Some(text), Some(p)) = (line, &options.progress) {
+                        p.event(&progress::Event::Notice { text });
+                    }
+                }
+                crate::claims::Hold::Stop(stop) => {
+                    return finish(
+                        feature_name,
+                        attempts,
+                        CommandStatus::NeedsHuman,
+                        format!("{}: {}", next.id, stop.message()),
+                    )
+                    .caused_by(&stop);
+                }
+            }
+        }
         // The run's cap: nothing starts once it is spent; what is left is
         // the next task's, or split evenly across a group's lanes.
         if let Some(c) = cap
@@ -623,6 +670,14 @@ pub fn run_feature_with(
             .filter(|t| t.state == TaskState::Ready && !skipped.contains_key(&t.id))
             .filter(|t| {
                 parallel_ids.contains(&t.id) && !one_at_a_time.contains(&t.id) && !yours(&t.id)
+            })
+            // Only stories this run holds run beside each other.
+            .filter(|t| {
+                parsed
+                    .iter()
+                    .find(|x| x.id == t.id)
+                    .and_then(|x| x.story.as_deref())
+                    .is_none_or(|s| claims.holds(s))
             })
             // A story whose oracle is still to be written goes first, alone.
             .filter(|t| {
@@ -704,6 +759,7 @@ pub fn run_feature_with(
             secret,
             &RunOptions {
                 left,
+                claimed: true,
                 ..options.clone()
             },
         );

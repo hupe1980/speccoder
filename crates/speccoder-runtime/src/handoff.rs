@@ -31,6 +31,29 @@ pub struct PrOptions<'a> {
     pub github: &'a crate::github::Ctx,
 }
 
+/// The stories with a task speccoder committed on the branch.
+fn worked_stories(path: &Path, feature: &str, report: &StatusReport) -> Vec<String> {
+    let inspected = crate::inspect(path, Some(feature));
+    let Some(CommandData::Inspect(snap)) = inspected.data() else {
+        return Vec::new();
+    };
+    let tasks = snap
+        .feature
+        .as_ref()
+        .and_then(|f| f.tasks.as_ref())
+        .map(|t| t.tasks.as_slice())
+        .unwrap_or_default();
+    let mut stories: Vec<String> = report
+        .tasks
+        .iter()
+        .filter(|t| t.commit.is_some())
+        .filter_map(|t| tasks.iter().find(|x| x.id == t.id)?.story.clone())
+        .collect();
+    stories.sort();
+    stories.dedup();
+    stories
+}
+
 /// Commit trailers on the branch: (task, `Mutation:` value, `Usage:` value).
 fn trailers(repo: &Git, base: &str, branch: &str) -> Vec<(String, String, String)> {
     const FS: char = '\u{1f}';
@@ -252,7 +275,7 @@ pub fn body(status: &StatusReport, trailers: &[(String, String, String)]) -> Str
         out,
         "\n> `verified` means the spec-derived acceptance tests went from red to green and no check regressed. It does not mean the change is correct, complete or safe: review this like any contribution. Opened as a draft by `speccoder pr`; speccoder never merges."
     );
-    // Nothing a secret file gave reaches the pull request (spec 126).
+    // Nothing a secret file gave reaches the pull request.
     crate::secrets::mask_out(&out)
 }
 
@@ -400,6 +423,28 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
                 t.failed.join(", ")
             ),
         );
+    }
+    // A story of this branch that another person holds: two people did
+    // one story.
+    if !options.force {
+        let stories = worked_stories(path, &report.feature, report);
+        if let Some(c) = crate::claims::others_on(&repo_root, &report.feature, &stories).first() {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs());
+            return refuse(
+                CommandStatus::NeedsHuman,
+                &format!(
+                    "{} — and {branch} has work on it; nothing was pushed",
+                    speccoder_core::claims::held_line(c, now)
+                ),
+            )
+            .with_code("CLAIMED")
+            .with_fix(vec![
+                format!("talk to {} <{}>", c.holder, c.email),
+                "speccoder pr --force".to_owned(),
+            ]);
+        }
     }
     // The definition of done on the branch as it will be pushed; CI is
     // not judged (it runs after the push).

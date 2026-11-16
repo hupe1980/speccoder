@@ -883,7 +883,7 @@ mod tests {
         assert_eq!(p.unenforced, Unenforced::default());
     }
 
-    /// F-141: the person's package caches are read by every command and
+    /// The person's package caches are read by every command and
     /// written only by what fetches; the rest derives into a private cache.
     #[test]
     fn caches_are_written_only_by_what_fetches() {

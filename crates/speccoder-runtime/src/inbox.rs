@@ -219,6 +219,7 @@ fn counted(kind: &str, n: usize) -> String {
             "agent files that wait for your trust",
         ),
         "yours" => ("step only you can take", "steps only you can take"),
+        "claimed" => ("story someone else holds", "stories someone else holds"),
         "aside" => ("set-aside change", "set-aside changes"),
         "commit" => ("plan to commit", "plans to commit"),
         "handoff" => ("branch to hand off", "branches to hand off"),
@@ -273,6 +274,62 @@ fn summary(items: &[InboxItem], features: usize) -> String {
     )
 }
 
+/// The item for a feature whose next ready task belongs to a story another
+/// person holds: who, since when, and Take It Over.
+fn claimed_item(
+    path: &Path,
+    feature: &str,
+    r: &StatusReport,
+    flag: &dyn Fn(String) -> String,
+) -> Option<(String, String, String, Vec<speccoder_core::actions::Action>)> {
+    let others = crate::claims::others(path, feature);
+    if others.is_empty() {
+        return None;
+    }
+    let next = r.tasks.iter().find(|t| t.state == "ready")?;
+    let inspected = crate::inspect(path, Some(feature));
+    let Some(CommandData::Inspect(snap)) = inspected.data() else {
+        return None;
+    };
+    let story = snap
+        .feature
+        .as_ref()
+        .and_then(|f| f.tasks.as_ref())
+        .and_then(|t| t.tasks.iter().find(|x| x.id == next.id))
+        .and_then(|t| t.story.clone())?;
+    let c = others.iter().find(|c| c.story == story)?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let mut take = action(
+        "next",
+        format!("take {story} over from {}", c.holder),
+        format!("{} is not told; talk to them first", c.holder),
+        flag(format!("speccoder claim {story} --force")),
+    )
+    .with_run(Runnable::Claim {
+        story: story.clone(),
+        release: false,
+        force: true,
+    });
+    take.confirm = Some(format!(
+        "{} is not told and may keep working on it: talk to them first.",
+        c.holder
+    ));
+    Some((
+        next.id.clone(),
+        format!("{story} is {}'s", c.holder),
+        format!(
+            "{} — {} waits for it. Talk to {} <{}>, or take it over.",
+            speccoder_core::claims::held_line(c, now),
+            next.id,
+            c.holder,
+            c.email
+        ),
+        vec![take],
+    ))
+}
+
 /// One feature's items. `several`: commands name the feature.
 fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -> Vec<InboxItem> {
     let report = crate::status::report(path, Some(feature));
@@ -310,6 +367,13 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         findings: Vec::new(),
     };
     let mut out = Vec::new();
+    // The next task's story is another person's: from this
+    // repository's copy of the claims, no network.
+    out.extend(
+        claimed_item(path, feature, r, &flag).map(|(task, title, detail, actions)| {
+            item("claimed", Some(&task), title, detail, actions)
+        }),
+    );
     let waiting: Vec<&str> = approvals
         .iter()
         .flat_map(|a| &a.pending)
@@ -1856,7 +1920,7 @@ fn feedback_items(path: &Path, state: &Path) -> Vec<InboxItem> {
 }
 
 /// The checkout's agent files that wait for trust: one item for the
-/// project (spec 126).
+/// project.
 fn checkout_items(path: &Path, state: &Path) -> Vec<InboxItem> {
     let report = crate::agent_files::states(path, state);
     let Some(title) = report.title() else {

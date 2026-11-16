@@ -137,7 +137,7 @@ class AppState {
   thinking = $state<string | null>(null);
   /** Counts the running attempt's turns, calls and stages: a thread refetches on it. */
   pulse = $state(0);
-  /** The checkout's agent files to review and trust (spec 126). */
+  /** The checkout's agent files to review and trust. */
   trustSheet = $state(false);
   /** A waiting call to explain: its task (feature/task) and call id. */
   explain = $state<{ task: string; call: string } | null>(null);
@@ -158,7 +158,7 @@ class AppState {
   palette = $state(false);
   view = $state<"inbox" | "overview" | "board" | "code" | "documents" | "report" | "settings" | "setup" | "projects">("inbox");
   /** Another project's request a sheet was opened for: recorded as taken up
-   *  only when that sheet is submitted (spec 125). */
+   *  only when that sheet is submitted. */
   pendingFeedback = $state<{ source: string; id: string; decision: "taken_up" | "bug" } | null>(null);
   /** Every recent project rolled up (spec 097); `null` until read. */
   projects = $state<ProjectsReport | null>(null);

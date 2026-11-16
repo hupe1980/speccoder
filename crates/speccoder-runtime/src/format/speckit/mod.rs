@@ -93,6 +93,10 @@ impl Adapter for SpecKit {
         })
     }
 
+    fn after_init(&self, root: &std::path::Path) {
+        timestamp_ids(root);
+    }
+
     fn init_steps(&self, choices: &crate::format::FormatInit) -> Vec<crate::format::InitStep> {
         use speccoder_core::new_project::ExtensionKind;
         let script = if cfg!(windows) { "ps" } else { "sh" };
@@ -526,6 +530,27 @@ impl Adapter for SpecKit {
         unit_dir: &str,
     ) -> CommitPrecondition {
         precondition(&join(texts::MARKER), &join(unit_dir))
+    }
+}
+
+/// Sets Spec Kit's `feature_numbering` to `timestamp` (`YYYYMMDD-HHMMSS-name`):
+/// two people's branches never mint one id. `specify init` writes
+/// `sequential` by default and keeps what it finds from then on.
+fn timestamp_ids(root: &std::path::Path) {
+    let path = root.join(".specify/init-options.json");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    let Ok(serde_json::Value::Object(mut o)) = serde_json::from_str::<serde_json::Value>(&text)
+    else {
+        return;
+    };
+    if o.get("feature_numbering").and_then(|v| v.as_str()) == Some("timestamp") {
+        return;
+    }
+    o.insert("feature_numbering".to_owned(), "timestamp".into());
+    if let Ok(out) = serde_json::to_string_pretty(&serde_json::Value::Object(o)) {
+        let _ = std::fs::write(&path, out + "\n");
     }
 }
 

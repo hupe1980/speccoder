@@ -1,4 +1,4 @@
-//! A checkout's agent files (spec 126): the one table of what a checkout
+//! A checkout's agent files: the one table of what a checkout
 //! tells agents — instructions, skills, each executor's project settings —
 //! and a person's trust in each, bound to its bytes.
 //!

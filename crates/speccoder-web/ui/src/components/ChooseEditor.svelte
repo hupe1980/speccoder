@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Choose Editor (spec 128): asked once, the first time something opens
+  // Choose Editor: asked once, the first time something opens
   // with no editor chosen; the editors found on this machine, the one VISUAL
   // or EDITOR names first. The choice is saved in the person's settings, so
   // the window and the terminal use it too; then the open goes on.

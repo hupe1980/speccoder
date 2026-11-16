@@ -1,4 +1,4 @@
-// The merge forecast on the Pull Request card (spec 129): one line until
+// The merge forecast on the Pull Request card: one line until
 // the first check, problems first with who, what and how to see it, the
 // rest in one quiet line; Check Open Branches runs one.
 

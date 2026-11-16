@@ -379,7 +379,7 @@ fn the_environment_is_the_invocations() {
     });
 }
 
-/// F-141: the person's package caches are read by a run's commands and
+/// The person's package caches are read by a run's commands and
 /// written by none of them — a planted line there would run in every later
 /// build; tools' derived state goes to the private cache; what fetches may
 /// write them.

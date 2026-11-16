@@ -687,15 +687,15 @@ const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
     ),
     (
         "choose",
-        "saves the person's own editor as `[ui] editor` in their personal settings, at their click (spec 128)",
+        "saves the person's own editor as `[ui] editor` in their personal settings, at their click",
     ),
     (
         "open",
-        "runs the person's chosen window editor's launcher on a project file they clicked, path checked inside, no shell (spec 128)",
+        "runs the person's chosen window editor's launcher on a project file they clicked, path checked inside, no shell",
     ),
     (
         "check",
-        "a merge forecast at the person's click (spec 129): fetches, merges in git's object store, runs frozen oracle tests in sandboxed scratch worktrees; writes only its state file",
+        "a merge forecast at the person's click: fetches, merges in git's object store, runs frozen oracle tests in sandboxed scratch worktrees; writes only its state file",
     ),
     (
         "trust_files",

@@ -1168,7 +1168,7 @@ fn main() {
         finish(&cli, *refused, events.as_ref());
     }
     // What a secret file of this project gives is masked in what this
-    // process shows or writes (spec 126).
+    // process shows or writes.
     // (Not for help, and not for the live view, which shows progress
     // events only and must start fast.)
     if !matches!(
@@ -1215,6 +1215,19 @@ fn main() {
                 },
             )
         }
+        Command::Claim {
+            stories,
+            release,
+            force,
+        } => speccoder_runtime::service::claims::claim(
+            path,
+            &speccoder_runtime::service::claims::Options {
+                feature: cli.feature.as_deref(),
+                stories,
+                release: *release,
+                force: *force,
+            },
+        ),
         Command::Trust { all, paths } => match speccoder_runtime::worktree::state_dir() {
             Some(state) => speccoder_runtime::agent_files::command(path, &state, *all, paths),
             None => no_state("trust"),
@@ -2741,6 +2754,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Trust { .. } => "trust",
             C::Done { .. } => "done",
             C::Forecast { .. } => "forecast",
+            C::Claim { .. } => "claim",
             C::Open { .. } => "open",
             C::Extensions { .. } => "extensions",
             C::Fix { .. } => "fix",

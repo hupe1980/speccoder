@@ -31,7 +31,21 @@ adheres to [Semantic Versioning](https://semver.org/).
   *Conflicts with N branches*
   ([docs](https://hupe1980.github.io/speccoder/docs/forecast/)).
 
+- **Story claims**: a run claims its story on the shared remote before its
+  first task — a ref created only while none exists, so of two people or
+  agents exactly one gets it — and stops at another person's claim
+  (`CLAIMED`). Claims last a day, are renewed while a run works, and end
+  when the story's branch is merged. `speccoder claim` lists, claims,
+  releases and takes over; Needs You offers **Take It Over**, the Overview
+  says *Dana has US2*, and `pr` stops at another person's story
+  ([docs](https://hupe1980.github.io/speccoder/docs/claims/)).
+
 ### Changed
+
+- Projects made with `speccoder new` number Spec Kit features by timestamp,
+  so two branches never make the same number; a feature is selected by its
+  name without the number too (`speccoder feature export`), and a number two
+  features share is refused instead of guessed (`discover.same-number`).
 
 - `speccoder pr` checks the definition of done on the branch before it
   pushes (`DONE-NOT-DONE`); `--force` hands off with the open lines in the

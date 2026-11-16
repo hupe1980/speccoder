@@ -815,7 +815,7 @@ impl Plane {
                 });
             };
             if let Err(e) = self.decide(task.id, &decision).await {
-                // Stopped while it waited (spec 124): the stop withdrew the
+                // Stopped while it waited: the stop withdrew the
                 // decision; resumed, the run observes the stop and unwinds.
                 let resumed = self
                     .runtime

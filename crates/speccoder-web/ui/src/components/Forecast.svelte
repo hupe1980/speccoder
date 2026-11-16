@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The merge forecast (spec 129): will this branch still work when it meets
+  // The merge forecast: will this branch still work when it meets
   // the others? The last forecast, problems first — each with who, what and
   // how to see it — and the rest in one quiet line. Check Open Branches
   // fetches, pairs this branch with each other open branch and runs the

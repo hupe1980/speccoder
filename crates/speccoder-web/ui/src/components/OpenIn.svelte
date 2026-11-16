@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Open in your editor (spec 128): a small button beside a path, a hunk or
+  // Open in your editor: a small button beside a path, a hunk or
   // a line that hands the person to their own editor at that line. Hidden
   // at phone width, where an editor on the host's desktop is not wanted.
   import Icon from "./Icon.svelte";

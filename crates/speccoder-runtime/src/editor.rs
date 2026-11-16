@@ -1,4 +1,4 @@
-//! The person's editor, one click away (spec 128): which editors this
+//! The person's editor, one click away: which editors this
 //! machine has, which one is chosen, and opening a project file at a line
 //! in it — by the editor's own launcher, an argument list, never a shell.
 //!

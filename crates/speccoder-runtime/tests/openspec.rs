@@ -594,7 +594,7 @@ fn openspecs_own_cli_is_a_second_opinion() {
 #[test]
 fn openspecs_planning_skills_are_hosted_and_its_apply_is_refused() {
     let r = repo("sample", NO_ACCEPTANCE);
-    // The person trusted the checkout's skills (spec 126).
+    // The person trusted the checkout's skills.
     let state = tempfile::tempdir().unwrap();
     let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let listed = speccoder_runtime::hosting::list_in(r.path(), Some(state.path()));
@@ -640,7 +640,7 @@ fn openspecs_planning_skills_are_hosted_and_its_apply_is_refused() {
 fn a_skill_that_stops_incomplete_says_why() {
     let r = repo("sample", NO_ACCEPTANCE);
     let state = tempfile::tempdir().unwrap();
-    // The person trusted the checkout's agent files (spec 126).
+    // The person trusted the checkout's agent files.
     let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     for (summary, says) in [
         (

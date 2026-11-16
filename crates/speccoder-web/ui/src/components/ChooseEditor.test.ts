@@ -1,4 +1,4 @@
-// Your editor, one click away (spec 128): a click opens the file at its
+// Your editor, one click away: a click opens the file at its
 // line through the host and says where; with no editor yet the sheet asks
 // once, saves the choice and the open goes on.
 

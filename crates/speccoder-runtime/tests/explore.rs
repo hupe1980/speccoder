@@ -315,7 +315,7 @@ fn a_choice_composes_the_brief_with_its_digest_and_sources() {
 fn the_spec_starts_from_the_brief_verbatim_with_its_origin() {
     let r = repo();
     let state = tempfile::tempdir().unwrap();
-    // The person trusted the checkout's agent files (spec 126).
+    // The person trusted the checkout's agent files.
     let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     f.will_structure(report(3));
@@ -546,7 +546,7 @@ fn openspec_explores_with_its_own_skill_and_only_reads() {
     git(r, &["add", "-A"]);
     git(r, &["commit", "-q", "-m", "init"]);
     let state = tempfile::tempdir().unwrap();
-    // The person trusted the checkout's agent files (spec 126).
+    // The person trusted the checkout's agent files.
     let _ = speccoder_runtime::agent_files::trust_all(r, state.path(), "t", "terminal");
     let (f, d) = fake();
     f.will_call_tool(

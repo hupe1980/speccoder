@@ -204,6 +204,7 @@ pub const SUBCOMMANDS: &[&str] = &[
     "feature",
     "fix",
     "forecast",
+    "claim",
     "help",
     "hooks",
     "inbox",
@@ -786,6 +787,7 @@ fn speccoder(argv: &[String], constant: bool) -> How {
         (Some("done"), _) => view(View::Report, None),
         // So does the merge forecast, with Check Open Branches.
         (Some("forecast"), _) => view(View::Report, None),
+        (Some("claim"), _) => view(View::Report, None),
         // Opening in the editor is the open buttons' job; Settings chooses.
         (Some("open"), _) => view(View::Settings, None),
         (Some("tui"), _) => view(View::Live, None),

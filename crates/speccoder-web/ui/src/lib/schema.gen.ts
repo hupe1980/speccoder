@@ -100,7 +100,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "hook_trust" | "extension_trust" | "view_run" | "hook_test" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "rule_scenario" | "check_story" | "accept_untestable" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "hook_trust" | "extension_trust" | "view_run" | "hook_test" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "rule_scenario" | "check_story" | "claim" | "accept_untestable" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -946,6 +946,77 @@ export interface Citation {
   label: string;
 }
 
+/** One story's claim, as its commit message records it. */
+export interface Claim {
+  /** The feature (its directory name). */
+  feature: string;
+  /** The story (`US2`). */
+  story: string;
+  /** Who holds it: git `user.name`. */
+  holder: string;
+  /** Their git `user.email`: the identity, compared without case. */
+  email: string;
+  /** First claimed (Unix seconds); kept on renewal. */
+  since: number;
+  /** Lasts until (Unix seconds). */
+  until: number;
+  /** The branch the work is on. */
+  branch: string;
+  /** The commit the story's last task was ticked at, once done. */
+  done?: string | null;
+}
+
+/** One change, with whose claim it replaced or removed. */
+export interface ClaimChange {
+  /** The story. */
+  story: string;
+  /** What happened. */
+  verb: ClaimVerb;
+  /** Whose claim it was, when another's. */
+  from?: string | null;
+  /** That claim was past its time. */
+  stale?: boolean;
+}
+
+/** A claim as one person sees it. */
+export type ClaimState = "theirs" | "done" | "mine" | "stale" | "unreadable";
+
+/** What a `claim` changed. */
+export type ClaimVerb = "claimed" | "renewed" | "took" | "released" | "removed";
+
+/** One listed claim. */
+export interface ClaimView {
+  /** The story. */
+  story: string;
+  /** Its state for the person. */
+  state: ClaimState;
+  /** The claim; none when unreadable. */
+  claim?: Claim | null;
+}
+
+/** `claim`: a feature's claims, and what this call changed. */
+export interface ClaimsReport {
+  /** The feature. */
+  feature: string;
+  /**
+   * Where claims live: `origin` (a remote's name), or `None` — this
+   * repository only.
+   */
+  remote?: string | null;
+  /** Read from the remote just now (`false`: the local copy as last fetched). */
+  live: boolean;
+  /** The person's git email, when set. */
+  me?: string | null;
+  /** The claims, by story. */
+  claims: ClaimView[];
+  /** What this call changed. */
+  changed?: ClaimChange[];
+  /** Said once: the fetch refspec added, a merged claim removed. */
+  notices?: string[];
+  /** When it was read (Unix seconds). */
+  at: number;
+}
+
 /** One line comment of the Code view. */
 export interface CodeComment {
   /** Project-relative path. */
@@ -1000,7 +1071,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | FeedbackReport | TrustReport | DoneReport | ForecastReport | EditorsReport | Opened | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | FeedbackReport | TrustReport | DoneReport | ForecastReport | ClaimsReport | EditorsReport | Opened | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -5805,6 +5876,19 @@ export type Runnable =
     kind: "check_story";
     /** The story (`US3`). */
     story: string;
+  }
+  /**
+   * Claim a story of the feature, release it, or (`force`) take over or
+   * remove another person's claim.
+   */
+  | {
+    kind: "claim";
+    /** The story (`US2`). */
+    story: string;
+    /** Release instead of claim. */
+    release: boolean;
+    /** Another person's claim. */
+    force: boolean;
   }
   /**
    * Rule that a task's tests are wrong (the input is the reason): one

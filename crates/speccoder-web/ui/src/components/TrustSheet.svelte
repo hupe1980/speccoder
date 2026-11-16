@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A checkout's agent files that wait for trust (spec 126): each one new or
+  // A checkout's agent files that wait for trust: each one new or
   // changed, with what changed; one action trusts exactly what is shown —
   // a file that changes meanwhile is not trusted, and the sheet says so.
   import { app } from "../lib/app.svelte";

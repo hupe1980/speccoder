@@ -1,4 +1,4 @@
-//! A checkout's agent files (spec 126) over the web host: each file with
+//! A checkout's agent files over the web host: each file with
 //! where it stands and what changed, and a person's trust in the files
 //! they saw — bound to the digests the page showed.
 

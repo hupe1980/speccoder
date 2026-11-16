@@ -35,32 +35,37 @@ pub mod progress {
     pub use crate::progress::{Event, Progress, read_live};
 }
 
-/// Masking secrets in what any process shows or writes (spec 126).
+/// Masking secrets in what any process shows or writes.
 pub mod secrets {
     pub use crate::secrets::{mask, mask_json, mask_json_out, mask_out, register_project};
 }
 
-/// A checkout's agent files and a person's trust in them (spec 126).
+/// A checkout's agent files and a person's trust in them.
 pub mod agent_files {
     pub use crate::agent_files::{Refused, command, report, trust_as_person};
 }
 
-/// The person's editor (spec 128).
+/// The person's editor.
 pub mod editor {
     pub use crate::editor::{choose, open, report};
 }
 
-/// The merge forecast (spec 129).
+/// The merge forecast.
 pub mod forecast {
     pub use crate::forecast::{Options, last, run};
 }
 
-/// The definition of done (spec 127).
+/// Story claims.
+pub mod claims {
+    pub use crate::claims::{Options, claim, local};
+}
+
+/// The definition of done.
 pub mod done {
     pub use crate::done::{for_feature, report};
 }
 
-/// Feedback between projects (spec 125).
+/// Feedback between projects.
 pub mod feedback {
     pub use crate::feedback::{
         Declared, Prepared, asked, decide, file_issue, items, ledger, prepared, report,

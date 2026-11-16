@@ -82,6 +82,9 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`FORECAST-CONFLICT`](#forecast-conflict) | stop | 23 | another open branch conflicts with this one |
 | [`FORECAST-NO-BRANCH`](#forecast-no-branch) | error | 15 | the feature has no branch to forecast yet |
 | [`FORECAST-BUSY`](#forecast-busy) | error | 2 | a forecast is already running here |
+| [`CLAIMED`](#claimed) | stop | 23 | another person holds this story |
+| [`CLAIM-NO-IDENTITY`](#claim-no-identity) | error | 13 | git does not know who you are |
+| [`CLAIM-UNREACHABLE`](#claim-unreachable) | error | 1 | the remote that keeps claims cannot be reached |
 | [`RETURN-BLOCKED`](#return-blocked) | stop | 23 | the in-place run cannot switch back to your branch |
 | [`NOT-FOUND`](#not-found) | error | 15 | nothing by that name exists |
 | [`NOT-FOUND-SCHEMA`](#not-found-schema) | error | 15 | there is no schema by that name |
@@ -776,6 +779,33 @@ A forecast is already running here.
 One forecast runs at a time: its tests run one after another in the sandbox. Look again when it ends.
 
 - `speccoder forecast`
+
+### CLAIMED
+
+Another person holds this story.
+
+A story is claimed by whoever starts it, as a ref on the shared remote: one person or agent per story. The claim names who holds it and until when; a done claim holds until its branch is merged. Talk to them, or take it over — they are not told.
+
+- `speccoder claim`
+- `speccoder claim US1 --force`
+
+### CLAIM-NO-IDENTITY
+
+Git does not know who you are.
+
+A claim names its holder by git's user.name and user.email; neither is set here.
+
+- `git config user.email you@example.com`
+- `git config user.name "Your Name"`
+
+### CLAIM-UNREACHABLE
+
+The remote that keeps claims cannot be reached.
+
+Claims live on the shared remote; reading or changing one needs it. A run goes on without claiming and says so.
+
+- `git fetch`
+- `speccoder claim`
 
 ### RETURN-BLOCKED
 

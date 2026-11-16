@@ -47,7 +47,7 @@ fn chain(leaf: &Path) -> Vec<PathBuf> {
 }
 
 /// What a model is given of the repository's instructions, and what was
-/// held back or replaced, with why (spec 126).
+/// held back or replaced, with why.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Given {
     /// The files given, root first.
@@ -230,7 +230,7 @@ mod tests {
 
     const AGENTS: &[&str] = &[];
 
-    /// Without a state: everything found, as before trust (spec 126).
+    /// Without a state: everything found, as before trust.
     fn collect(
         repo: &Path,
         project: &Path,

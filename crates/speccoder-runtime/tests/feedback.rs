@@ -1,4 +1,4 @@
-//! Feedback between projects (spec 125): an upstream lists what its
+//! Feedback between projects: an upstream lists what its
 //! downstream projects ask of it; its decisions become their statuses; no
 //! project's files change because another read or decided on them.
 

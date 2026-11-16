@@ -40,6 +40,7 @@ pub(crate) fn run_lanes(
                     run_id: std::sync::Arc::clone(&options.run_id),
                     asked: std::sync::Arc::clone(&options.asked),
                     in_place: false,
+                    claimed: true,
                     session: None,
                     bug_home: None,
                     mode: options.mode,

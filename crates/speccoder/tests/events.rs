@@ -347,7 +347,7 @@ fn after_planning_the_cli_offers_the_commit_and_then_the_run() {
     .unwrap();
     git(r, &["add", "-A"]);
     git(r, &["commit", "-qm", "planned"]);
-    // The person trusted the checkout's skill (spec 126).
+    // The person trusted the checkout's skill.
     let trusted = Command::new(env!("CARGO_BIN_EXE_speccoder"))
         .args(["trust", "--all", "-C"])
         .arg(r)

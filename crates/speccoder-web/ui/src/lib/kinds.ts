@@ -19,6 +19,7 @@ export const KINDS: Record<string, { title: string; icon: string; tone: string; 
   review: { title: "Review the Spec", icon: "doc", tone: "ready", why: "The result will be judged against these words." },
   revise: { title: "Change Requests", icon: "sparkle", tone: "needs_approval", why: "Revise the spec as you asked, then review it again." },
   yours: { title: "Yours to Do", icon: "hand", tone: "needs_approval", why: "A step only you can take — do it, give the agent a hint, or skip it." },
+  claimed: { title: "Someone Else's Story", icon: "lock", tone: "needs_approval", why: "The next task belongs to a story another person claimed. Talk to them, or take it over." },
   autopilot_denied: { title: "Refused on Autopilot", icon: "shield", tone: "ready", why: "Calls the autopilot run would have asked you about were refused, not asked: look at each, and allow one when you run again." },
   gate_blocked: { title: "Blocked by a Gate", icon: "shield", tone: "failed", why: "Your gate did not let the tick through — its own words say why. Fix that, then run again." },
   hook_untrusted: { title: "Gates to Trust", icon: "shield", tone: "needs_approval", why: "A gate runs only after you trusted exactly what it runs; until then it blocks every tick." },
@@ -36,5 +37,5 @@ export const KINDS: Record<string, { title: string; icon: string; tone: string; 
 /** A kind's title; one the page does not know, by its own name. */
 export const kindTitle = (kind: string) => KINDS[kind]?.title ?? kind.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 
-/** Who reads an agent file, as a person names it (spec 126). */
+/** Who reads an agent file, as a person names it. */
 export const READERS: Record<string, string> = { speccoder: "speccoder", claude: "Claude Code", codex: "Codex", gemini: "Gemini CLI", opencode: "OpenCode", copilot: "Copilot" };

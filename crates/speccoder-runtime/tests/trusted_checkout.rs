@@ -1,4 +1,4 @@
-//! A trusted checkout (spec 126), story 1: speccoder's own git never runs
+//! A trusted checkout, story 1: speccoder's own git never runs
 //! a program the checkout chose — a worktree whose `.git` file an attempt
 //! rewrote is refused, inherited `GIT_*` is ignored, and diffs read for
 //! evidence never run an external diff or text conversion.
@@ -206,7 +206,7 @@ fn evidence_diffs_never_run_an_external_diff_or_textconv() {
 }
 
 /// A worktree speccoder made: under `<state>/<id>/worktrees/`, `id` the
-/// repository's (spec 126, review finding 1–2).
+/// repository's.
 #[test]
 fn a_worktree_speccoder_made_is_held_to_its_repository() {
     // The child: started below with the state directory set.

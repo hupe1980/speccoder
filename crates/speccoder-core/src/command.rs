@@ -207,6 +207,8 @@ pub enum CommandData {
     Done(Box<crate::done::DoneReport>),
     /// `forecast`: the branch paired with each other open branch.
     Forecast(Box<crate::forecast::ForecastReport>),
+    /// `claim`: who holds which story of the feature.
+    Claims(Box<crate::claims::ClaimsReport>),
     /// The person's editors and their choice.
     Editors(Box<crate::editor::EditorsReport>),
     /// `open`: what was opened in the person's editor.
@@ -1106,6 +1108,7 @@ impl CommandData {
             Self::Trust(_) => "trust",
             Self::Done(_) => "done",
             Self::Forecast(_) => "forecast",
+            Self::Claims(_) => "claims",
             Self::Editors(_) => "editors",
             Self::Opened(_) => "opened",
             Self::Extensions(_) => "extensions",
@@ -1175,6 +1178,7 @@ pub const PAYLOADS: &[&str] = &[
     "trust",
     "done",
     "forecast",
+    "claims",
     "editors",
     "opened",
     "shape",

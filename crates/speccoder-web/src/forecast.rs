@@ -1,4 +1,4 @@
-//! The merge forecast for a feature's branch (spec 129): the last one, as
+//! The merge forecast for a feature's branch: the last one, as
 //! stored, for the Pull Request card and the Overview; and a new one on the
 //! person's click — fetched, paired, its tests run in the sandbox. One at a
 //! time per feature (`FORECAST-BUSY`).

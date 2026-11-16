@@ -1,4 +1,4 @@
-//! `speccoder mcp` (spec 125): an MCP client over stdio sees the five
+//! `speccoder mcp`: an MCP client over stdio sees the five
 //! feedback tools; a report lands in the project's outbox with speccoder's
 //! evidence line; a duplicate, an undeclared upstream and a commit that is
 //! not there are refused; another project's text comes back as data.

@@ -161,6 +161,8 @@ pub enum Kind {
     /// A step only a person can take: a `[YOU]` task, or one whose attempt
     /// stopped `BLOCKED` — I did it, a hint and a new attempt, or skip.
     Yours,
+    /// The next task's story is another person's: leave it, or take it over.
+    Claimed,
     /// A gate the person declared blocked a tick.
     GateBlocked,
     /// A gate waits for a person's trust before any tick can pass it.
@@ -193,7 +195,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, the most urgent first.
-    pub const ALL: [Self; 29] = [
+    pub const ALL: [Self; 30] = [
         Self::Unknown,
         Self::Approval,
         Self::ApprovalBatch,
@@ -210,6 +212,7 @@ impl Kind {
         Self::Review,
         Self::Revise,
         Self::Yours,
+        Self::Claimed,
         Self::HookUntrusted,
         Self::ExtensionUntrusted,
         Self::CheckoutUntrusted,
@@ -245,6 +248,7 @@ impl Kind {
             Self::Review => "review",
             Self::Revise => "revise",
             Self::Yours => "yours",
+            Self::Claimed => "claimed",
             Self::GateBlocked => "gate_blocked",
             Self::HookUntrusted => "hook_untrusted",
             Self::ExtensionUntrusted => "extension_untrusted",
@@ -278,6 +282,7 @@ impl Kind {
             | Self::Ambiguous
             | Self::Revise
             | Self::Yours
+            | Self::Claimed
             | Self::GateBlocked
             | Self::HookUntrusted
             | Self::ExtensionUntrusted
@@ -314,7 +319,7 @@ impl Kind {
 
     /// Every recorded name, the most urgent first.
     #[must_use]
-    pub fn names() -> [&'static str; 29] {
+    pub fn names() -> [&'static str; 30] {
         Self::ALL.map(Self::as_str)
     }
 }
@@ -352,6 +357,7 @@ mod tests {
                             | "autopilot_denied"
                             | "unverified"
                             | "yours"
+                            | "claimed"
                             | "promote"
                             | "gate_blocked"
                             | "hook_untrusted"

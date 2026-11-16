@@ -1,4 +1,4 @@
-//! Feedback between projects (spec 125) over the web host: what this
+//! Feedback between projects over the web host: what this
 //! project asks of its upstreams and what others ask of it; a person's
 //! decision on a request (kept in this project's own state); an item
 //! prepared, or filed after the page's confirm, as a GitHub issue.

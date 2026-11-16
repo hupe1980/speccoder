@@ -288,7 +288,7 @@ pub(super) fn make(
     // The repository's instructions for agents, from the tree the
     // attempt starts in: for speccoder's own calls (the attempt, the test
     // authors); an external agent reads its own files.
-    // Only what a person trusted (spec 126).
+    // Only what a person trusted.
     let given = crate::instructions::collect(
         wt_root,
         project,

@@ -7,7 +7,7 @@ weight = 79
 group = "Use"
 +++
 
-Two branches can each pass their tests and still break each other once merged. `speccoder forecast` finds that before anyone merges. It pairs the feature's branch with every other open branch, whether yours, a teammate's or another agent's. For each pair it makes the merge without touching your checkout, then runs your oracle on the merged code.
+Two branches can each pass their tests and still break each other once merged. ([Claims](@/docs/claims.md) keep two people off one story; the forecast catches two stories that meet in the code.) `speccoder forecast` finds that before anyone merges. It pairs the feature's branch with every other open branch, whether yours, a teammate's or another agent's. For each pair it makes the merge without touching your checkout, then runs your oracle on the merged code.
 
 ```console
 $ speccoder forecast

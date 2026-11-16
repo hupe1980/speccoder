@@ -183,7 +183,7 @@ const CSV: &str = "Users can export a report as CSV, with the columns they chose
 fn spec_only_runs_the_creating_skill_once_with_the_description_and_commits_nothing() {
     let r = repo();
     let state = tempfile::tempdir().unwrap();
-    // The person trusted the checkout's agent files (spec 126).
+    // The person trusted the checkout's agent files.
     let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     will_specify(&f, false);
@@ -239,7 +239,7 @@ fn through_tasks_stops_for_the_review_and_continues_only_after_the_approval() {
     let r = repo();
     fs::write(r.path().join("pyproject.toml"), "[project]\nname = \"r\"\n").unwrap();
     let state = tempfile::tempdir().unwrap();
-    // The person trusted the checkout's agent files (spec 126).
+    // The person trusted the checkout's agent files.
     let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     will_specify(&f, false);
@@ -346,7 +346,7 @@ fn through_tasks_stops_for_the_review_and_continues_only_after_the_approval() {
 fn open_questions_stop_the_chain_and_a_changed_wording_lapses_the_approval() {
     let r = repo();
     let state = tempfile::tempdir().unwrap();
-    // The person trusted the checkout's agent files (spec 126).
+    // The person trusted the checkout's agent files.
     let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     will_specify(&f, true);
@@ -419,7 +419,7 @@ fn open_questions_stop_the_chain_and_a_changed_wording_lapses_the_approval() {
 fn a_failed_step_keeps_what_ran_and_a_retry_runs_only_from_it() {
     let r = repo();
     let state = tempfile::tempdir().unwrap();
-    // The person trusted the checkout's agent files (spec 126).
+    // The person trusted the checkout's agent files.
     let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     will_specify(&f, false);
@@ -480,7 +480,7 @@ fn a_failed_step_keeps_what_ran_and_a_retry_runs_only_from_it() {
 fn an_issue_source_records_the_units_origin_once() {
     let r = repo();
     let state = tempfile::tempdir().unwrap();
-    // The person trusted the checkout's agent files (spec 126).
+    // The person trusted the checkout's agent files.
     let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     will_specify(&f, false);

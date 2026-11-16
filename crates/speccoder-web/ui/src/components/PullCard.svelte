@@ -2,9 +2,9 @@
   // The feature's pull request, as GitHub has it: number and title, draft
   // or open or merged, the review, the checks' rollup — beside speccoder's
   // own evidence, never instead of it. Open Draft PR / Update confirm first.
-  // Above them, the definition of done on the branch (spec 127): what is
+  // Above them, the definition of done on the branch: what is
   // still open and how to close it; a stop at it offers Open Anyway. Then
-  // the merge forecast (spec 129): how the branch fares against the others.
+  // the merge forecast: how the branch fares against the others.
   import { app } from "../lib/app.svelte";
   import { get, latest, q } from "../lib/api";
   import type { Action, DoneReport, GitHubState, Reply } from "../lib/types";

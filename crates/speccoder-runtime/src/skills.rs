@@ -118,7 +118,7 @@ pub fn discover_trusted(root: &Path, planning: &Planning, state: &Path) -> Vec<S
     use speccoder_core::extensions::ExtensionSource;
     let mut out = discover_with(root, planning);
     // A repository skill is hosted only when every file of it is trusted
-    // as it is now, and it is no link (spec 126).
+    // as it is now, and it is no link.
     let folders: Vec<&str> = out
         .iter()
         .map(|s| s.path.strip_suffix("SKILL.md").unwrap_or(&s.path))

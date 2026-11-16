@@ -1,4 +1,4 @@
-//! The merge forecast (spec 129): a feature's branch paired with each
+//! The merge forecast: a feature's branch paired with each
 //! sibling — conflicts from the merge, breaks from the frozen oracles on
 //! the merged tree, honest reasons when nothing judged, and a second look
 //! that runs nothing.

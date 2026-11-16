@@ -16,6 +16,7 @@ pub mod attest;
 pub mod aws;
 pub mod bench;
 pub mod bug;
+pub mod claims;
 pub mod code;
 pub mod collection;
 pub mod commands;

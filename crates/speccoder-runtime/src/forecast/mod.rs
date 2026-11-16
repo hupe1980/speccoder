@@ -1,4 +1,4 @@
-//! `speccoder forecast` (spec 129): the feature's branch paired with each
+//! `speccoder forecast`: the feature's branch paired with each
 //! other open branch, never the others with each other. Per pair, the merge
 //! is made without touching any checkout (`git merge-tree`): conflicting
 //! files, or a merged tree on which the frozen oracles run — mine always,
@@ -231,7 +231,7 @@ fn fetch(git: &Git) -> FetchState {
 /// The ref siblings are measured from: the remote's default branch,
 /// else the local default branch (`init.defaultBranch`, `main`,
 /// `master`) — never a feature's branch, never merely what is checked out.
-fn base(git: &Git) -> Option<String> {
+pub(crate) fn base_of(git: &Git) -> Option<String> {
     if let Some(d) = git
         .line(&["symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"])
         .ok()
@@ -491,7 +491,7 @@ pub fn run(path: &Path, opts: &Options<'_>) -> CommandResult {
     } else {
         FetchState::Skipped
     };
-    let base = base(&git);
+    let base = base_of(&git);
     let base_commit = base
         .as_deref()
         .and_then(|b| git.line(&["rev-parse", "--verify", "-q", b]).ok());

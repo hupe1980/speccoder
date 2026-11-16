@@ -1399,6 +1399,34 @@
           ]
         },
         {
+          "description": "Claim a story of the feature, release it, or (`force`) take over or\nremove another person's claim.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "claim"
+            },
+            "story": {
+              "description": "The story (`US2`).",
+              "type": "string"
+            },
+            "release": {
+              "description": "Release instead of claim.",
+              "type": "boolean"
+            },
+            "force": {
+              "description": "Another person's claim.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "story",
+            "release",
+            "force"
+          ]
+        },
+        {
           "description": "Rule that a task's tests are wrong (the input is the reason): one\nscenario's oracle tests, or — none named — the task's own test\noutside a story. The next run writes them again.",
           "type": "object",
           "properties": {
@@ -2691,6 +2719,10 @@
         {
           "description": "`forecast`: the branch paired with each other open branch.",
           "$ref": "#/$defs/ForecastReport"
+        },
+        {
+          "description": "`claim`: who holds which story of the feature.",
+          "$ref": "#/$defs/ClaimsReport"
         },
         {
           "description": "The person's editors and their choice.",
@@ -11847,6 +11879,11 @@
           "const": "check_story"
         },
         {
+          "description": "[`Runnable::Claim`].",
+          "type": "string",
+          "const": "claim"
+        },
+        {
           "description": "[`Runnable::AcceptUntestable`].",
           "type": "string",
           "const": "accept_untestable"
@@ -13749,6 +13786,239 @@
         "scenario",
         "test",
         "output"
+      ]
+    },
+    "ClaimsReport": {
+      "description": "`claim`: a feature's claims, and what this call changed.",
+      "type": "object",
+      "properties": {
+        "feature": {
+          "description": "The feature.",
+          "type": "string"
+        },
+        "remote": {
+          "description": "Where claims live: `origin` (a remote's name), or `None` — this\nrepository only.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "live": {
+          "description": "Read from the remote just now (`false`: the local copy as last fetched).",
+          "type": "boolean"
+        },
+        "me": {
+          "description": "The person's git email, when set.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "claims": {
+          "description": "The claims, by story.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ClaimView"
+          }
+        },
+        "changed": {
+          "description": "What this call changed.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ClaimChange"
+          }
+        },
+        "notices": {
+          "description": "Said once: the fetch refspec added, a merged claim removed.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "at": {
+          "description": "When it was read (Unix seconds).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "feature",
+        "live",
+        "claims",
+        "at"
+      ]
+    },
+    "ClaimView": {
+      "description": "One listed claim.",
+      "type": "object",
+      "properties": {
+        "story": {
+          "description": "The story.",
+          "type": "string"
+        },
+        "state": {
+          "description": "Its state for the person.",
+          "$ref": "#/$defs/ClaimState"
+        },
+        "claim": {
+          "description": "The claim; none when unreadable.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "story",
+        "state"
+      ]
+    },
+    "ClaimState": {
+      "description": "A claim as one person sees it.",
+      "oneOf": [
+        {
+          "description": "Another person's, live: their run or their hands are on it.",
+          "type": "string",
+          "const": "theirs"
+        },
+        {
+          "description": "Another person's, done on their branch and not merged yet.",
+          "type": "string",
+          "const": "done"
+        },
+        {
+          "description": "The person's own (any machine).",
+          "type": "string",
+          "const": "mine"
+        },
+        {
+          "description": "Another person's, past its time: anyone may take it.",
+          "type": "string",
+          "const": "stale"
+        },
+        {
+          "description": "The ref's message is not a claim: anyone may take it.",
+          "type": "string",
+          "const": "unreadable"
+        }
+      ]
+    },
+    "Claim": {
+      "description": "One story's claim, as its commit message records it.",
+      "type": "object",
+      "properties": {
+        "feature": {
+          "description": "The feature (its directory name).",
+          "type": "string"
+        },
+        "story": {
+          "description": "The story (`US2`).",
+          "type": "string"
+        },
+        "holder": {
+          "description": "Who holds it: git `user.name`.",
+          "type": "string"
+        },
+        "email": {
+          "description": "Their git `user.email`: the identity, compared without case.",
+          "type": "string"
+        },
+        "since": {
+          "description": "First claimed (Unix seconds); kept on renewal.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "until": {
+          "description": "Lasts until (Unix seconds).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "branch": {
+          "description": "The branch the work is on.",
+          "type": "string"
+        },
+        "done": {
+          "description": "The commit the story's last task was ticked at, once done.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "feature",
+        "story",
+        "holder",
+        "email",
+        "since",
+        "until",
+        "branch"
+      ]
+    },
+    "ClaimChange": {
+      "description": "One change, with whose claim it replaced or removed.",
+      "type": "object",
+      "properties": {
+        "story": {
+          "description": "The story.",
+          "type": "string"
+        },
+        "verb": {
+          "description": "What happened.",
+          "$ref": "#/$defs/ClaimVerb"
+        },
+        "from": {
+          "description": "Whose claim it was, when another's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stale": {
+          "description": "That claim was past its time.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "story",
+        "verb"
+      ]
+    },
+    "ClaimVerb": {
+      "description": "What a `claim` changed.",
+      "oneOf": [
+        {
+          "description": "A free story is now the person's.",
+          "type": "string",
+          "const": "claimed"
+        },
+        {
+          "description": "The person's own claim lasts longer.",
+          "type": "string",
+          "const": "renewed"
+        },
+        {
+          "description": "Another person's claim is now the person's.",
+          "type": "string",
+          "const": "took"
+        },
+        {
+          "description": "The person's own claim is gone.",
+          "type": "string",
+          "const": "released"
+        },
+        {
+          "description": "Another person's claim is gone.",
+          "type": "string",
+          "const": "removed"
+        }
       ]
     },
     "EditorsReport": {

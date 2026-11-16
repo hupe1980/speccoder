@@ -1,4 +1,4 @@
-// The checkout's agent files (spec 126): each new or changed file with what
+// The checkout's agent files: each new or changed file with what
 // changed; one action trusts exactly the digests shown, and a file that
 // changed meanwhile is shown again instead of trusted.
 

@@ -262,6 +262,9 @@ pub struct RunOptions {
     /// Run in the person's checkout on `speccoder/<feature>` instead of a
     /// worktree (`run --in-place`).
     pub in_place: bool,
+    /// The feature loop already holds the task's story claim;
+    /// a task run on its own claims it first.
+    pub claimed: bool,
     /// The in-place session the runtime opened for this run.
     pub session: Option<Arc<std::sync::Mutex<crate::in_place::Session>>>,
     /// Run a bug of the format's own bug structure (no task list names it).

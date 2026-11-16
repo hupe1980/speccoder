@@ -231,7 +231,7 @@ fn the_codes_page_is_the_catalog_and_the_cli_reference_lists_every_status() {
 }
 
 /// Every subcommand, visible or hidden, has a `speccoder …` row in the CLI
-/// reference, and every long flag appears there (spec 127).
+/// reference, and every long flag appears there.
 #[test]
 fn the_cli_reference_names_every_subcommand_and_flag() {
     use clap::CommandFactory;
@@ -272,7 +272,7 @@ fn the_cli_reference_names_every_subcommand_and_flag() {
 }
 
 /// Every Needs You kind has a title in the web app, and the web app page
-/// describes it by that title (spec 127).
+/// describes it by that title.
 #[test]
 fn the_web_page_describes_every_needs_you_kind() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");

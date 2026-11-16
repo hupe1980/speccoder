@@ -10,6 +10,7 @@ pub mod actions;
 pub mod agent_files;
 pub mod ask;
 pub mod bug;
+pub mod claims;
 pub mod codes;
 pub mod collection;
 mod command;

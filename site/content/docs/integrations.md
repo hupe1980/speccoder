@@ -1,7 +1,7 @@
 +++
 title = "Integrations"
 description = "Use speccoder from Zed and JetBrains over the Agent Client Protocol, give it MCP tools, let Copilot, OpenCode, Claude Code, Codex or Gemini CLI make the attempts, run it in CI, and as a Spec Kit workflow step."
-weight = 80
+weight = 81
 
 [extra]
 group = "Use"

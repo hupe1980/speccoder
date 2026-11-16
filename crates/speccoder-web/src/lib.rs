@@ -4,6 +4,7 @@
 //! holds no logic of its own: what it shows and offers comes from the
 //! runtime, as for the CLI.
 
+mod claims;
 mod done;
 mod editor;
 mod feedback;
@@ -106,7 +107,7 @@ impl Root {
     /// project now (process, port, start — never the key).
     fn announce(&self) {
         // Secrets this project's files give are masked in what this
-        // process shows, as in the process that copied them (spec 126).
+        // process shows, as in the process that copied them.
         if let Some(root) = self.bound() {
             speccoder_runtime::service::secrets::register_project(&root);
         }
@@ -1465,6 +1466,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/trust", get(trust::list).post(trust::trust_files))
         .route("/api/done", get(done::report))
         .route("/api/forecast", get(forecast::last).post(forecast::check))
+        .route("/api/claims", get(claims::list))
         .route("/api/editor", get(editor::list).post(editor::choose))
         .route("/api/editor/open", post(editor::open))
         .route("/api/feedback", get(feedback::list))

@@ -309,7 +309,7 @@ pub(super) fn run(
                 let _ = allow;
                 // An external agent loads its own files from the checkout
                 // and runs on this machine: it starts only once each file
-                // it reads is trusted as it is now (spec 126).
+                // it reads is trusted as it is now.
                 let reader = match &exec.kind {
                     external::Kind::Acp(agent) => {
                         speccoder_core::agent_files::Reader::named(&agent.id)
@@ -577,7 +577,7 @@ pub(super) fn run(
                     } else if let agentplane::prelude::RunStatus::Cancelled { actor, .. } =
                         &outcome.status
                     {
-                        // A person stopped it (spec 124): stopped, never failed.
+                        // A person stopped it: stopped, never failed.
                         output["status"] = serde_json::json!("stopped");
                         output["stopped_by"] = serde_json::json!(actor.actor());
                         format!("stopped by {}", actor.actor())

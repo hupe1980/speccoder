@@ -262,6 +262,14 @@ pub fn perform(
                     r.state = PlanStepState::Failed;
                     r.output_tail.push("the step changed the repository's own files (.git): speccoder stops before its commit — run the step yourself to see what it does".to_owned());
                 }
+                // The format's own settings for a project speccoder made
+                // (Spec Kit: feature ids that never clash).
+                if spec.step.id == "format_init"
+                    && r.state == PlanStepState::Done
+                    && let Some(a) = format_kind(&plan.format).and_then(crate::format::adapter)
+                {
+                    a.after_init(&root);
+                }
                 // An existing repository: the person's tracked files stay theirs.
                 if plan.mode == ProjectMode::ExistingRepository && r.state == PlanStepState::Done {
                     let changed: Vec<String> = snapshot(&root)
@@ -420,7 +428,7 @@ pub fn perform(
     record.at = now();
     let recorded = write_creation(state, &record);
     crate::welcome::remember(state, &root, &plan.name, true);
-    // The agent files this creation wrote are speccoder's own (spec 126);
+    // The agent files this creation wrote are speccoder's own;
     // ones already in an existing repository wait for the person.
     let written = Git::at(&root)
         .run(&[

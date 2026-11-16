@@ -17,7 +17,7 @@
     void load();
   });
   const hooks = $derived(reply?.data?.hooks ?? []);
-  // The checkout's agent files (spec 126), read again when the sheet closes.
+  // The checkout's agent files, read again when the sheet closes.
   let agent = $state<Reply<TrustReport> | null>(null);
   $effect(() => {
     if (!app.trustSheet) void get<Reply<TrustReport>>("/api/trust").then((r) => (agent = r)).catch(() => {});

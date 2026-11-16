@@ -210,6 +210,10 @@ for b in maya/crate-name sam/doc-comment sam/readme lee/feed-tests; do
   git update-ref "refs/remotes/origin/$b" "$b" && git branch -qD "$b"
 done
 "$bin" forecast --feature 001 --no-fetch >"$dir/forecast.log" 2>&1 || true
+# Lee has started the feed: their claim on its first story, as their run leaves it.
+git config user.name "Lee Park" && git config user.email lee@example.com
+"$bin" claim US1 --feature 002 >"$dir/claim.log" 2>&1 || true
+git config --unset user.name && git config --unset user.email
 
 # ── newsletter: requirements to review ───────────────────────────────────
 p="$HOME/code/newsletter"

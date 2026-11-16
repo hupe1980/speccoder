@@ -1,4 +1,4 @@
-//! The definition of done for a feature's branch (spec 127): what the
+//! The definition of done for a feature's branch: what the
 //! Pull Request card shows before Open Draft PR. Read-only.
 
 use axum::Json;

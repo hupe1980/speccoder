@@ -257,7 +257,7 @@ mod tests {
                 entry("file-write-create", "/etc/x", Rule::NotGranted),
                 "writable trees",
             ),
-            // F-141: what a run may not plant in the person's caches.
+            // What a run may not plant in the person's caches.
             (
                 entry(
                     "file-write-data",

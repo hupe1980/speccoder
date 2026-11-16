@@ -413,6 +413,18 @@ pub enum Command {
         #[arg(long)]
         no_fetch: bool,
     },
+    /// Who works on which story: claims kept on the shared remote. Lists the feature's claims, or claims stories so nobody else starts them.
+    #[command(hide = true)]
+    Claim {
+        /// Stories to claim (`US2`); none lists the claims.
+        stories: Vec<String>,
+        /// Release them instead.
+        #[arg(long)]
+        release: bool,
+        /// Take over (or with --release, remove) another person's claim.
+        #[arg(long)]
+        force: bool,
+    },
     /// What this project asks of the projects it depends on (`[upstream.<name>]`), where each item stands, and what others ask of it.
     #[command(hide = true)]
     Feedback,

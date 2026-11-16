@@ -1,4 +1,4 @@
-//! Opening a project file in the person's editor (spec 128): the branch's
+//! Opening a project file in the person's editor: the branch's
 //! version from the feature's worktree, else the checkout; the launcher
 //! gets one argument per piece, never a shell.
 

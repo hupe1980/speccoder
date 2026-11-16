@@ -118,6 +118,7 @@ const fn describe(payload: &str) -> &'static str {
         b"forecast" => {
             "forecast: the branch paired with each other open branch, textual and by the oracles"
         }
+        b"claims" => "claims: who holds which story of the feature, and what this call changed",
         b"editors" => "editors: the editors found here and the one you chose",
         b"opened" => "opened: a file opened in your editor, at its line",
         b"extensions" => {
@@ -226,6 +227,7 @@ published! {
     "trust", "TrustReport" => core::agent_files::TrustReport,
     "done", "DoneReport" => core::done::DoneReport,
     "forecast", "ForecastReport" => core::forecast::ForecastReport,
+    "claims", "ClaimsReport" => core::claims::ClaimsReport,
     "editors", "EditorsReport" => core::editor::EditorsReport,
     "opened", "Opened" => core::editor::Opened,
     "extension_views", "ViewsReport" => core::extensions::ViewsReport,

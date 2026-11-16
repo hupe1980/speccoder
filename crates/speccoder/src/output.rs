@@ -416,6 +416,13 @@ fn human_body(
             }
             writeln!(out, "{}", result.message())
         }
+        (_, Some(CommandData::Claims(r))) => {
+            let look = crate::style::out();
+            for line in crate::human::claims(r, &look) {
+                writeln!(out, "{line}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (_, Some(CommandData::Forecast(r))) => {
             let look = crate::style::out();
             let now = std::time::SystemTime::now()

@@ -305,9 +305,18 @@ fn a_rust_spec_kit_project_is_made_by_its_own_tools_and_committed_once_as_the_pe
         .status()
         .unwrap();
     assert!(st.success());
+    // …but for one setting: features numbered by timestamp, which never
+    // clash between two people's branches.
+    let options = ".specify/init-options.json";
+    let numbering: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(root.join(options)).unwrap()).unwrap();
+    assert_eq!(numbering["feature_numbering"], "timestamp");
+    let without = |t: Vec<(String, Vec<u8>)>| -> Vec<(String, Vec<u8>)> {
+        t.into_iter().filter(|(p, _)| p != options).collect()
+    };
     assert_eq!(
-        tree(&root, &[".specify", ".claude"]),
-        tree(alone.path(), &[".specify", ".claude"])
+        without(tree(&root, &[".specify", ".claude"])),
+        without(tree(alone.path(), &[".specify", ".claude"]))
     );
     // init's checks ran on the untouched code; the Next step is the first feature.
     assert!(
@@ -746,6 +755,13 @@ fn with_the_real_tools_the_formats_files_are_the_formats_own() {
         ]);
         let v: Value = serde_json::from_slice(&out.stdout).unwrap();
         assert_eq!(v["status"], "ok", "{format}: {v}");
+        // Spec Kit's features get ids two branches never share.
+        if format == "speckit" {
+            let opts = std::fs::read_to_string(m.target("real").join(".specify/init-options.json"))
+                .unwrap();
+            let opts: Value = serde_json::from_str(&opts).unwrap();
+            assert_eq!(opts["feature_numbering"], "timestamp", "{opts}");
+        }
         // The first task starts from a library the project's checks pass on.
         let fmt = Command::new("cargo")
             .args(["fmt", "--all", "--check"])

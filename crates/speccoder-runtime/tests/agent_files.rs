@@ -1,4 +1,4 @@
-//! A trusted checkout (spec 126), story 2: agent files are trusted by
+//! A trusted checkout, story 2: agent files are trusted by
 //! digest; speccoder's model reads only trusted bytes; an external agent
 //! does not start while a file it reads waits; Needs You says so once.
 

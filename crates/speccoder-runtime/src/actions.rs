@@ -619,6 +619,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::DecideBatch
             | K::OracleTests
             | K::CheckStory
+            | K::Claim
             | K::ApproveAndRun
             | K::Comment
             | K::CommentsSend
@@ -675,6 +676,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::DecideBatch
             | K::OracleTests
             | K::CheckStory
+            | K::Claim
             | K::ApproveAndRun
             | K::Comment
             | K::CommentsSend
@@ -728,6 +730,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::DecideBatch
             | K::OracleTests
             | K::CheckStory
+            | K::Claim
             | K::ApproveAndRun
             | K::Comment
             | K::CommentsSend
@@ -780,6 +783,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::WidenPolicy
             | K::OracleTests
             | K::CheckStory
+            | K::Claim
             | K::ApproveAndRun
             | K::Comment
             | K::CommentsSend
@@ -835,6 +839,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::DecideBatch
             | K::OracleTests
             | K::CheckStory
+            | K::Claim
             | K::ApproveAndRun
             | K::Comment
             | K::CommentsSend
@@ -1216,6 +1221,19 @@ pub fn perform_in(
                 via,
             )
         }
+        Runnable::Claim {
+            story,
+            release,
+            force,
+        } => crate::claims::claim(
+            root,
+            &crate::claims::Options {
+                feature,
+                stories: std::slice::from_ref(story),
+                release: *release,
+                force: *force,
+            },
+        ),
         Runnable::CheckStory { story } => {
             crate::pipeline::story::check_story(root, feature, story, options)
         }

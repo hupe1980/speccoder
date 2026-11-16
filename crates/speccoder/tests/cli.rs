@@ -1525,3 +1525,61 @@ fn forecast_needs_the_feature_branch_then_pairs_it_with_nothing_here() {
     assert_eq!(v["data"]["pairs"], serde_json::json!([]));
     assert_eq!(v["data"]["fetch"]["state"], "skipped");
 }
+
+#[test]
+fn claim_takes_a_story_once_and_lists_who_has_what() {
+    let project = committed_project(false);
+    let state = tempfile::tempdir().unwrap();
+    let as_ = |email: &str| {
+        git(project.path(), &["config", "user.email", email]);
+        git(
+            project.path(),
+            &["config", "user.name", email.split('@').next().unwrap()],
+        );
+    };
+    let run = |args: &[&str]| {
+        speccoder()
+            .args(["--json", "claim"])
+            .args(args)
+            .arg("-C")
+            .arg(project.path())
+            .env("SPECCODER_STATE_DIR", state.path())
+            .assert()
+            .get_output()
+            .clone()
+    };
+    as_("dana@example.com");
+    let out = run(&["US1"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let v: serde_json::Value = support::result(&out.stdout);
+    assert_eq!(v["data"]["changed"][0]["verb"], "claimed");
+    assert_eq!(v["data"]["claims"][0]["state"], "mine");
+    as_("sam@example.com");
+    let out = run(&["US1"]);
+    assert_eq!(out.status.code(), Some(23));
+    let v: serde_json::Value = support::result(&out.stdout);
+    assert_eq!(v["code"], "CLAIMED");
+    assert_eq!(v["data"]["claims"][0]["state"], "theirs");
+    // The person's words: who has it.
+    let human = speccoder()
+        .args(["claim", "-C"])
+        .arg(project.path())
+        .env("SPECCODER_STATE_DIR", state.path())
+        .env("NO_COLOR", "1")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let human = String::from_utf8_lossy(&human);
+    assert!(
+        human.contains("Claims on 001-user-auth (on this machine)"),
+        "{human}"
+    );
+    assert!(human.contains("US1  dana"), "{human}");
+    assert!(human.trim_end().ends_with("dana has US1"), "{human}");
+}

@@ -182,7 +182,7 @@ pub(crate) fn commit_paths(
         add.extend(paths.iter().map(String::as_str));
         g.run(&add).map_err(|e| e.0)?;
     }
-    // Nothing a secret file gave is written into history (spec 126).
+    // Nothing a secret file gave is written into history.
     let message = crate::secrets::mask_out(message);
     let mut commit = base.to_vec();
     commit.extend(["commit", "-q", "--no-verify", "-m", &message]);
@@ -217,7 +217,7 @@ pub(crate) fn commit_attempt_as(
     add.extend(excluded.iter().map(String::as_str));
     g.run(&add).map_err(|e| e.0)?;
     crate::include::check_staged(worktree)?;
-    // Nothing a secret file gave is written into history (spec 126).
+    // Nothing a secret file gave is written into history.
     let message = crate::secrets::mask_out(message);
     let mut commit = base.to_vec();
     commit.extend(["commit", "-q", "--no-verify", "-m", &message]);

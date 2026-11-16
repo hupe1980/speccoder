@@ -1,5 +1,5 @@
 //! `speccoder done` on a real repository: each line not done with its fix,
-//! then done after the fixes; nothing written (spec 127).
+//! then done after the fixes; nothing written.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
