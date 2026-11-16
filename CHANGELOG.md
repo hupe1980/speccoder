@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-16
+
 ### Added
 
 - **A checkout you trust**: what a repository tells agents — `AGENTS.md`,
@@ -1117,7 +1119,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/hupe1980/speccoder/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/hupe1980/speccoder/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/hupe1980/speccoder/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/hupe1980/speccoder/compare/v0.14.0...v0.15.0
