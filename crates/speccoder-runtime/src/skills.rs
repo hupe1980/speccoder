@@ -13,6 +13,9 @@ use serde::Serialize;
 
 use crate::format::Planning;
 
+/// Why a repository skill is not hosted while it waits for trust.
+pub const UNTRUSTED: &str = "it waits for your trust: what a checkout tells agents runs only once you trusted it (speccoder trust)";
+
 /// Where skills are installed, relative to the project root.
 pub const DIRS: [&str; 2] = [".claude/skills", ".agents/skills"];
 
@@ -114,6 +117,18 @@ pub fn discover_with(root: &Path, planning: &Planning) -> Vec<Skill> {
 pub fn discover_trusted(root: &Path, planning: &Planning, state: &Path) -> Vec<Skill> {
     use speccoder_core::extensions::ExtensionSource;
     let mut out = discover_with(root, planning);
+    // A repository skill is hosted only when every file of it is trusted
+    // as it is now, and it is no link (spec 126).
+    let folders: Vec<&str> = out
+        .iter()
+        .map(|s| s.path.strip_suffix("SKILL.md").unwrap_or(&s.path))
+        .collect();
+    let ok = crate::agent_files::skills_trusted(root, state, &folders);
+    for (s, ok) in out.iter_mut().zip(ok) {
+        if s.refused.is_none() && !ok {
+            s.refused = Some(UNTRUSTED.to_owned());
+        }
+    }
     let dir = crate::hooks::dir(state, root);
     for e in crate::extensions::load(root) {
         let trusted = e.usable()

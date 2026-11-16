@@ -74,6 +74,8 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`JUDGE-CHANGED`](#judge-changed) | stop | 23 | the judge's inputs changed during the run |
 | [`CHECKOUT-CHANGED`](#checkout-changed) | stop | 23 | the checkout moved under the run |
 | [`GIT-CHANGED`](#git-changed) | stop | 23 | git's configuration, hooks or refs changed during the run |
+| [`GIT-REDIRECTED`](#git-redirected) | error | 14 | a worktree's .git points at another git directory |
+| [`CHECKOUT-UNTRUSTED`](#checkout-untrusted) | stop | 23 | an executor would load agent files you have not trusted |
 | [`RETURN-BLOCKED`](#return-blocked) | stop | 23 | the in-place run cannot switch back to your branch |
 | [`NOT-FOUND`](#not-found) | error | 15 | nothing by that name exists |
 | [`NOT-FOUND-SCHEMA`](#not-found-schema) | error | 15 | there is no schema by that name |
@@ -700,6 +702,24 @@ Where the sandbox cannot keep `.git` read-only, speccoder fingerprints it; a cha
 
 - `git config --list --show-origin`
 - `speccoder run --in-place --return`
+
+### GIT-REDIRECTED
+
+A worktree's .git points at another git directory.
+
+A worktree's `.git` file names the git directory git uses, and so whose filters and diff programs run. speccoder's git uses only the repository's own; one changed to point elsewhere is refused, so nothing it names runs.
+
+- Open the project again; if you did not move it, an attempt changed it
+- `git worktree repair`
+
+### CHECKOUT-UNTRUSTED
+
+An executor would load agent files you have not trusted.
+
+An external agent reads its own files from the checkout — instructions, settings with hooks, MCP servers — and runs on your machine. It starts only once every file it reads is trusted as it is now.
+
+- `speccoder trust`
+- `speccoder trust --all`
 
 ### RETURN-BLOCKED
 

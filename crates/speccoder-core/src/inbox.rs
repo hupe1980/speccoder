@@ -167,6 +167,9 @@ pub enum Kind {
     HookUntrusted,
     /// An extension waits for a person's trust before any of it runs.
     ExtensionUntrusted,
+    /// Agent files of the checkout (instructions, skills, an executor's
+    /// settings) are new or changed: agents read only the trusted ones.
+    CheckoutUntrusted,
     /// The last attempt did not pass.
     Stuck,
     /// An autopilot run refused calls it would have asked about: listed
@@ -190,7 +193,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, the most urgent first.
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 29] = [
         Self::Unknown,
         Self::Approval,
         Self::ApprovalBatch,
@@ -209,6 +212,7 @@ impl Kind {
         Self::Yours,
         Self::HookUntrusted,
         Self::ExtensionUntrusted,
+        Self::CheckoutUntrusted,
         Self::GateBlocked,
         Self::Stuck,
         Self::AutopilotDenied,
@@ -244,6 +248,7 @@ impl Kind {
             Self::GateBlocked => "gate_blocked",
             Self::HookUntrusted => "hook_untrusted",
             Self::ExtensionUntrusted => "extension_untrusted",
+            Self::CheckoutUntrusted => "checkout_untrusted",
             Self::Stuck => "stuck",
             Self::AutopilotDenied => "autopilot_denied",
             Self::BugAlreadySatisfied => "bug_already_satisfied",
@@ -276,6 +281,7 @@ impl Kind {
             | Self::GateBlocked
             | Self::HookUntrusted
             | Self::ExtensionUntrusted
+            | Self::CheckoutUntrusted
             | Self::Stuck
             | Self::Commit => Group::BlockedOnYou,
             Self::Unverified
@@ -308,7 +314,7 @@ impl Kind {
 
     /// Every recorded name, the most urgent first.
     #[must_use]
-    pub fn names() -> [&'static str; 28] {
+    pub fn names() -> [&'static str; 29] {
         Self::ALL.map(Self::as_str)
     }
 }
@@ -350,6 +356,7 @@ mod tests {
                             | "gate_blocked"
                             | "hook_untrusted"
                             | "extension_untrusted"
+                            | "checkout_untrusted"
                             | "request"
                             | "feedback"
                     )

@@ -105,6 +105,9 @@ impl Approver for Answers {
 #[test]
 fn skills_are_listed_and_implement_is_refused() {
     let r = repo();
+    // The person trusted the checkout's skills (spec 126).
+    let state = speccoder_runtime::worktree::state_dir().unwrap();
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), &state, "t", "terminal");
     let res = list(r.path());
     let Some(CommandData::Skills(k)) = res.data() else {
         panic!("{}", res.message())
@@ -119,6 +122,8 @@ fn skills_are_listed_and_implement_is_refused() {
         [("demo-specify", false), ("speckit-implement", true)]
     );
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let f = FakeProvider::new();
     let d: Arc<dyn ModelProvider> = f.clone();
     let res = run_with(
@@ -139,6 +144,8 @@ fn skills_are_listed_and_implement_is_refused() {
 fn a_planning_skill_writes_the_spec_in_the_checkout_and_asks_when_it_can() {
     let r = repo();
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let f = FakeProvider::new();
     let d: Arc<dyn ModelProvider> = f.clone();
     f.will_call_tool(
@@ -207,6 +214,8 @@ fn a_planning_skill_writes_the_spec_in_the_checkout_and_asks_when_it_can() {
 fn without_a_terminal_questions_go_unanswered_and_source_writes_stop() {
     let r = repo();
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let f = FakeProvider::new();
     let d: Arc<dyn ModelProvider> = f.clone();
     f.will_call_tool(
@@ -245,6 +254,8 @@ fn without_a_terminal_questions_go_unanswered_and_source_writes_stop() {
 fn a_refused_command_in_a_hosted_skill_is_named_with_its_fix() {
     let r = repo();
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let f = FakeProvider::new();
     let d: Arc<dyn ModelProvider> = f.clone();
     f.will_call_tool(
@@ -351,6 +362,8 @@ fn a_mandatory_before_implement_hook_runs_as_a_hosted_skill_and_optional_ones_ar
         &[("speckit-audit-record", HOOK_SKILL)],
     );
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     trust_audit(r.path(), state.path());
     let f = FakeProvider::new();
     let d: Arc<dyn ModelProvider> = f.clone();
@@ -445,6 +458,8 @@ fn a_hook_that_leaves_artifacts_uncommitted_stops_the_run_with_the_reason() {
         &[("speckit-audit-record", HOOK_SKILL)],
     );
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     trust_audit(r.path(), state.path());
     let f = FakeProvider::new();
     let d: Arc<dyn ModelProvider> = f.clone();
@@ -505,6 +520,8 @@ fn a_planning_skill_is_told_the_feature_its_scripts_need() {
     git(r.path(), &["commit", "-qm", "plan skill"]);
     assert!(!r.path().join(".specify/feature.json").exists());
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let f = FakeProvider::new();
     let d: Arc<dyn ModelProvider> = f.clone();
     f.will_call_tool(
@@ -549,6 +566,8 @@ fn a_feature_the_specify_skill_creates_becomes_current() {
     git(r.path(), &["add", "-A"]);
     git(r.path(), &["commit", "-qm", "specify skill"]);
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let f = FakeProvider::new();
     let d: Arc<dyn ModelProvider> = f.clone();
     // The model writes the spec but not .specify/feature.json.

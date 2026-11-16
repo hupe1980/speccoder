@@ -686,6 +686,10 @@ const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
         "removes an item from this project's own outbox file, at the person's click",
     ),
     (
+        "trust_files",
+        "records a person's trust in the agent files they saw, bound to each file's digest, in speccoder's state (as `hook_trust` does)",
+    ),
+    (
         "file",
         "files a prepared GitHub issue with the person's sign-in after the page's confirm (as `github_login` signs in)",
     ),

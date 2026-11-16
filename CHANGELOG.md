@@ -6,6 +6,36 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **A checkout you trust**: what a repository tells agents — `AGENTS.md`,
+  `CLAUDE.md`, skills, an agent's own settings (`.claude/settings.json`,
+  `.mcp.json`, `.codex/`, `.gemini/`) — is trusted by its digest.
+  speccoder's model gets only trusted bytes (a changed file as you trusted
+  it), a repository skill runs only once trusted, and an external agent
+  does not start while a file it reads is new or changed
+  (`CHECKOUT-UNTRUSTED`). Needs You shows each change as a diff with
+  **Trust N Files**; `speccoder trust` in the terminal
+  ([security](https://hupe1980.github.io/speccoder/docs/security/#agent-files)).
+
+### Changed
+
+- Existing projects' agent files start untrusted: review them once in
+  Needs You or with `speccoder trust`. New projects and the sample are
+  trusted already.
+
+### Security
+
+- speccoder's git refuses a worktree whose `.git` file was changed to
+  point at another git directory (`GIT-REDIRECTED`), and never runs an
+  external diff or text conversion: an attempt could otherwise make it
+  run a filter of its choosing outside the sandbox. The worktree's `.git`
+  file is read-only to commands where the sandbox can carve it.
+- Secrets are masked in every speccoder process (the web app and
+  `speccoder mcp` too), in commit messages, pull request bodies and MCP
+  replies, including secret-named environment variables and well-known
+  token shapes.
+
 ## [0.17.0] - 2026-11-15
 
 ### Added

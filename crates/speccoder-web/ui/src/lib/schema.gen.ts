@@ -169,6 +169,40 @@ export interface AgentCard {
   asks_first: AgentTick;
 }
 
+/** One agent file of a checkout. */
+export interface AgentFile {
+  /** Repository-relative, `/`-separated. */
+  path: string;
+  /** What it is. */
+  kind: AgentFileKind;
+  /** Who reads it. */
+  readers: Reader[];
+  /** `sha256:…` of its bytes now; empty when gone. */
+  digest: string;
+  /** Its size now. */
+  bytes: number;
+  /** Where it stands. */
+  state: AgentFileState;
+  /** The record in force, if any. */
+  trusted?: TrustedBy | null;
+  /**
+   * Where these bytes are when not in your checkout: a feature's
+   * worktree (`001-login`), whose agents read them.
+   */
+  tree?: string | null;
+  /**
+   * What changed (a unified diff), or the text of a new file; cut at
+   * [`DIFF_CAP`] with a note.
+   */
+  diff?: string | null;
+}
+
+/** What an agent file is. */
+export type AgentFileKind = "instructions" | "skill" | "settings";
+
+/** Where an agent file stands. */
+export type AgentFileState = "trusted" | "changed" | "untrusted" | "gone";
+
 /** One entry of an external agent's plan. */
 export interface AgentPlanEntry {
   /** Its words. */
@@ -950,7 +984,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | FeedbackReport | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | FeedbackReport | TrustReport | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -4489,6 +4523,9 @@ export interface Read {
   subject?: string | null;
 }
 
+/** Who reads an agent file. */
+export type Reader = "speccoder" | "claude" | "codex" | "gemini" | "opencode" | "copilot";
+
 /**
  * What the future oracle of a unit will be made of, counted from its
  * files as they are now: requirements, scenarios, open questions, and
@@ -6813,8 +6850,26 @@ export interface Triad {
   digest: string;
 }
 
+/** `trust`: a checkout's agent files. */
+export interface TrustReport {
+  /** Every agent file found or trusted before, waiting ones first. */
+  files: AgentFile[];
+  /** How many wait for a person. */
+  waiting: number;
+}
+
 /** Whether a hook may run. */
 export type TrustState = "trusted" | "untrusted" | "changed";
+
+/** Who trusted a file, how and when. */
+export interface TrustedBy {
+  /** The person. */
+  by: string;
+  /** Through what: `terminal`, `web`, `speccoder` (files it wrote). */
+  via: string;
+  /** When (RFC 3339). */
+  at: string;
+}
 
 /** One statement's class in one try. */
 export interface TryStatement {
@@ -6972,7 +7027,7 @@ export interface VerifyReport {
 export type Via = "terminal" | "web" | "window" | "acp" | "phone" | "ci" | "mcp";
 
 /** A read-only place an interface opens instead of running a command. */
-export type View = "doctor" | "bug_report" | "report" | "live" | "approvals" | "explain" | "review" | "settings" | "setup" | "bug" | "quick_change" | "new_feature" | "new_project" | "github" | "task" | "ask" | "explore";
+export type View = "doctor" | "bug_report" | "report" | "live" | "approvals" | "explain" | "review" | "settings" | "setup" | "bug" | "quick_change" | "new_feature" | "new_project" | "github" | "task" | "ask" | "explore" | "trust";
 
 /** A view's data, ready for its widget. */
 export type ViewData =

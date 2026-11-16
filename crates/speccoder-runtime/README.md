@@ -15,6 +15,7 @@ Entry points:
 - `hooks` — the person's gates and observers: trust by digest, gates in the checks' sandbox, events delivered at least once from git.
 - `thread::of`, `thread::explain` — an attempt as one thread from its journal and git; a waiting call's facts, no model asked.
 - `projects` — the recent projects rolled up read-only; another opened in its own host; a stop reported to another project.
+- `agent_files` — the table of what a checkout tells agents, trust by digest, the trusted bytes a model is given.
 - `feedback` — what a project asks of its upstreams (its outbox) and what others ask of it; decisions, statuses, prepared GitHub issues.
 - `extensions` — Agent Plugins folders and Spec Kit extensions: one digest each, trust, add from a folder or a commit, views run read-only in the sandbox.
 

@@ -214,7 +214,7 @@ fn unclean(s: &str) -> Option<String> {
             return Some("a URL with credentials".to_owned());
         }
     }
-    let secret = [
+    let prefixes = [
         "sk-ant-",
         "sk-proj-",
         "ghp_",
@@ -223,8 +223,11 @@ fn unclean(s: &str) -> Option<String> {
         "xoxb-",
         "-----BEGIN",
     ];
-    if secret.iter().any(|p| s.contains(p)) {
+    if crate::secrets::shape_in(s).is_some() || prefixes.iter().any(|p| s.contains(p)) {
         return Some("something shaped like a secret".to_owned());
+    }
+    if let Some(name) = crate::secrets::found_in(s) {
+        return Some(format!("the value of {name}, from a secret file"));
     }
     None
 }

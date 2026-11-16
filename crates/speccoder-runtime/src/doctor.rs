@@ -673,8 +673,21 @@ pub fn checks(
         .map(|c| c.instructions.clone())
         .unwrap_or_else(|| vec!["AGENTS.md".to_owned()]);
     let repo = top.unwrap_or_else(|| root.clone());
-    let given = crate::instructions::collect(&repo, &root, &[], &names);
-    out.push(if !given.is_empty() {
+    let state = crate::worktree::state_dir();
+    let given = crate::instructions::collect(&repo, &root, &[], &names, state.as_deref());
+    let withheld = given.withheld;
+    let given = given.files;
+    out.push(if !withheld.is_empty() {
+        warned(
+            "instructions",
+            withheld
+                .iter()
+                .map(|(p, why)| format!("{p} {why}"))
+                .collect::<Vec<_>>()
+                .join("; "),
+            &["speccoder trust"],
+        )
+    } else if !given.is_empty() {
         check(
             "instructions",
             DoctorLevel::Pass,

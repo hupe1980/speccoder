@@ -647,6 +647,25 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "GIT-REDIRECTED",
+        E,
+        S::GitPrecondition,
+        "a worktree's .git points at another git directory",
+        "A worktree's `.git` file names the git directory git uses, and so whose filters and diff programs run. speccoder's git uses only the repository's own; one changed to point elsewhere is refused, so nothing it names runs.",
+        [
+            "→ open the project again; if you did not move it, an attempt changed it",
+            "git worktree repair"
+        ]
+    ),
+    entry!(
+        "CHECKOUT-UNTRUSTED",
+        P,
+        S::NeedsHuman,
+        "an executor would load agent files you have not trusted",
+        "An external agent reads its own files from the checkout — instructions, settings with hooks, MCP servers — and runs on your machine. It starts only once every file it reads is trusted as it is now.",
+        ["speccoder trust", "speccoder trust --all"]
+    ),
+    entry!(
         "RETURN-BLOCKED",
         P,
         S::NeedsHuman,

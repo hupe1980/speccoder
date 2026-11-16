@@ -218,6 +218,7 @@ speccoder gives its model the repository's [`AGENTS.md`](https://agents.md) file
 - They rank below the task, the spec, the checks and speccoder's rules.
 - At most 32 KiB: the nearest files whole, farther ones cut, and the report says so.
 - They are read from the commit the attempt starts from; the run summary (`Guided by  AGENTS.md, services/api/AGENTS.md`) and the attestation name them with each file's hash.
+- Only [trusted bytes](@/docs/security.md#agent-files) are given: a file changed since you trusted it is given as you trusted it, a new one not at all, and the run says so.
 - Changing an `AGENTS.md` during an attempt needs your approval.
 - [External agents](@/docs/integrations.md#external-agents) read their own files; speccoder does not add them twice. Other file names, such as `CLAUDE.md`, are a [setting](@/docs/configuration.md#context).
 

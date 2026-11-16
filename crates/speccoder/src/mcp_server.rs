@@ -261,6 +261,7 @@ impl Feedback {
 pub fn serve(root: &std::path::Path) -> Result<(), String> {
     let state = speccoder_runtime::worktree::state_dir().ok_or("no state directory")?;
     let root = std::fs::canonicalize(root).map_err(|e| e.to_string())?;
+    speccoder_runtime::service::secrets::register_project(&root);
     let server = Feedback { root, state };
     let stdin = std::io::stdin();
     let mut out = std::io::stdout().lock();
@@ -270,7 +271,11 @@ pub fn serve(root: &std::path::Path) -> Result<(), String> {
             continue;
         }
         let reply = match serde_json::from_str::<Value>(&line) {
-            Ok(msg) => server.handle(&msg),
+            // Nothing a secret file gave leaves in a reply.
+            Ok(msg) => server.handle(&msg).map(|mut r| {
+                speccoder_runtime::service::secrets::mask_json_out(&mut r);
+                r
+            }),
             Err(e) => Some(
                 json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": e.to_string() } }),
             ),

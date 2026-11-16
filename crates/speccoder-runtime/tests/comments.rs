@@ -114,6 +114,8 @@ fn sha(p: &Path) -> Vec<u8> {
 fn us5_drafts_persist_go_out_as_one_scoped_turn_and_undo_restores_bytes() {
     let r = repo();
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     // Drafts on two sections, anchored and listed.
     let a = add(
         r.path(),
@@ -483,6 +485,8 @@ fn us5_undo_never_reverts_what_the_person_wrote_while_the_revision_ran() {
     ] {
         let r = repo();
         let state = tempfile::tempdir().unwrap();
+        // The person trusted the checkout's agent files (spec 126).
+        let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
         assert_eq!(
             add(
                 r.path(),
@@ -545,6 +549,8 @@ fn us5_a_heading_is_a_section_of_its_own_document() {
     // P6: the plan gains a section named like the commented one in the spec.
     let r = repo();
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     assert_eq!(
         add(
             r.path(),

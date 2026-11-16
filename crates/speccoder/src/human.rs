@@ -2913,6 +2913,25 @@ pub fn projects(r: &speccoder_core::projects::ProjectsReport) -> Vec<String> {
     out
 }
 
+/// `speccoder trust`: each agent file with where it stands and who reads it.
+#[must_use]
+pub fn trust(r: &speccoder_core::agent_files::TrustReport) -> Vec<String> {
+    let width = r.files.iter().map(|f| f.path.len()).max().unwrap_or(0);
+    r.files
+        .iter()
+        .map(|f| {
+            let readers: Vec<&str> = f.readers.iter().map(|x| x.as_str()).collect();
+            format!(
+                "  {:<8} {:<width$}  {} · {}",
+                f.state.word(),
+                f.path,
+                f.kind.word(),
+                readers.join(", ")
+            )
+        })
+        .collect()
+}
+
 /// `speccoder feedback`: each upstream's items with where they stand, then
 /// what other projects ask of this one.
 #[must_use]

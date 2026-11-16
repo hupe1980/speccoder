@@ -252,7 +252,8 @@ pub fn body(status: &StatusReport, trailers: &[(String, String, String)]) -> Str
         out,
         "\n> `verified` means the spec-derived acceptance tests went from red to green and no check regressed. It does not mean the change is correct, complete or safe: review this like any contribution. Opened as a draft by `speccoder pr`; speccoder never merges."
     );
-    out
+    // Nothing a secret file gave reaches the pull request (spec 126).
+    crate::secrets::mask_out(&out)
 }
 
 /// Where the guidance to add the evidence check is.

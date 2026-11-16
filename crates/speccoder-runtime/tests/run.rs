@@ -3750,6 +3750,8 @@ fn the_repository_instructions_reach_the_attempt_and_the_test_author() {
         ],
     );
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
     f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));

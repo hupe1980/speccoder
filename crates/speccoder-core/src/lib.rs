@@ -7,6 +7,7 @@
 
 pub mod acceptance;
 pub mod actions;
+pub mod agent_files;
 pub mod ask;
 pub mod bug;
 pub mod codes;

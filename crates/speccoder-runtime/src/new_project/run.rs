@@ -420,6 +420,25 @@ pub fn perform(
     record.at = now();
     let recorded = write_creation(state, &record);
     crate::welcome::remember(state, &root, &plan.name, true);
+    // The agent files this creation wrote are speccoder's own (spec 126);
+    // ones already in an existing repository wait for the person.
+    let written = Git::at(&root)
+        .run(&[
+            "diff-tree",
+            "--root",
+            "--no-commit-id",
+            "--name-only",
+            "-r",
+            "-z",
+            &commit_id,
+        ])
+        .map(|o| crate::git::nul_fields(&o))
+        .unwrap_or_default();
+    crate::agent_files::record_written(
+        &root,
+        state,
+        &written.iter().map(String::as_str).collect::<Vec<_>>(),
+    );
     event(crate::progress::ProjectEvent::Created {
         path_digest: path_digest(&root),
         mode: match plan.mode {

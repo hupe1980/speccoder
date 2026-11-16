@@ -201,6 +201,8 @@ pub enum CommandData {
     Projects(Box<crate::projects::ProjectsReport>),
     /// `feedback`: what this project asks of others, and others of it.
     Feedback(Box<crate::feedback::FeedbackReport>),
+    /// `trust`: the checkout's agent files and whether each is trusted.
+    Trust(Box<crate::agent_files::TrustReport>),
     /// `extensions`: every extension, what it contributes and its trust.
     Extensions(Box<crate::extensions::ExtensionsReport>),
     /// The views an extension places on a feature or the project.
@@ -1093,6 +1095,7 @@ impl CommandData {
             Self::Explanation(_) => "explanation",
             Self::Projects(_) => "projects",
             Self::Feedback(_) => "feedback",
+            Self::Trust(_) => "trust",
             Self::Extensions(_) => "extensions",
             Self::ExtensionViews(_) => "extension_views",
             Self::Shape(_) => "shape",
@@ -1157,6 +1160,7 @@ pub const PAYLOADS: &[&str] = &[
     "explanation",
     "projects",
     "feedback",
+    "trust",
     "shape",
     "ask",
     "ask_conversations",

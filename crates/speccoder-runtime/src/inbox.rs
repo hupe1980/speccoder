@@ -85,6 +85,7 @@ pub fn inbox_with(path: &Path, feature: Option<&str>, state: Option<&Path>) -> C
         && let Some(s) = state
     {
         items.extend(extension_items(path, s));
+        items.extend(checkout_items(path, s));
         items.extend(feedback_items(path, s));
     }
     sort(&mut items);
@@ -212,6 +213,10 @@ fn counted(kind: &str, n: usize) -> String {
         "extension_untrusted" => (
             "extension that waits for your trust",
             "extensions that wait for your trust",
+        ),
+        "checkout_untrusted" => (
+            "agent file that waits for your trust",
+            "agent files that wait for your trust",
         ),
         "yours" => ("step only you can take", "steps only you can take"),
         "aside" => ("set-aside change", "set-aside changes"),
@@ -1848,6 +1853,50 @@ fn feedback_items(path: &Path, state: &Path) -> Vec<InboxItem> {
         }
     }
     out
+}
+
+/// The checkout's agent files that wait for trust: one item for the
+/// project (spec 126).
+fn checkout_items(path: &Path, state: &Path) -> Vec<InboxItem> {
+    let report = crate::agent_files::states(path, state);
+    let Some(title) = report.title() else {
+        return Vec::new();
+    };
+    let waiting: Vec<&str> = report
+        .files
+        .iter()
+        .filter(|f| f.state.waits())
+        .map(|f| f.path.as_str())
+        .collect();
+    let mut detail = waiting
+        .iter()
+        .take(6)
+        .copied()
+        .collect::<Vec<_>>()
+        .join(", ");
+    if waiting.len() > 6 {
+        detail.push_str(&format!(" and {} more", waiting.len() - 6));
+    }
+    detail.push_str(" — agents read only what you trusted; an external agent waits until then.");
+    vec![InboxItem {
+        kind: Kind::CheckoutUntrusted.as_str().to_owned(),
+        group: Kind::CheckoutUntrusted.group().as_str().to_owned(),
+        risk: Vec::new(),
+        tool: None,
+        feature: String::new(),
+        task: None,
+        title,
+        detail,
+        since: None,
+        actions: vec![action(
+            "trust",
+            "review…".to_owned(),
+            "see each file and what changed, then trust it",
+            "speccoder trust".to_owned(),
+        )],
+        unverified: None,
+        findings: Vec::new(),
+    }]
 }
 
 fn extension_items(path: &Path, state: &Path) -> Vec<InboxItem> {

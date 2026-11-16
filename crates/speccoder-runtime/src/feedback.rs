@@ -586,7 +586,7 @@ pub fn report_item(root: &Path, upstream: &str, title: &str, text: &str) -> Resu
             }
         ));
     };
-    let title = crate::secrets::mask(title.trim()).replace('\n', " ");
+    let title = crate::secrets::mask_out(title.trim()).replace('\n', " ");
     if title.is_empty() || title.chars().count() > 120 {
         return Err("give a title of one line, at most 120 characters".into());
     }
@@ -609,7 +609,7 @@ pub fn report_item(root: &Path, upstream: &str, title: &str, text: &str) -> Resu
     if let Some(v) = pinned(root, upstream) {
         evidence.push_str(&format!(" · pins {upstream} {v}"));
     }
-    let body = crate::secrets::mask(text.trim());
+    let body = crate::secrets::mask_out(text.trim());
     let out = speccoder_core::feedback::append(&current, &id, &title, &body, &evidence);
     if let Some(dir) = file.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;

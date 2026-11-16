@@ -121,6 +121,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 |---|---|
 | `speccoder hooks [trust [NAME] \| test NAME \| deliver]` | Your [hooks](@/docs/hooks.md): each one's trust, what it guards or hears, its last runs; trust one after seeing what it runs; run a gate alone or send an observer a sample; deliver what waits for the observers |
 | `speccoder extensions [add SOURCE \| trust NAME \| remove NAME]` | Your [extensions](@/docs/extensions.md): what each contributes and can reach, its trust; add one from a folder or `URL@COMMIT` (nothing of it runs), trust it after seeing it, remove it |
+| `speccoder trust [--all \| PATH…]` | The checkout's [agent files](@/docs/security.md#agent-files) — instructions, skills, an agent's settings — and whether each is trusted as it is now; `--all` or PATHs trust them (payload `trust`) |
 | `speccoder auth [login [--with-token] \| status \| logout] [--host H]` | Sign in to GitHub (a device code, or a token on stdin), show the account, sign out ([GitHub](@/docs/github.md#sign-in)) |
 | `speccoder suggest TEXT…` | The rung a description suggests — bug fix, quick change, feature or a question — and the cue that decided it (payload `rung_suggestion`); no model |
 | `speccoder preset add [--yes]` | Install or update the [speccoder Spec Kit preset](@/docs/planning.md#the-speccoder-preset) with `specify preset add --dev` |

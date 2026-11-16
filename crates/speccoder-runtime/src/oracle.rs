@@ -1069,8 +1069,14 @@ impl<'a> Author<'a> {
             },
             "dependencies": [],
         });
-        let instructions =
-            crate::instructions::collect(&ctx.root, &ctx.root, &[], &ctx.config.instructions);
+        let instructions = crate::instructions::collect(
+            &ctx.root,
+            &ctx.root,
+            &[],
+            &ctx.config.instructions,
+            Some(&ctx.state),
+        )
+        .files;
         Self {
             ctx,
             rt,

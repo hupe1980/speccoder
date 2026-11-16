@@ -585,6 +585,15 @@ pub fn runner(root: &Path, config: &Config) -> Result<(Runner, Option<String>), 
     }
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let profile = Profile::new(root, config, home.as_deref());
+    // A linked worktree's `.git` file read-only where this machine can
+    // carve it; elsewhere speccoder's git refuses a rewritten one
+    // (`git::pinned`), so falling back says nothing.
+    let dot_git = root.join(".git");
+    let carved = std::fs::symlink_metadata(&dot_git)
+        .is_ok_and(|m| m.is_file())
+        .then(|| profile.clone().carve(std::slice::from_ref(&dot_git), &[]))
+        .filter(|p| fit(p).is_ok_and(|(_, notice)| notice.is_none()));
+    let profile = carved.unwrap_or(profile);
     // What this machine cannot enforce is left out by name; anything else it
     // cannot confine means no sandbox, and `mode` decides.
     match backend().and_then(|backend| Ok((backend, fit(&profile)?))) {

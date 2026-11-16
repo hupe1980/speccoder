@@ -451,17 +451,13 @@ pub fn holds_a_credential(text: &str) -> bool {
             regex::RegexSet::new([
                 r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
                 r"[a-zA-Z][a-zA-Z0-9+.-]*://[^\s/:@]+:[^\s/@]+@",
-                r"\bAKIA[0-9A-Z]{16}\b",
-                r"\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}",
-                r"\bgithub_pat_[A-Za-z0-9_]{20,}",
-                r"\bxox[abprs]-[A-Za-z0-9-]{10,}",
-                r"\bsk-[A-Za-z0-9_-]{16,}",
                 r#"(?i)(api[_-]?key|secret|passw(or)?d|token|private[_-]?key)["']?\s*[:=]\s*["']?[^\s"']{4,}"#,
             ])
             .ok()
         })
         .as_ref()
         .is_none_or(|set| set.is_match(text))
+        || crate::secrets::shape_in(text).is_some()
 }
 
 /// Why a command the agent runs itself needs a person.
@@ -779,12 +775,9 @@ impl Governor {
             return false;
         }
         // 1: not ignored; 0 (ignored) or anything else (an error): no.
-        let not_ignored = std::process::Command::new("git")
-            .args(["check-ignore", "-q", "--"])
-            .arg(rel)
-            .current_dir(&self.root)
-            .status()
-            .is_ok_and(|s| s.code() == Some(1));
+        let not_ignored = crate::git::Git::at(&self.root)
+            .code(&["check-ignore", "-q", "--", rel])
+            .is_ok_and(|c| c == Some(1));
         if !not_ignored {
             return false;
         }

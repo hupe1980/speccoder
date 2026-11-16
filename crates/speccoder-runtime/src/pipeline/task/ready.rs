@@ -287,12 +287,15 @@ pub(super) fn make(
     // The repository's instructions for agents, from the tree the
     // attempt starts in: for speccoder's own calls (the attempt, the test
     // authors); an external agent reads its own files.
-    let instructions = crate::instructions::collect(
+    // Only what a person trusted (spec 126).
+    let given = crate::instructions::collect(
         wt_root,
         project,
         &speccoder_core::scope::named_paths(&bundle.task.title),
         &run_config.instructions,
+        Some(state),
     );
+    let instructions = given.files;
 
     // MCP servers, started in the worktree for this task's attempts.
     let servers = match mcp::parse(config_text) {
@@ -399,6 +402,7 @@ pub(super) fn make(
         .chain(sandbox_notice.clone())
         .chain(contained_notice.clone())
         .chain(prepare_notes.iter().cloned())
+        .chain(given.withheld.iter().map(|(p, why)| format!("{p} {why}")))
         .chain(resumed_from.as_ref().map(|(stage, last_call)| {
             format!(
                 "Resuming — {task} was interrupted during {}{}; finished calls will not repeat.",

@@ -18,12 +18,13 @@ nav = "Security and the sandbox"
 | Policy | *which* calls may run | every tool call, before it runs |
 | OS sandbox | *what* a running command can reach | every command speccoder starts |
 | Secret scrubbing | which environment a command sees | every command speccoder starts |
+| Agent-file trust | what steers an agent, and whether an external agent starts | every attempt |
 | Provenance labels | what may steer a mutating call | every model call |
 | Verifier and audit | whether a task is done | after every attempt |
 
 ## Isolation
 
-All work happens on `speccoder/<feature>` in a worktree under speccoder's state directory, and reaches your branch only when you merge it. speccoder never fetches or pushes on its own; `speccoder pr` pushes after you confirm. The model writes in your checkout only through a hosted planning skill (`speccoder spec …`), which may write only the format's planning artifacts and leaves them uncommitted.
+All work happens on `speccoder/<feature>` in a worktree under speccoder's state directory, and reaches your branch only when you merge it. A worktree's `.git` file is read-only to commands where the sandbox can carve it; everywhere, speccoder's git checks where it points and refuses one changed to name another git directory (`GIT-REDIRECTED`), so filters and diff programs from such a directory never run. speccoder never fetches or pushes on its own; `speccoder pr` pushes after you confirm. The model writes in your checkout only through a hosted planning skill (`speccoder spec …`), which may write only the format's planning artifacts and leaves them uncommitted.
 
 ### In-place mode
 
@@ -32,7 +33,7 @@ All work happens on `speccoder/<feature>` in a worktree under speccoder's state 
 - **No git that moves the checkout.** The model's `git checkout`, `switch`, `reset`, `commit`, `merge`, `rebase`, `cherry-pick`, `revert`, `stash`, `branch`, `tag`, `update-ref`, `worktree`, `am`, `apply --index` and `restore --staged` are denied.
 - **Only what a worktree would hold.** The file tools refuse files git ignored at the start (a journaled list), except the spec, plan and tasks, which stay readable and never writable.
 - **`.git` read-only, ignored secrets unreadable.** macOS: Seatbelt rules. Linux: each command starts in its own user and mount namespace with `.git` bound read-only and git-ignored credential-like files (`.env`, keys) reading as empty.
-- **A guard where the sandbox cannot.** Some hosts forbid user namespaces (a container's default seccomp profile, Ubuntu's AppArmor restriction); the run says so at the start. In every case speccoder hashes `.git`'s `config`, `hooks/`, `info/` and every branch and tag but its own, and stops before the next tick when they change (`GIT-CHANGED`). speccoder's own git calls never run hooks or an fsmonitor.
+- **A guard where the sandbox cannot.** Some hosts forbid user namespaces (a container's default seccomp profile, Ubuntu's AppArmor restriction); the run says so at the start. In every case speccoder hashes `.git`'s `config`, `hooks/`, `info/` and every branch and tag but its own, and stops before the next tick when they change (`GIT-CHANGED`). speccoder's own git calls never run hooks, an fsmonitor, an external diff or a text conversion.
 
 Not confined in place:
 
@@ -123,6 +124,7 @@ Held-out tests are kept in the state directory, out of the model's reach — wit
 - Every command speccoder starts gets an environment without secret-looking variables: `*_API_KEY`, `*_TOKEN`, `*SECRET*`, `*PASSWORD*`, `AWS_*`, `ANTHROPIC_*`, `OPENAI_*`, `SSH_AUTH_SOCK`, `GIT_ASKPASS`, `SSH_ASKPASS`. Colour is off for these commands (`NO_COLOR=1`, `CARGO_TERM_COLOR=never`).
 - Commands run with stdin closed, a deadline for their whole process group, and capped output.
 - A git-ignored secret file [copied into a worktree](@/docs/running.md#copied-files) (`[worktree] include`, `.worktreeinclude`) stays unreadable to the model's file tools. The values of its secret-named variables, and the lines of a key file (8 characters or more, not a plain number), are masked as `[redacted:NAME]`, also base64-, hex- and URL-encoded, in speccoder's tool results, MCP results, command and check output, the journal and the screen — an external `[executor]` reads files with its own tools too, so only what it reads through speccoder is masked; a commit never holds the file, and a diff adding a value stops the task (`SECRET-IN-DIFF`). A value transformed otherwise is not recognised.
+- Every speccoder process masks the same values — the web app and `speccoder mcp` included — as well as secret-named environment variables and well-known token shapes (GitHub, Anthropic, OpenAI, AWS, Slack, private keys), in commit messages, pull request bodies and MCP replies too. An attestation holding one is refused.
 - Signing keys: see [what a signature proves](@/docs/attestations.md#what-a-signature-proves).
 
 ## Provenance labels
@@ -144,6 +146,17 @@ A fix that is your own command (`npm install`, `git add … && git commit …`) 
 Two kinds run unsandboxed, and the card says so before **Run**: the few fixes that change something outside the project by their nature (`git config --global …` changes your global git config; removing a worktree elsewhere), and every fix where the OS has no sandbox.
 
 Only a command speccoder issued runs: built as exact argvs (a file name stays one argument and one literal path), or one of speccoder's constant fix lines, and signed by the host for this project. The host refuses anything else — argvs the page composed or changed, a model's suggestion, a sign-in that must run in a terminal. speccoder's own commands run as speccoder, never through this path. Output is masked like every other.
+
+## Agent files
+
+What a checkout tells agents can steer them: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, rules files, skills (`.claude/skills/`, `.agents/skills/`) and an agent's own settings (`.claude/settings.json`, `.mcp.json`, `.codex/`, `.gemini/`, `opencode.json`), whose hooks and servers run on your machine. Each is trusted by its digest, like a hook; trust lives in speccoder's state and keeps the text you saw.
+
+<figure class="shot"><img class="shot-light" src="../../screenshots/trust-light.webp" alt="Review agent files: a new .claude/settings.json and AGENTS.md changed since you trusted it, its diff showing an added line, with Trust 2 Files" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/trust-dark.webp" alt="Review agent files: a new .claude/settings.json and AGENTS.md changed since you trusted it, its diff showing an added line, with Trust 2 Files" width="1440" height="900" loading="lazy" decoding="async"></figure>
+
+- speccoder's model gets only trusted bytes: a changed file as you trusted it, a new one not at all. The run says which.
+- A repository skill runs only when every file of it is trusted. A link where an agent file belongs is never followed: it waits like a file.
+- An [external agent](#external-agents) does not start while a file it reads is new or changed (`CHECKOUT-UNTRUSTED`).
+- Needs You shows one item with each file's diff; **Trust N Files** records exactly what you saw, or `speccoder trust`. What speccoder writes itself (a new project, the sample) is trusted already.
 
 ## Hooks
 

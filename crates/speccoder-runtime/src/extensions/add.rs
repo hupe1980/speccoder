@@ -138,27 +138,22 @@ fn fetch(url: &str, commit: &str) -> Result<tempfile::TempDir, String> {
     std::fs::create_dir_all(&no_hooks).map_err(|e| e.to_string())?;
     let local = !url.contains("://") && !url.contains('@');
     let git = |args: &[&str]| -> Result<(), String> {
-        let mut c = std::process::Command::new("git");
-        c.arg("-c")
-            .arg(format!("core.hooksPath={}", no_hooks.display()))
-            .args(["-c", "submodule.recurse=false"]);
+        let hooks = format!("core.hooksPath={}", no_hooks.display());
+        let mut all = vec!["-c", hooks.as_str(), "-c", "submodule.recurse=false"];
         if !local {
-            c.args(["-c", "protocol.file.allow=never"]);
+            all.extend(["-c", "protocol.file.allow=never"]);
         }
-        let out = c
-            .args(args)
-            .current_dir(&tree)
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .output()
+        all.extend_from_slice(args);
+        crate::git::Git::at(&tree)
+            .quiet(&all, &[("GIT_CONFIG_NOSYSTEM", std::ffi::OsStr::new("1"))])
+            .map(|_| ())
             .map_err(|e| {
-                format!("git is needed to add from a repository ({e}); add a folder instead")
-            })?;
-        if out.status.success() {
-            Ok(())
-        } else {
-            Err(String::from_utf8_lossy(&out.stderr).trim().to_owned())
-        }
+                if e.0.starts_with("cannot run git") {
+                    format!("git is needed to add from a repository ({e}); add a folder instead")
+                } else {
+                    e.0
+                }
+            })
     };
     std::fs::create_dir_all(&tree).map_err(|e| e.to_string())?;
     git(&["init", "--quiet"])?;

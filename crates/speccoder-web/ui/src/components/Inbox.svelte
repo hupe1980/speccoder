@@ -98,6 +98,11 @@
       app.settingsSection = "extensions";
       return;
     }
+    // The checkout's agent files: what changed, and trust.
+    if (i.kind === "checkout_untrusted") {
+      app.trustSheet = true;
+      return;
+    }
     // Between projects: their feedback, on the Projects page.
     if (i.kind === "request" || i.kind === "feedback") {
       app.view = "projects";

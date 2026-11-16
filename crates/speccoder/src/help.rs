@@ -20,6 +20,7 @@ pub const ADVANCED: &[&str] = &[
     "projects",
     "feedback",
     "mcp",
+    "trust",
     "hooks",
     "extensions",
     "auth",

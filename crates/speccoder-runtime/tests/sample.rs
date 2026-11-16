@@ -73,6 +73,8 @@ fn scripted_sample() -> Asset {
     git(&r, &["add", "-A"]);
     git(&r, &["commit", "-q", "-m", "wordcount"]);
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's skill (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(&r, state.path(), "t", "terminal");
     let f = FakeProvider::new();
     f.will_call_tool(
         "w",
@@ -135,6 +137,12 @@ fn a_build_without_the_recording_says_so_and_with_it_the_recording_reproduces() 
         assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
         assert!(report(&res).runs.iter().all(|r| r.result == "reproduced"));
         assert!(began.elapsed() < std::time::Duration::from_secs(10));
+        // Its agent files are speccoder's own: nothing waits for trust.
+        let copy = Path::new(&report(&res).path);
+        assert_eq!(
+            speccoder_runtime::agent_files::states(copy, state.path()).waiting,
+            0
+        );
         // What the playback shows: the recorded ticks.
         let status = speccoder_runtime::status::report(Path::new(&report(&res).path), None);
         let Some(CommandData::Report(st)) = status.data() else {

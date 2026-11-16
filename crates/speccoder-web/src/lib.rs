@@ -9,6 +9,7 @@ pub mod fixes;
 pub mod jobs;
 mod projects;
 pub mod security;
+mod trust;
 mod welcome;
 
 use std::net::SocketAddr;
@@ -101,6 +102,11 @@ impl Root {
     /// Says, for the view across projects, that this process serves its
     /// project now (process, port, start — never the key).
     fn announce(&self) {
+        // Secrets this project's files give are masked in what this
+        // process shows, as in the process that copied them (spec 126).
+        if let Some(root) = self.bound() {
+            speccoder_runtime::service::secrets::register_project(&root);
+        }
         if let (Some(root), Some(port), Some(state)) = (
             self.bound(),
             self.0.port.get(),
@@ -1453,6 +1459,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/open", post(welcome::open))
         .route("/api/recent/forget", post(welcome::forget))
         .route("/api/projects", get(projects::list))
+        .route("/api/trust", get(trust::list).post(trust::trust_files))
         .route("/api/feedback", get(feedback::list))
         .route("/api/feedback/decide", post(feedback::decide))
         .route("/api/feedback/prepared", get(feedback::prepared))

@@ -391,6 +391,15 @@ pub enum Command {
     /// What this project asks of the projects it depends on (`[upstream.<name>]`), where each item stands, and what others ask of it.
     #[command(hide = true)]
     Feedback,
+    /// The checkout's agent files (instructions, skills, an executor's settings) and your trust in each; agents read only what you trusted.
+    #[command(hide = true)]
+    Trust {
+        /// Trust every waiting file as it is now.
+        #[arg(long, conflicts_with = "paths")]
+        all: bool,
+        /// Trust these files as they are now (repository-relative).
+        paths: Vec<String>,
+    },
     /// Serve the feedback tools to your coding agent over stdio (MCP): report, list, withdraw, requests, resolve.
     #[command(hide = true)]
     Mcp,

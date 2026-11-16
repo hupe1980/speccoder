@@ -113,6 +113,7 @@ const fn describe(payload: &str) -> &'static str {
         b"feedback" => {
             "feedback: what this project asks of the projects it depends on, and what others ask of it"
         }
+        b"trust" => "trust: the checkout's agent files and your trust in each",
         b"extensions" => {
             "extensions: every extension, what it contributes and can reach, and its trust"
         }
@@ -216,6 +217,7 @@ published! {
     "explanation", "Explanation" => core::thread::Explanation,
     "projects", "ProjectsReport" => core::projects::ProjectsReport,
     "feedback", "FeedbackReport" => core::feedback::FeedbackReport,
+    "trust", "TrustReport" => core::agent_files::TrustReport,
     "extension_views", "ViewsReport" => core::extensions::ViewsReport,
     "shape", "ShapeReport" => core::ShapeReport,
     "ask", "AskReport" => core::ask::AskReport,

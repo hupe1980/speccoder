@@ -8,6 +8,7 @@
 pub mod acceptance_at;
 pub mod acp;
 pub mod actions;
+pub mod agent_files;
 pub mod approvals;
 pub mod ask;
 pub mod attempts;

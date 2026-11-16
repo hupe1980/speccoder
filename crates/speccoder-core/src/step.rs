@@ -47,6 +47,8 @@ pub enum View {
     Ask,
     /// `spec explore`: the Explore sheet (`subject`: a session, if one).
     Explore,
+    /// `trust`: the checkout's agent files, to review and trust.
+    Trust,
 }
 
 /// How an interface takes a line.
@@ -221,6 +223,7 @@ pub const SUBCOMMANDS: &[&str] = &[
     "story",
     "suggest",
     "task",
+    "trust",
     "tui",
     "ui",
     "verify",
@@ -1001,6 +1004,7 @@ fn speccoder(argv: &[String], constant: bool) -> How {
         (Some("hooks"), _) => view(View::Settings, Some("hooks")),
         // An extension is trusted in its sheet, after it is seen.
         (Some("extensions"), _) => view(View::Settings, Some("extensions")),
+        (Some("trust"), _) => view(View::Trust, None),
         (Some("config"), None | Some("get" | "unset")) => view(View::Settings, None),
         (Some("config"), Some("set")) if a.iter().any(|w| has_blank(w)) => {
             view(View::Settings, None)

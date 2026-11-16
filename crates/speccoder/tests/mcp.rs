@@ -254,3 +254,27 @@ fn an_agent_reports_lists_withdraws_and_an_upstream_resolves() {
         "{ups:#?}"
     );
 }
+
+#[test]
+fn a_secret_from_the_project_s_dotenv_never_leaves_in_a_reply() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = dir.path().join("state");
+    let _lib = project(dir.path(), "lib", "");
+    let app = project(
+        dir.path(),
+        "app",
+        "[upstream.lib]\npath = \"../lib\"\noutbox = \"FEEDBACK.md\"\n",
+    );
+    fs::write(app.join(".gitignore"), ".env\n").unwrap();
+    fs::write(app.join(".env"), "LIB_TOKEN=canary-91d0e7a4c3\n").unwrap();
+    // A person pasted it into the outbox by mistake.
+    fs::write(
+        app.join("FEEDBACK.md"),
+        "# For lib\n\n## Open\n\n### AP-7 — auth fails with canary-91d0e7a4c3\n\nIt fails.\n",
+    )
+    .unwrap();
+    let mut c = Client::start(&app, &state);
+    let (t, _) = c.call("feedback_upstreams", json!({}));
+    assert!(!t.contains("canary-91d0e7a4c3"), "{t}");
+    assert!(t.contains("[redacted:LIB_TOKEN]"), "{t}");
+}

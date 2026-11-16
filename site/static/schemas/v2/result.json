@@ -2295,6 +2295,11 @@
           "description": "`spec explore`: the Explore sheet (`subject`: a session, if one).",
           "type": "string",
           "const": "explore"
+        },
+        {
+          "description": "`trust`: the checkout's agent files, to review and trust.",
+          "type": "string",
+          "const": "trust"
         }
       ]
     },
@@ -2670,6 +2675,10 @@
         {
           "description": "`feedback`: what this project asks of others, and others of it.",
           "$ref": "#/$defs/FeedbackReport"
+        },
+        {
+          "description": "`trust`: the checkout's agent files and whether each is trusted.",
+          "$ref": "#/$defs/TrustReport"
         },
         {
           "description": "`extensions`: every extension, what it contributes and its trust.",
@@ -13018,6 +13027,200 @@
         "digest",
         "status",
         "changed"
+      ]
+    },
+    "TrustReport": {
+      "description": "`trust`: a checkout's agent files.",
+      "type": "object",
+      "properties": {
+        "files": {
+          "description": "Every agent file found or trusted before, waiting ones first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AgentFile"
+          }
+        },
+        "waiting": {
+          "description": "How many wait for a person.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "files",
+        "waiting"
+      ]
+    },
+    "AgentFile": {
+      "description": "One agent file of a checkout.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Repository-relative, `/`-separated.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "What it is.",
+          "$ref": "#/$defs/AgentFileKind"
+        },
+        "readers": {
+          "description": "Who reads it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Reader"
+          }
+        },
+        "digest": {
+          "description": "`sha256:…` of its bytes now; empty when gone.",
+          "type": "string"
+        },
+        "bytes": {
+          "description": "Its size now.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "state": {
+          "description": "Where it stands.",
+          "$ref": "#/$defs/AgentFileState"
+        },
+        "trusted": {
+          "description": "The record in force, if any.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrustedBy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tree": {
+          "description": "Where these bytes are when not in your checkout: a feature's\nworktree (`001-login`), whose agents read them.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "diff": {
+          "description": "What changed (a unified diff), or the text of a new file; cut at\n[`DIFF_CAP`] with a note.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "readers",
+        "digest",
+        "bytes",
+        "state"
+      ]
+    },
+    "AgentFileKind": {
+      "description": "What an agent file is.",
+      "oneOf": [
+        {
+          "description": "Text that steers a model (`AGENTS.md`, `CLAUDE.md`, rules).",
+          "type": "string",
+          "const": "instructions"
+        },
+        {
+          "description": "A skill a model may run.",
+          "type": "string",
+          "const": "skill"
+        },
+        {
+          "description": "An executor's settings: hooks and servers it starts itself.",
+          "type": "string",
+          "const": "settings"
+        }
+      ]
+    },
+    "Reader": {
+      "description": "Who reads an agent file.",
+      "oneOf": [
+        {
+          "description": "speccoder's own model.",
+          "type": "string",
+          "const": "speccoder"
+        },
+        {
+          "description": "Claude Code.",
+          "type": "string",
+          "const": "claude"
+        },
+        {
+          "description": "Codex.",
+          "type": "string",
+          "const": "codex"
+        },
+        {
+          "description": "Gemini CLI.",
+          "type": "string",
+          "const": "gemini"
+        },
+        {
+          "description": "OpenCode.",
+          "type": "string",
+          "const": "opencode"
+        },
+        {
+          "description": "GitHub Copilot.",
+          "type": "string",
+          "const": "copilot"
+        }
+      ]
+    },
+    "AgentFileState": {
+      "description": "Where an agent file stands.",
+      "oneOf": [
+        {
+          "description": "Trusted as it is now.",
+          "type": "string",
+          "const": "trusted"
+        },
+        {
+          "description": "Changed since it was trusted.",
+          "type": "string",
+          "const": "changed"
+        },
+        {
+          "description": "Never trusted.",
+          "type": "string",
+          "const": "untrusted"
+        },
+        {
+          "description": "Trusted once, gone now.",
+          "type": "string",
+          "const": "gone"
+        }
+      ]
+    },
+    "TrustedBy": {
+      "description": "Who trusted a file, how and when.",
+      "type": "object",
+      "properties": {
+        "by": {
+          "description": "The person.",
+          "type": "string"
+        },
+        "via": {
+          "description": "Through what: `terminal`, `web`, `speccoder` (files it wrote).",
+          "type": "string"
+        },
+        "at": {
+          "description": "When (RFC 3339).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "via",
+        "at"
       ]
     },
     "ExtensionsReport": {

@@ -35,6 +35,16 @@ pub mod progress {
     pub use crate::progress::{Event, Progress, read_live};
 }
 
+/// Masking secrets in what any process shows or writes (spec 126).
+pub mod secrets {
+    pub use crate::secrets::{mask, mask_json, mask_json_out, mask_out, register_project};
+}
+
+/// A checkout's agent files and a person's trust in them (spec 126).
+pub mod agent_files {
+    pub use crate::agent_files::{Refused, command, report, trust_as_person};
+}
+
 /// Feedback between projects (spec 125).
 pub mod feedback {
     pub use crate::feedback::{

@@ -137,6 +137,8 @@ class AppState {
   thinking = $state<string | null>(null);
   /** Counts the running attempt's turns, calls and stages: a thread refetches on it. */
   pulse = $state(0);
+  /** The checkout's agent files to review and trust (spec 126). */
+  trustSheet = $state(false);
   /** A waiting call to explain: its task (feature/task) and call id. */
   explain = $state<{ task: string; call: string } | null>(null);
   usage = $state<{ in: number; out: number; usd: number | null }>({ in: 0, out: 0, usd: null });
@@ -387,6 +389,7 @@ class AppState {
       case "review": this.doc = "review"; this.view = "documents"; return;
       case "settings": this.view = "settings"; this.settingsSection = subject ?? null; return;
       case "setup": this.view = "setup"; return;
+      case "trust": this.trustSheet = true; return;
       case "bug": this.bugSheet = {}; return;
       case "quick_change": this.quick = true; return;
       case "ask": return ask.toggle(true);

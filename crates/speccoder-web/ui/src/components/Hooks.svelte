@@ -5,7 +5,8 @@
   import { app } from "../lib/app.svelte";
   import { get } from "../lib/api";
   import { offer } from "../lib/actions";
-  import type { HookEntry, HooksReport, Reply } from "../lib/types";
+  import type { HookEntry, HooksReport, Reply, TrustReport } from "../lib/types";
+  import { READERS } from "../lib/kinds";
   import Icon from "./Icon.svelte";
 
   let reply = $state<Reply<HooksReport> | null>(null);
@@ -16,6 +17,13 @@
     void load();
   });
   const hooks = $derived(reply?.data?.hooks ?? []);
+  // The checkout's agent files (spec 126), read again when the sheet closes.
+  let agent = $state<Reply<TrustReport> | null>(null);
+  $effect(() => {
+    if (!app.trustSheet) void get<Reply<TrustReport>>("/api/trust").then((r) => (agent = r)).catch(() => {});
+  });
+  const files = $derived(agent?.data?.files ?? []);
+  const WORD: Record<string, string> = { trusted: "Trusted", changed: "Changed", untrusted: "New", gone: "Gone" };
   const STARTERS = [
     { title: "A gate the tick waits for", text: '[hooks.licence]\nat = "tick"\nargv = ["cargo", "deny", "check", "licenses"]\nnetwork = true' },
     { title: "An observer for your team chat", text: '[hooks.team-chat]\non = ["task.ticked", "task.stopped"]\nurl = "https://hooks.example.com/speccoder"\nsecret_env = "SPECCODER_HOOK_SECRET"' },
@@ -88,9 +96,34 @@
       {/each}
     </ul>
   {/if}
+  {#if files.length}
+    <section class="agent" aria-labelledby="agent-files">
+      <header>
+        <h3 id="agent-files">Agent files</h3>
+        <span class="muted small">What this checkout tells agents. They read only what you trusted, as you saw it.</span>
+        {#if agent?.data?.waiting}<button class="btn small primary" onclick={() => (app.trustSheet = true)}>Review {agent.data.waiting}…</button>{/if}
+      </header>
+      <ul class="files">
+        {#each files as f (f.path)}
+          <li class="file" class:waiting={f.state !== "trusted"}>
+            <span class="state {f.state === 'trusted' ? 'verified' : 'needs_approval'}">{WORD[f.state] ?? f.state}</span>
+            <span class="mono path">{f.path}</span>
+            <span class="muted small">{f.kind} · {f.readers.map((r) => READERS[r] ?? r).join(", ")}</span>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
 </section>
 
 <style>
+  .agent { display: grid; gap: 0.5rem; }
+  .agent header h3 { margin: 0; font-size: 0.95rem; }
+  .agent .files { gap: 0.25rem; }
+  .agent .file { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) auto; gap: 0.6rem; align-items: center; padding: 0.4rem 0.7rem; border-radius: 8px; }
+  .agent .path { overflow-wrap: anywhere; font-size: 0.82rem; }
+  .agent .file .state { margin-left: 0; }
+  @media (max-width: 600px) { .agent .file { grid-template-columns: 5.5rem minmax(0, 1fr); } .agent .file > :last-child { display: none; } }
   .hooks { display: grid; gap: 0.75rem; margin-bottom: 1rem; }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
   li { border: 1px solid var(--line); border-radius: 12px; padding: 0.75rem 0.9rem; background: var(--surface); }

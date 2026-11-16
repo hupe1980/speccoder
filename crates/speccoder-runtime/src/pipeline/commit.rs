@@ -182,8 +182,10 @@ pub(crate) fn commit_paths(
         add.extend(paths.iter().map(String::as_str));
         g.run(&add).map_err(|e| e.0)?;
     }
+    // Nothing a secret file gave is written into history (spec 126).
+    let message = crate::secrets::mask_out(message);
     let mut commit = base.to_vec();
-    commit.extend(["commit", "-q", "--no-verify", "-m", message]);
+    commit.extend(["commit", "-q", "--no-verify", "-m", &message]);
     if allow_empty {
         commit.push("--allow-empty");
     }
@@ -215,8 +217,10 @@ pub(crate) fn commit_attempt_as(
     add.extend(excluded.iter().map(String::as_str));
     g.run(&add).map_err(|e| e.0)?;
     crate::include::check_staged(worktree)?;
+    // Nothing a secret file gave is written into history (spec 126).
+    let message = crate::secrets::mask_out(message);
     let mut commit = base.to_vec();
-    commit.extend(["commit", "-q", "--no-verify", "-m", message]);
+    commit.extend(["commit", "-q", "--no-verify", "-m", &message]);
     if allow_empty {
         commit.push("--allow-empty");
     }
@@ -467,6 +471,20 @@ pub(crate) fn set_aside_leftovers(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_commit_message_never_carries_a_secret_value() {
+        let t = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let g = git::Git::at(t.path());
+        g.run(&["init", "-q"]).unwrap_or_else(|e| panic!("{e}"));
+        crate::secrets::register("DB_PASSWORD", "hunter2-canary-x");
+        let id = commit_paths(t.path(), "T001: uses hunter2-canary-x", &[], true)
+            .unwrap_or_else(|e| panic!("{e}"));
+        let msg = g
+            .line(&["log", "-1", "--format=%B", &id])
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(msg, "T001: uses [redacted:DB_PASSWORD]");
+    }
 
     #[test]
     fn an_agent_s_tick_names_its_executor_by_preset() {

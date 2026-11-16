@@ -7,6 +7,7 @@
 //! The values are held for the process, never written anywhere: masking
 //! more than one worktree's values everywhere is the safe direction.
 
+use std::path::Path;
 use std::sync::RwLock;
 
 use base64::Engine as _;
@@ -168,6 +169,60 @@ pub fn to_mask(file_name: &str, text: &str) -> Vec<(String, String)> {
     out.dedup();
     out
 }
+/// Well-known shapes of secrets, by the name they are masked under: one
+/// list for every caller (masking, the attestation's refusal, an external
+/// agent's reads, the doctor's report). Most specific first.
+const SHAPES: &[(&str, &str)] = &[
+    (
+        "PRIVATE_KEY",
+        r"-----BEGIN [A-Z ]*PRIVATE KEY-----(?s:.*?)-----END [A-Z ]*PRIVATE KEY-----",
+    ),
+    ("AWS_ACCESS_KEY", r"\bAKIA[0-9A-Z]{16}\b"),
+    (
+        "GITHUB_TOKEN",
+        r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}",
+    ),
+    ("GITHUB_TOKEN", r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
+    ("SLACK_TOKEN", r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),
+    ("ANTHROPIC_API_KEY", r"\bsk-ant-[A-Za-z0-9_-]{16,}"),
+    ("OPENAI_API_KEY", r"\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}"),
+];
+
+fn shapes() -> &'static [(&'static str, regex::Regex)] {
+    static COMPILED: std::sync::OnceLock<Vec<(&'static str, regex::Regex)>> =
+        std::sync::OnceLock::new();
+    COMPILED.get_or_init(|| {
+        SHAPES
+            .iter()
+            .filter_map(|(n, p)| regex::Regex::new(p).ok().map(|r| (*n, r)))
+            .collect()
+    })
+}
+
+/// The name of the first well-known secret shape `text` holds, if any.
+#[must_use]
+pub fn shape_in(text: &str) -> Option<&'static str> {
+    shapes()
+        .iter()
+        .find(|(_, r)| r.is_match(text))
+        .map(|(n, _)| *n)
+}
+
+/// `text` with every well-known secret shape replaced by `[redacted:NAME]`.
+#[must_use]
+pub fn mask_shapes(text: &str) -> String {
+    let mut out = std::borrow::Cow::Borrowed(text);
+    for (name, r) in shapes() {
+        if r.is_match(&out) {
+            out = std::borrow::Cow::Owned(
+                r.replace_all(&out, format!("[redacted:{name}]").as_str())
+                    .into_owned(),
+            );
+        }
+    }
+    out.into_owned()
+}
+
 /// `text` with every registered value, in each of its forms, replaced by
 /// `[redacted:NAME]`.
 #[must_use]
@@ -184,6 +239,96 @@ pub fn mask(text: &str) -> String {
         }
     }
     out
+}
+
+/// [`mask`], and every well-known secret shape too: for what speccoder
+/// writes into history or sends away — commit messages, a pull request's
+/// body, an outbox, MCP replies (spec 126). What a tool reads stays
+/// [`mask`]ed only, so a test fixture's fake token reads as written.
+#[must_use]
+pub fn mask_out(text: &str) -> String {
+    mask_shapes(&mask(text))
+}
+
+/// [`mask_out`] over every string in a JSON value.
+pub fn mask_json_out(v: &mut serde_json::Value) {
+    match v {
+        serde_json::Value::String(s) => {
+            let masked = mask_out(s);
+            if masked != *s {
+                *s = masked;
+            }
+        }
+        serde_json::Value::Array(a) => a.iter_mut().for_each(mask_json_out),
+        serde_json::Value::Object(o) => o.values_mut().for_each(mask_json_out),
+        _ => {}
+    }
+}
+
+/// Whether an environment variable's name says its value is a secret:
+/// narrower than [`secret_name`] (which also covers a secret file's
+/// lines), so a region, a profile, a model or a base address stays as is.
+#[must_use]
+pub fn env_secret_name(name: &str) -> bool {
+    let n = name.to_ascii_uppercase();
+    let plain = [
+        "_REGION", "_PROFILE", "_MODEL", "_URL", "_HOST", "_PORT", "_NAME", "_EMAIL", "_ID",
+    ];
+    if plain.iter().any(|p| n.ends_with(p)) && !n.ends_with("_KEY_ID") {
+        return false;
+    }
+    [
+        "_KEY",
+        "_KEY_ID",
+        "_TOKEN",
+        "_SECRET",
+        "_PASSWORD",
+        "_PASSWD",
+        "_PAT",
+        "_CREDENTIALS",
+    ]
+    .iter()
+    .any(|s| n.ends_with(s))
+        || n.contains("PASSWORD")
+        || n.contains("SECRET")
+        || n == "AWS_SESSION_TOKEN"
+}
+
+/// Registers the values of this process's environment variables whose
+/// names say secret ([`env_secret_name`]) — never a path.
+pub fn register_env() {
+    for (k, v) in std::env::vars() {
+        let path = v.starts_with(['/', '~', '.']);
+        if env_secret_name(&k) && !path {
+            register(&k, &v);
+        }
+    }
+}
+
+/// Registers what a project's secret files give to mask, in any process
+/// (spec 126): the environment ([`register_env`]), each worktree's copied
+/// files (its include record), and the checkout's own ignored `.env*`.
+pub fn register_project(root: &Path) {
+    register_env();
+    let git = crate::git::Git::at(root);
+    let listed = git
+        .run(&["worktree", "list", "--porcelain", "-z"])
+        .map(|o| crate::git::nul_fields(&o))
+        .unwrap_or_default();
+    for wt in listed.iter().filter_map(|l| l.strip_prefix("worktree ")) {
+        crate::include::register(Path::new(wt));
+    }
+    for f in crate::include::matched(root, &[".env".to_owned(), ".env.*".to_owned()]) {
+        let name = Path::new(&f)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if let Ok(text) = std::fs::read_to_string(root.join(&f)) {
+            for (k, v) in to_mask(&name, &text) {
+                register(&k, &v);
+            }
+        }
+    }
 }
 
 /// [`mask`] over bytes that need not be UTF-8: each form replaced where it
@@ -288,6 +433,74 @@ pub fn dotenv(text: &str) -> Vec<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn well_known_shapes_are_masked_by_name() {
+        let gh = format!("ghp_{}", "a".repeat(36));
+        let ant = format!("sk-ant-api03-{}", "b".repeat(30));
+        let text = format!("token {gh} and {ant} and AKIAABCDEFGHIJKLMNOP; sk-short stays");
+        assert_eq!(
+            mask(&text),
+            text,
+            "a tool's read keeps a fixture's fake token"
+        );
+        let out = mask_out(&text);
+        assert!(out.contains("[redacted:GITHUB_TOKEN]"), "{out}");
+        assert!(out.contains("[redacted:ANTHROPIC_API_KEY]"), "{out}");
+        assert!(out.contains("[redacted:AWS_ACCESS_KEY]"), "{out}");
+        assert!(out.contains("sk-short stays"), "{out}");
+        assert_eq!(shape_in(&gh), Some("GITHUB_TOKEN"));
+        assert_eq!(shape_in("nothing here"), None);
+        let pem =
+            "a\n-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\nb";
+        assert_eq!(mask_out(pem), "a\n[redacted:PRIVATE_KEY]\nb");
+        let open = "x -----BEGIN PRIVATE KEY----- y and more";
+        assert_eq!(mask_out(open), open, "no END marker: nothing to cut");
+        for (n, secret) in [
+            ("OPENAI_API_KEY", true),
+            ("AWS_SECRET_ACCESS_KEY", true),
+            ("AWS_ACCESS_KEY_ID", true),
+            ("GH_TOKEN", true),
+            ("DB_PASSWORD", true),
+            ("AWS_REGION", false),
+            ("AWS_PROFILE", false),
+            ("ANTHROPIC_MODEL", false),
+            ("OPENAI_BASE_URL", false),
+            ("GIT_AUTHOR_NAME", false),
+            ("SSH_AUTH_SOCK", false),
+            ("PWD", false),
+        ] {
+            assert_eq!(env_secret_name(n), secret, "{n}");
+        }
+    }
+
+    #[test]
+    fn a_fresh_process_masks_a_project_s_dotenv_and_secret_named_variables() {
+        let t = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let root = t.path();
+        let git = |args: &[&str]| {
+            assert!(
+                std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(root)
+                    .status()
+                    .is_ok_and(|s| s.success())
+            );
+        };
+        git(&["init", "-q"]);
+        std::fs::write(root.join(".gitignore"), ".env\n").unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(
+            root.join(".env"),
+            "API_TOKEN=canary-7f3a9c2e51\nPORT=5432\n",
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        register_project(root);
+        assert_eq!(
+            mask("got canary-7f3a9c2e51 back"),
+            "got [redacted:API_TOKEN] back"
+        );
+        assert_eq!(mask("port 5432"), "port 5432");
+    }
 
     #[test]
     fn a_dotenv_file_gives_its_pairs() {

@@ -347,6 +347,14 @@ fn after_planning_the_cli_offers_the_commit_and_then_the_run() {
     .unwrap();
     git(r, &["add", "-A"]);
     git(r, &["commit", "-qm", "planned"]);
+    // The person trusted the checkout's skill (spec 126).
+    let trusted = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+        .args(["trust", "--all", "-C"])
+        .arg(r)
+        .env("SPECCODER_STATE_DIR", state.path())
+        .output()
+        .unwrap();
+    assert!(trusted.status.success(), "{trusted:?}");
     let driver = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pty_drive.py");
     let out = Command::new("python3")
         .arg("-I")

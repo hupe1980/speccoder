@@ -1167,12 +1167,26 @@ fn main() {
     {
         finish(&cli, *refused, events.as_ref());
     }
+    // What a secret file of this project gives is masked in what this
+    // process shows or writes (spec 126).
+    // (Not for help, and not for the live view, which shows progress
+    // events only and must start fast.)
+    if !matches!(
+        command,
+        Command::Help { .. } | Command::Completion { .. } | Command::Report { live: true, .. }
+    ) {
+        speccoder_runtime::service::secrets::register_project(path);
+    }
     let result = match command {
         Command::Hooks { action } => hooks(path, action.as_ref(), machine),
         Command::Projects { action } => projects(path, action.as_ref()),
         Command::Feedback => match speccoder_runtime::worktree::state_dir() {
             Some(state) => speccoder_runtime::service::feedback::report(&state, path),
             None => no_state("feedback"),
+        },
+        Command::Trust { all, paths } => match speccoder_runtime::worktree::state_dir() {
+            Some(state) => speccoder_runtime::agent_files::command(path, &state, *all, paths),
+            None => no_state("trust"),
         },
         Command::Mcp => match mcp_server::serve(path) {
             Ok(()) => std::process::exit(0),
@@ -2693,6 +2707,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Projects { .. } => "projects",
             C::Feedback => "feedback",
             C::Mcp => "mcp",
+            C::Trust { .. } => "trust",
             C::Extensions { .. } => "extensions",
             C::Fix { .. } => "fix",
             C::Spec { .. } => "spec",

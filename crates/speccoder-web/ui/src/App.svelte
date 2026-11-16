@@ -26,6 +26,7 @@
   import Setup from "./components/Setup.svelte";
   import ConfirmSheet from "./components/ConfirmSheet.svelte";
   import ExplainSheet from "./components/ExplainSheet.svelte";
+  import TrustSheet from "./components/TrustSheet.svelte";
   import Projects from "./components/Projects.svelte";
   import RemedyCard from "./components/RemedyCard.svelte";
   import Composer from "./components/Composer.svelte";
@@ -329,6 +330,7 @@
 {#if app.input}<InputSheet />{/if}
 {#if app.confirming}<ConfirmSheet />{/if}
 {#if app.explain}<ExplainSheet />{/if}
+{#if app.trustSheet}<TrustSheet />{/if}
 {#if app.remedy}<RemedyCard />{/if}
 {#if app.palette}<Palette />{/if}
 {#if app.context}<ContextMenu />{/if}

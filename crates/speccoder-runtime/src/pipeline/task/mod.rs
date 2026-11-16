@@ -175,7 +175,12 @@ pub(super) fn ended(
         usd: None,
         regression: None,
     });
-    CommandResult::new("run", status, &redact(&m, secret))
+    let r = CommandResult::new("run", status, &redact(&m, secret));
+    if m.contains(crate::git::REDIRECTED) {
+        r.with_code("GIT-REDIRECTED")
+    } else {
+        r
+    }
 }
 
 pub(crate) fn run_task(

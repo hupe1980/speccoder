@@ -778,15 +778,12 @@ pub fn digest(folder: &Path) -> Result<(String, Vec<HookFile>), String> {
 /// while files there are not committed or are ignored by git.
 fn git_files(folder: &Path) -> Result<Option<Vec<String>>, String> {
     let git = |args: &[&str]| {
-        std::process::Command::new("git")
-            .args(["-c", "core.quotePath=off"])
-            .args(args)
-            .current_dir(folder)
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .output()
+        let mut all = vec!["-c", "core.quotePath=off"];
+        all.extend_from_slice(args);
+        crate::git::Git::at(folder)
+            .run_with_env(&all, &[("GIT_CONFIG_NOSYSTEM", std::ffi::OsStr::new("1"))])
             .ok()
-            .filter(|o| o.status.success())
-            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .map(|o| String::from_utf8_lossy(&o).into_owned())
     };
     let Some(top) = git(&["rev-parse", "--show-toplevel"]) else {
         return Ok(None);

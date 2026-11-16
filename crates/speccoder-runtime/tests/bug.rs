@@ -1171,6 +1171,8 @@ const ASSESSMENT: &str = "# Bug Assessment: Saving an empty title crashes\n\n- *
 fn with_spec_kits_bug_extension_the_bug_is_the_extensions_own_and_its_fix_a_trailer_only_task() {
     let r = extension_repo();
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     // The extension's own assess skill writes the assessment, with the
     // person's words verbatim.
@@ -1266,6 +1268,8 @@ fn with_spec_kits_bug_extension_the_bug_is_the_extensions_own_and_its_fix_a_trai
 fn an_assessment_that_drops_the_persons_words_stops_before_reproduce() {
     let r = extension_repo();
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     let paraphrased = ASSESSMENT.replace(
         "> Expected: an empty title is refused with a message\n",
@@ -1842,6 +1846,8 @@ fn an_extension_bug_already_satisfied_is_kept_as_a_trailer_only_task() {
     .unwrap();
     git(r.path(), &["commit", "-qam", "fixed already"]);
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     f.will_call_tool("w", "write_file", json!({ "path": ".specify/bugs/saving-an-empty-title/assessment.md", "content": ASSESSMENT }));
     f.will_structure(
@@ -2008,6 +2014,8 @@ fn an_assessment_with_words_the_person_did_not_give_stops() {
     ] {
         let r = extension_repo();
         let state = tempfile::tempdir().unwrap();
+        // The person trusted the checkout's agent files (spec 126).
+        let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
         let (f, d) = fake();
         f.will_call_tool("w", "write_file", json!({ "path": ".specify/bugs/saving-an-empty-title/assessment.md", "content": assessment }));
         f.will_structure(
@@ -2186,6 +2194,8 @@ fn a_trailer_only_tasks_staleness_is_read_from_the_verified_statement_only() {
     use speccoder_runtime::attest::{dsse, notes};
     let r = extension_repo();
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     f.will_call_tool("w", "write_file", json!({ "path": ".specify/bugs/saving-an-empty-title/assessment.md", "content": ASSESSMENT }));
     f.will_structure(
@@ -2276,6 +2286,8 @@ fn an_extension_bug_is_dropped_by_its_hand_off_s_skip_step() {
     .unwrap();
     git(r.path(), &["commit", "-qam", "fixed already"]);
     let state = tempfile::tempdir().unwrap();
+    // The person trusted the checkout's agent files (spec 126).
+    let _ = speccoder_runtime::agent_files::trust_all(r.path(), state.path(), "t", "terminal");
     let (f, d) = fake();
     f.will_call_tool("w", "write_file", json!({ "path": ".specify/bugs/saving-an-empty-title/assessment.md", "content": ASSESSMENT }));
     f.will_structure(

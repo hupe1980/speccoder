@@ -307,6 +307,33 @@ pub(super) fn run(
                     notices.push("held-out set withheld from the external agent, not sealed: it runs with your permissions; a copied held-out literal stops the tick".to_owned());
                 }
                 let _ = allow;
+                // An external agent loads its own files from the checkout
+                // and runs on this machine: it starts only once each file
+                // it reads is trusted as it is now (spec 126).
+                let reader = match &exec.kind {
+                    external::Kind::Acp(agent) => {
+                        speccoder_core::agent_files::Reader::named(&agent.id)
+                    }
+                    external::Kind::Command(_) => None,
+                };
+                let waiting = crate::agent_files::blocking(wt_root, state, reader);
+                if !waiting.is_empty() {
+                    let who = match &exec.kind {
+                        external::Kind::Acp(agent) => agent.name.clone(),
+                        external::Kind::Command(argv) => argv.first().cloned().unwrap_or_default(),
+                    };
+                    return Err(Box::new(
+                        fail(
+                            CommandStatus::NeedsHuman,
+                            format!(
+                                "{who} was not started: {} {} not trusted as it is now",
+                                waiting.join(", "),
+                                if waiting.len() == 1 { "is" } else { "are" }
+                            ),
+                        )
+                        .with_code("CHECKOUT-UNTRUSTED"),
+                    ));
+                }
                 let o = match &exec.kind {
                     external::Kind::Command(argv) => {
                         external::run(argv, exec.timeout, wt_root, &prompt, tmp)

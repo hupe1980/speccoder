@@ -4845,6 +4845,11 @@
           "description": "`spec explore`: the Explore sheet (`subject`: a session, if one).",
           "type": "string",
           "const": "explore"
+        },
+        {
+          "description": "`trust`: the checkout's agent files, to review and trust.",
+          "type": "string",
+          "const": "trust"
         }
       ]
     },
