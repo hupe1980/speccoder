@@ -299,6 +299,8 @@ theme = "auto"         # auto | dark | light | high-contrast | daltonized | mono
 color = "auto"         # auto | always | never; --color wins, this wins over NO_COLOR
 ascii = false          # [ok] [~] [A] … instead of ✓ ~ A …, plain box borders
 screen_reader = false  # labelled plain lines, no dashboard
+editor = "code"        # where files open: code, cursor, zed, windsurf, subl, idea, rustrover, nvim, …
+                       # or your own: ["my-editor", "{file}:{line}:{column}"]
 
 [ui.notify]
 on = ["approval", "task_failed"]   # the default: what blocks work; add "feature_done", "stalled"

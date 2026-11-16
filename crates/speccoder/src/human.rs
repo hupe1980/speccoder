@@ -2983,6 +2983,31 @@ pub fn feedback(r: &speccoder_core::feedback::FeedbackReport) -> Vec<String> {
     out
 }
 
+/// The editors: the found ones with their launcher, then the rest.
+#[must_use]
+pub fn editors(r: &speccoder_core::editor::EditorsReport) -> Vec<String> {
+    let mine = r.chosen.as_deref().or(r.detected.as_deref());
+    r.editors
+        .iter()
+        .filter(|e| e.found.is_some() || mine == Some(e.id.as_str()))
+        .map(|e| {
+            format!(
+                "  {} {:<14} {}{}",
+                if mine == Some(e.id.as_str()) {
+                    "●"
+                } else {
+                    " "
+                },
+                e.id,
+                e.name,
+                e.found
+                    .as_deref()
+                    .map_or_else(|| " (not found)".to_owned(), |f| format!("  {f}"))
+            )
+        })
+        .collect()
+}
+
 /// `speccoder done`: one row per line, its findings and fixes under it.
 #[must_use]
 pub fn done(r: &speccoder_core::done::DoneReport, look: &crate::style::Look) -> Vec<String> {

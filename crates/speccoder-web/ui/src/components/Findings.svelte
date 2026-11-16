@@ -3,6 +3,7 @@
   // mark, the rule, the message, and the place, which opens the code view
   // at that line. Long lists show ten, then the rest on demand.
   import { app } from "../lib/app.svelte";
+  import OpenIn from "./OpenIn.svelte";
   import type { SarifFinding } from "../lib/types";
   import Icon from "./Icon.svelte";
 
@@ -36,7 +37,7 @@
         <span class="msg">{f.message}</span>
         <span class="rule mono">{f.rule}</span>
         {#if f.file}
-          <button class="at mono" onclick={() => open(f)} title="Open {f.file}{f.line ? ` at line ${f.line}` : ''}">{f.file}{f.line ? `:${f.line}` : ""}</button>
+<span class="where"><button class="at mono" onclick={() => open(f)} title="Open {f.file}{f.line ? ` at line ${f.line}` : ''}">{f.file}{f.line ? `:${f.line}` : ""}</button><OpenIn path={f.file} line={f.line ?? null} /></span>
         {/if}
       </li>
     {/each}
@@ -60,4 +61,5 @@
   .at:focus-visible { outline: 2px solid var(--focus); border-radius: 3px; }
   .none { margin: 0; display: inline-flex; gap: 0.35rem; align-items: center; color: var(--verified); font-size: 0.85rem; }
   .more { margin-top: 0.35rem; }
+  .where { grid-area: at; display: inline-flex; align-items: center; gap: 0.15rem; min-width: 0; }
 </style>

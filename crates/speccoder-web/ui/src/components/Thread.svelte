@@ -4,12 +4,15 @@
   // bold rows. Built by the host from the record — the same live and after
   // a reload; while the attempt runs it is fetched again as events arrive.
   import { app } from "../lib/app.svelte";
+  import OpenIn from "./OpenIn.svelte";
   import { get, latest, q } from "../lib/api";
   import { offer } from "../lib/actions";
   import type { Reply, Thread, ThreadRow } from "../lib/types";
   import Icon from "./Icon.svelte";
 
   let { feature, task, live = false }: { feature: string; task: string; live?: boolean } = $props();
+  // Calls whose object is a project file: it opens in the editor.
+  const FILE_VERBS = new Set(["Read", "Edited", "Wrote"]);
 
   let thread = $state<Thread | null>(null);
   let error = $state<string | null>(null);
@@ -139,6 +142,7 @@
                 <ul class="items">{#each r.items ?? [] as it, j (j)}<li><span class="verb">{it.verb}</span> <span class="mono obj">{it.object}</span>{#if it.outcome && it.outcome !== "ok"} <span class="o-{it.outcome}">{label(it.outcome)}</span>{/if}</li>{/each}</ul>
               {/if}
             {:else if r.kind === "call" || r.kind === "approval"}
+              <div class="callrow">
               <button class="line" aria-expanded={r.detail ? open.has(i) : undefined} disabled={!r.detail && r.kind !== "approval"} onclick={() => toggle(i)}>
                 <span class="m o-{r.outcome ?? 'ok'}" aria-label={r.outcome ?? "ok"}>{mark(r)}</span>
                 <span class="verb">{r.verb}</span>
@@ -146,6 +150,8 @@
                 {#if r.decided}<span class="tag" class:you={r.decided === "you"} class:no={r.decided === "refused"}>{r.decided === "you" ? "you approved" : r.decided}</span>{/if}
                 {#if r.outcome === "waiting"}<span class="tag wait">waits for you</span>{/if}
               </button>
+              {#if r.object && FILE_VERBS.has(r.verb ?? "")}<OpenIn path={r.object} {feature} />{/if}
+              </div>
               {#if r.kind === "approval" && r.call}
                 <div class="acts"><button class="btn small" onclick={() => (app.explain = { task: `${feature}/${task}`, call: r.call! })}><Icon name="info" size={11} /> Explain</button><button class="btn small ghost" onclick={() => app.open("approvals")}>Decide in Needs You</button></div>
               {/if}
@@ -209,4 +215,6 @@
   .nudge input { flex: 1; min-width: 0; font: inherit; font-size: 0.8rem; padding: 0.25rem 0.45rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: inherit; }
   .muted { color: var(--muted); }
   .small { font-size: 0.78rem; }
+  .callrow { display: flex; align-items: center; gap: 0.2rem; }
+  .callrow .line { flex: 1; min-width: 0; }
 </style>

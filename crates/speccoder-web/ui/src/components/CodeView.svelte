@@ -8,6 +8,7 @@
   import { symbol, word } from "../lib/marks";
   import { language } from "../lib/highlight";
   import Diff from "./Diff.svelte";
+  import OpenIn from "./OpenIn.svelte";
   import Icon from "./Icon.svelte";
   import Code from "./Code.svelte";
   import Source from "./Source.svelte";
@@ -358,6 +359,7 @@
           <div class="viewer">
             <div class="vhead">
               <button class="path mono" title="Copy the path" onclick={copyPath}>{open}<Icon name="copy" size={11} /></button>
+              <OpenIn path={open} line={app.codeLine ?? null} label="Open in Editor" />
               {#if text.html !== undefined}
                 <div class="seg small" role="tablist" aria-label="Show">
                   <button role="tab" aria-selected={preview} class:on={preview} onclick={() => (preview = true)}>Preview</button>

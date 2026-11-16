@@ -5,6 +5,7 @@
 //! runtime, as for the CLI.
 
 mod done;
+mod editor;
 mod feedback;
 pub mod fixes;
 pub mod jobs;
@@ -1462,6 +1463,8 @@ pub fn router(s: Shared) -> Router {
         .route("/api/projects", get(projects::list))
         .route("/api/trust", get(trust::list).post(trust::trust_files))
         .route("/api/done", get(done::report))
+        .route("/api/editor", get(editor::list).post(editor::choose))
+        .route("/api/editor/open", post(editor::open))
         .route("/api/feedback", get(feedback::list))
         .route("/api/feedback/decide", post(feedback::decide))
         .route("/api/feedback/prepared", get(feedback::prepared))
@@ -1574,6 +1577,25 @@ pub fn serve(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every route registers: two handlers on one path and method panic
+    /// only when the router is built, so build it.
+    #[test]
+    fn the_router_builds() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let (_, closing) = tokio::sync::watch::channel(false);
+        let root = Root::new(dir.path(), false);
+        let issuer = fixes::Issuer::new().unwrap_or_else(|| panic!("no random source"));
+        let _ = router(Shared {
+            root: root.clone(),
+            token: "t".to_owned(),
+            port: 1,
+            hub: jobs::Hub::new(root, Arc::new(issuer)),
+            window: false,
+            closing,
+            device: Arc::default(),
+        });
+    }
 
     /// A free slot of a signed speccoder line (`spec archive {change}`)
     /// takes only a unit the project has.

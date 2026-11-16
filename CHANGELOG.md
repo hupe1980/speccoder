@@ -14,6 +14,13 @@ adheres to [Semantic Versioning](https://semver.org/).
   with its fix ([docs](https://hupe1980.github.io/speccoder/docs/done/)).
   `[done]` and `[screenshots.<name>]` in `speccoder.toml`.
 
+- **Your editor, one click away**: every diff file, hunk and line number,
+  file in Code, finding and file in the thread opens in your own editor at
+  its line — the branch's version from the feature's worktree. Choose it
+  once (VS Code, Cursor, Zed, Windsurf, Sublime Text, the JetBrains IDEs),
+  saved as `[ui] editor` and shared with `speccoder open src/lib.rs:42`
+  ([docs](https://hupe1980.github.io/speccoder/docs/web/#your-editor)).
+
 ### Changed
 
 - `speccoder pr` checks the definition of done on the branch before it

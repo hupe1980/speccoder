@@ -76,6 +76,8 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`GIT-CHANGED`](#git-changed) | stop | 23 | git's configuration, hooks or refs changed during the run |
 | [`GIT-REDIRECTED`](#git-redirected) | error | 14 | a worktree's .git points at another git directory |
 | [`CHECKOUT-UNTRUSTED`](#checkout-untrusted) | stop | 23 | an executor would load agent files you have not trusted |
+| [`OPEN-REFUSED`](#open-refused) | error | 2 | that path cannot be opened |
+| [`EDITOR-NOT-FOUND`](#editor-not-found) | stop | 23 | no editor to open it in |
 | [`DONE-NOT-DONE`](#done-not-done) | stop | 23 | the definition of done has an open line |
 | [`RETURN-BLOCKED`](#return-blocked) | stop | 23 | the in-place run cannot switch back to your branch |
 | [`NOT-FOUND`](#not-found) | error | 15 | nothing by that name exists |
@@ -721,6 +723,23 @@ An external agent reads its own files from the checkout — instructions, settin
 
 - `speccoder trust`
 - `speccoder trust --all`
+
+### OPEN-REFUSED
+
+That path cannot be opened.
+
+Only a file inside the project opens — the feature's worktree, else your checkout — named relative to it.
+
+- `speccoder open <path>[:line]`
+
+### EDITOR-NOT-FOUND
+
+No editor to open it in.
+
+Files open in your own editor: `[ui] editor` in your settings, else the one `$VISUAL` or `$EDITOR` names. A terminal editor opens only from the terminal.
+
+- `speccoder open --choose <editor>`
+- `export VISUAL=code`
 
 ### DONE-NOT-DONE
 

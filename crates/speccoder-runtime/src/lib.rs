@@ -29,6 +29,7 @@ pub mod doctor;
 pub mod documents;
 pub mod done;
 mod drift;
+pub mod editor;
 pub mod eval;
 pub mod evidence;
 pub mod explore;

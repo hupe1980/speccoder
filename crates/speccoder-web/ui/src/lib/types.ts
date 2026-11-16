@@ -8,6 +8,9 @@
 import type { Envelope, FeatureEntry, IssueEntry as GitHubIssue } from "./schema.gen";
 
 export type {
+  EditorsReport,
+  EditorEntry,
+  Opened,
   DoneReport,
   DoneLine,
   AgentFile,

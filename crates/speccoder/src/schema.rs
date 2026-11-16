@@ -115,6 +115,8 @@ const fn describe(payload: &str) -> &'static str {
         }
         b"trust" => "trust: the checkout's agent files and your trust in each",
         b"done" => "done: the definition of done, line by line, with fixes",
+        b"editors" => "editors: the editors found here and the one you chose",
+        b"opened" => "opened: a file opened in your editor, at its line",
         b"extensions" => {
             "extensions: every extension, what it contributes and can reach, and its trust"
         }
@@ -220,6 +222,8 @@ published! {
     "feedback", "FeedbackReport" => core::feedback::FeedbackReport,
     "trust", "TrustReport" => core::agent_files::TrustReport,
     "done", "DoneReport" => core::done::DoneReport,
+    "editors", "EditorsReport" => core::editor::EditorsReport,
+    "opened", "Opened" => core::editor::Opened,
     "extension_views", "ViewsReport" => core::extensions::ViewsReport,
     "shape", "ShapeReport" => core::ShapeReport,
     "ask", "AskReport" => core::ask::AskReport,

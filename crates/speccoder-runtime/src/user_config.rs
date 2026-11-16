@@ -111,6 +111,18 @@ pub struct Ui {
     pub ascii: Option<bool>,
     /// Screen-reader mode.
     pub screen_reader: Option<bool>,
+    /// `[ui] editor`: the editor files open in.
+    pub editor: Option<EditorChoice>,
+}
+
+/// `[ui] editor`: a known editor by id, or a command of the person's own
+/// with `{file}`, `{line}`, `{column}`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EditorChoice {
+    /// `"cursor"`.
+    Named(String),
+    /// `["my-editor", "{file}:{line}"]`.
+    Command(Vec<String>),
 }
 
 /// The person's settings.
@@ -209,6 +221,26 @@ pub fn parse_ui(text: &str, file: &str) -> (Ui, Vec<String>) {
             "screen_reader" => match value.as_bool() {
                 Some(b) => ui.screen_reader = Some(b),
                 None => warn("ui.screen_reader", "expected true or false"),
+            },
+            "editor" => match value {
+                toml::Value::String(id) if !id.trim().is_empty() => {
+                    ui.editor = Some(EditorChoice::Named(id.trim().to_owned()));
+                }
+                toml::Value::Array(a) => {
+                    let argv: Vec<String> = a
+                        .iter()
+                        .filter_map(|v| v.as_str().map(str::to_owned))
+                        .collect();
+                    if argv.len() == a.len() && argv.first().is_some_and(|p| !p.is_empty()) {
+                        ui.editor = Some(EditorChoice::Command(argv));
+                    } else {
+                        warn(
+                            "ui.editor",
+                            "expected a program and its arguments, as strings",
+                        );
+                    }
+                }
+                _ => warn("ui.editor", "expected an editor's name or a command"),
             },
             other => warn(&format!("ui.{other}"), "not a setting"),
         }
@@ -319,6 +351,39 @@ fn duration(text: &str) -> Option<Duration> {
     }
 }
 
+/// Saves `[ui] editor = "<id>"` in the person's settings file, keeping
+/// every other key and comment.
+///
+/// # Errors
+///
+/// No home directory, or the file cannot be read, parsed or written.
+pub fn set_editor(id: &str) -> Result<PathBuf, String> {
+    let file = path().ok_or("no settings directory (set HOME or XDG_CONFIG_HOME)")?;
+    let text = match std::fs::read_to_string(&file) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("{}: {e}", file.display())),
+    };
+    let edited = with_editor(&text, id).map_err(|e| format!("{}: {e}", file.display()))?;
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    std::fs::write(&file, edited).map_err(|e| format!("{}: {e}", file.display()))?;
+    Ok(file)
+}
+
+/// `text` with `[ui] editor = "<id>"`, the rest untouched.
+fn with_editor(text: &str, id: &str) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e| format!("{e}"))?;
+    let ui = doc
+        .entry("ui")
+        .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
+        .as_table_like_mut()
+        .ok_or("`ui` is not a table")?;
+    ui.insert("editor", toml_edit::value(id));
+    Ok(doc.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -393,5 +458,26 @@ mod tests {
         );
         let (_, w) = parse("not toml [", "f");
         assert_eq!(w.len(), 1);
+    }
+
+    #[test]
+    fn the_editor_is_a_name_or_a_command_and_saving_keeps_the_rest() {
+        let (ui, w) = parse_ui("[ui]\neditor = \"cursor\"\n", "f");
+        assert_eq!(ui.editor, Some(EditorChoice::Named("cursor".into())));
+        assert!(w.is_empty());
+        let (ui, _) = parse_ui("[ui]\neditor = [\"ed\", \"{file}\"]\n", "f");
+        assert_eq!(
+            ui.editor,
+            Some(EditorChoice::Command(vec!["ed".into(), "{file}".into()]))
+        );
+        let (_, w) = parse_ui("[ui]\neditor = 3\n", "f");
+        assert_eq!(w.len(), 1);
+        let kept = with_editor("# mine\n[ui]\ntheme = \"dark\" # yes\n", "zed").unwrap();
+        assert!(
+            kept.contains("# mine") && kept.contains("theme = \"dark\" # yes"),
+            "{kept}"
+        );
+        assert!(kept.contains("editor = \"zed\""), "{kept}");
+        assert!(with_editor("", "code").unwrap().contains("[ui]"));
     }
 }

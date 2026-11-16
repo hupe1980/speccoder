@@ -45,6 +45,11 @@ pub mod agent_files {
     pub use crate::agent_files::{Refused, command, report, trust_as_person};
 }
 
+/// The person's editor (spec 128).
+pub mod editor {
+    pub use crate::editor::{choose, open, report};
+}
+
 /// The definition of done (spec 127).
 pub mod done {
     pub use crate::done::{for_feature, report};

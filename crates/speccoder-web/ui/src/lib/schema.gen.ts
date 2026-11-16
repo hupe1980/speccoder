@@ -984,7 +984,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | FeedbackReport | TrustReport | DoneReport | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | FeedbackReport | TrustReport | DoneReport | EditorsReport | Opened | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -1700,6 +1700,31 @@ export interface EarlierAttempt {
   digest: Digest;
   /** Token usage of the attempt. */
   usage: unknown;
+}
+
+/** An editor speccoder can open a file in. */
+export interface EditorEntry {
+  /** `code`, `cursor`, `zed`, `idea`, … */
+  id: string;
+  /** `Visual Studio Code`. */
+  name: string;
+  /** It runs in a terminal (vim, nvim, …): the terminal only. */
+  terminal: boolean;
+  /** Its launcher on this machine; none: not found. */
+  found?: string | null;
+}
+
+/**
+ * Result of the editors listing: the known editors and the person's
+ * choice.
+ */
+export interface EditorsReport {
+  /** `[ui] editor`: an id, or `custom` for a command of the person's own. */
+  chosen: string | null;
+  /** The editor `$VISUAL` or `$EDITOR` names, when it is a known one. */
+  detected: string | null;
+  /** Every known editor; window editors first, found ones first. */
+  editors: EditorEntry[];
 }
 
 /** Another speccoder serving the project now (never its key). */
@@ -3720,6 +3745,23 @@ export interface OpenSpecMeta {
   /** The selected change's delta requirements, in file order. */
   requirements: DeltaRequirement[];
 }
+
+/** Result of `speccoder open`: what was opened, where, in which editor. */
+export interface Opened {
+  /** The editor's name. */
+  editor: string;
+  /** The file, project-relative. */
+  path: string;
+  /** The line, 1-based. */
+  line?: number | null;
+  /** The column, 1-based. */
+  column?: number | null;
+  /** Whose copy of the file. */
+  where: OpenedIn;
+}
+
+/** Where an opened file lives. */
+export type OpenedIn = "worktree" | "checkout";
 
 /** Who decided, and how speccoder knows the name. */
 export interface OperatorView {

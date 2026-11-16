@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "editors: the editors found here and the one you chose",
+  "description": "Result of the editors listing: the known editors and the person's\nchoice.",
+  "type": "object",
+  "properties": {
+    "chosen": {
+      "description": "`[ui] editor`: an id, or `custom` for a command of the person's own.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "detected": {
+      "description": "The editor `$VISUAL` or `$EDITOR` names, when it is a known one.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "editors": {
+      "description": "Every known editor; window editors first, found ones first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EditorEntry"
+      }
+    }
+  },
+  "required": [
+    "chosen",
+    "detected",
+    "editors"
+  ],
+  "$defs": {
+    "EditorEntry": {
+      "description": "An editor speccoder can open a file in.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`code`, `cursor`, `zed`, `idea`, …",
+          "type": "string"
+        },
+        "name": {
+          "description": "`Visual Studio Code`.",
+          "type": "string"
+        },
+        "terminal": {
+          "description": "It runs in a terminal (vim, nvim, …): the terminal only.",
+          "type": "boolean"
+        },
+        "found": {
+          "description": "Its launcher on this machine; none: not found.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "terminal"
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/editors.json"
+}

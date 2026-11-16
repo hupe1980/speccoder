@@ -15,6 +15,7 @@ pub mod collection;
 mod command;
 pub mod context;
 pub mod done;
+pub mod editor;
 pub mod event;
 pub mod evidence;
 pub mod explore;

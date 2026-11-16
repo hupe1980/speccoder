@@ -686,6 +686,14 @@ const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
         "removes an item from this project's own outbox file, at the person's click",
     ),
     (
+        "choose",
+        "saves the person's own editor as `[ui] editor` in their personal settings, at their click (spec 128)",
+    ),
+    (
+        "open",
+        "runs the person's chosen window editor's launcher on a project file they clicked, path checked inside, no shell (spec 128)",
+    ),
+    (
         "trust_files",
         "records a person's trust in the agent files they saw, bound to each file's digest, in speccoder's state (as `hook_trust` does)",
     ),

@@ -10,6 +10,7 @@
   import { load } from "./GitHub.svelte";
   import Icon from "./Icon.svelte";
   import Code from "./Code.svelte";
+  import OpenIn from "./OpenIn.svelte";
 
   const action = $derived(app.actions.find((a) => a.run?.kind === "pull_request") ?? null);
   let gh = $state<GitHubState | null>(null);
@@ -52,7 +53,7 @@
               {#if l.findings?.length}
                 <ul class="findings">
                   {#each l.findings.slice(0, 3) as f}
-                    <li><code>{f.path}{f.line ? `:${f.line}` : ""}</code> {f.what}</li>
+                    <li><code>{f.path}{f.line ? `:${f.line}` : ""}</code>{#if l.part !== "ci" && !f.path.includes("*")}<OpenIn path={f.path} line={f.line ?? null} />{/if} {f.what}</li>
                   {/each}
                   {#if l.findings.length + (l.more ?? 0) > 3}<li class="muted">{l.findings.length + (l.more ?? 0) - 3} more — <code>speccoder done</code></li>{/if}
                 </ul>

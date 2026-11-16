@@ -395,6 +395,15 @@ pub enum Command {
         #[arg(long)]
         base: Option<String>,
     },
+    /// Open a file in your editor at a line (`src/lib.rs:42`); without one, the editors found here and yours.
+    #[command(hide = true)]
+    Open {
+        /// `PATH[:LINE[:COLUMN]]`, relative to the project; with `--feature`, the branch's version from its worktree.
+        location: Option<String>,
+        /// Make this editor yours (`code`, `cursor`, `zed`, `idea`, …), saved in your settings.
+        #[arg(long, conflicts_with = "location")]
+        choose: Option<String>,
+    },
     /// What this project asks of the projects it depends on (`[upstream.<name>]`), where each item stands, and what others ask of it.
     #[command(hide = true)]
     Feedback,

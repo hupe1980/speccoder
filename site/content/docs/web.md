@@ -165,6 +165,10 @@ A suggested change — a quick change, a bug fix, a nudge, an answer, a new spec
 
 Conversations are kept per project: the three most recent in the empty panel, all of them in the list (↑ ↓, ⏎). A stopped, idle or long one goes on in a fresh run carrying its earlier turns word for word — Ask never summarises. Its budget is [`[ask]`](@/docs/configuration.md#ask)'s; Spend shows it on its own line.
 
+### Your editor
+
+Every file, hunk, line number and finding opens in your own editor at its line: the ↗ beside a diff's file or hunk, a line number in a diff, **Open in Editor** in Code, the path of a definition-of-done or extension finding, a file the thread read or edited. A file of the feature opens from its worktree, the branch's version you were looking at; anything else from your checkout. The first time, **Choose Your Editor** lists the editors found on this machine — VS Code, Cursor, Zed, Windsurf, Sublime Text, the JetBrains IDEs — with the one `VISUAL` or `EDITOR` names first; the choice is saved as `[ui] editor` in your settings, and **Settings › Your Editor** changes it. speccoder runs the editor's own launcher with the path and line as arguments, never a shell, and only for a file inside the project. The control is hidden on a phone. In the terminal, `speccoder open src/lib.rs:42` does the same, and a terminal editor (vim, Neovim, Helix) runs there.
+
 ### Bug sheet
 
 Opened by **Report a Bug…** (⇧⌘B, `⇧B`), a bug's row in Needs You, or **Fix as Bug** on an issue. It takes the [triad](@/docs/bugs.md#the-triad) (one line per expected behaviour; **Record** needs one) and optionally the issue, your own failing test or a fix to judge; then **Record** or **Record and Reproduce**. The stage strip (Record → Reproduce → Confirm → Unchanged → Fix → Ship) follows the host's state, so a reload resumes; reproductions are confirmed with **Confirm and Fix** or **Reject with Reason**.
@@ -240,6 +244,7 @@ Every error — a toast, a stop or remedy card, a doctor row, a failed command �
 - Requests naming another host are refused (DNS rebinding), and so are changes from another origin.
 - The page loads from and sends to this host only, cannot be framed, and is never cached.
 - The host runs only commands it issued as fixes — built as exact argvs, or one of speccoder's constant fix lines — signed for this project with a key the page never sees; it refuses any other (changed, composed in the page, taken from a model's words, or a sign-in that needs a terminal).
+- Opening a file in [your editor](#your-editor) runs only your chosen window editor's launcher, with a project-relative path the host checks inside the project and passes as one argument, never through a shell; the page never sees an absolute path.
 - The interface is built into the binary; nothing is fetched from the network. The window navigates nowhere else.
 
 Do not share the printed address: it holds the key.

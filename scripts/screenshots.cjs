@@ -33,6 +33,21 @@ const SHOTS = {
   review: `?${F}&view=documents&doc=review`,
   report: `?${F}&view=report`,
   projects: `?${F}&view=projects`,
+  thread: `?${F}&view=board&task=T003`,
+};
+
+// A shot that needs more than its address: what to do before it is taken.
+const POSE = {
+  // The attempt's thread in the inspector, its edit open.
+  thread: async (page) => {
+    const thread = page.locator("section.thread");
+    await thread.getByRole("button", { name: /Edited/ }).first().click().catch(() => {});
+    await page.locator(".inspector").evaluate((el) => {
+      const t = el.querySelector("section.thread");
+      if (t) el.scrollTop = t.offsetTop - 110;
+    });
+    await page.waitForTimeout(600);
+  },
 };
 
 // The app keeps a live connection open, so the network is never idle: a
@@ -93,6 +108,7 @@ async function main() {
       for (const name of names.length ? names : Object.keys(SHOTS)) {
         await page.goto(`${base}${SHOTS[name]}#${token}`);
         await settled(page, name);
+        if (POSE[name]) await POSE[name](page);
         const png = path.join(pngs, `${name}-${scheme}.png`);
         await page.screenshot({ path: png });
         const webp = path.join(out, `${name}-${scheme}.webp`);

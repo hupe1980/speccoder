@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "opened: a file opened in your editor, at its line",
+  "description": "Result of `speccoder open`: what was opened, where, in which editor.",
+  "type": "object",
+  "properties": {
+    "editor": {
+      "description": "The editor's name.",
+      "type": "string"
+    },
+    "path": {
+      "description": "The file, project-relative.",
+      "type": "string"
+    },
+    "line": {
+      "description": "The line, 1-based.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "minimum": 0
+    },
+    "column": {
+      "description": "The column, 1-based.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "minimum": 0
+    },
+    "where": {
+      "description": "Whose copy of the file.",
+      "$ref": "#/$defs/OpenedIn"
+    }
+  },
+  "required": [
+    "editor",
+    "path",
+    "where"
+  ],
+  "$defs": {
+    "OpenedIn": {
+      "description": "Where an opened file lives.",
+      "oneOf": [
+        {
+          "description": "The feature's worktree: the branch's version.",
+          "type": "string",
+          "const": "worktree"
+        },
+        {
+          "description": "The person's checkout.",
+          "type": "string",
+          "const": "checkout"
+        }
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/opened.json"
+}

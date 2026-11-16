@@ -10,6 +10,7 @@
   import { offer } from "../lib/actions";
   import Icon from "./Icon.svelte";
   import Diff from "./Diff.svelte";
+  import ChooseEditor from "./ChooseEditor.svelte";
   import Agents from "./Agents.svelte";
   import Hooks from "./Hooks.svelte";
   import Extensions from "./Extensions.svelte";
@@ -50,6 +51,7 @@
     format: ["sparkle", "#af52de"], sandbox: ["lock", "#636366"], attest: ["signature", "#bf5af2"], mutation: ["exclaim", "#ff9500"],
     executor: ["play", "#0a84ff"], mcp: ["grid", "#30b0c7"], worktree: ["copy", "#5ac8fa"], ask: ["bubble", "#bf5af2"],
     hooks: ["shield", "#ff9f0a"],
+    upstream: ["branch", "#30b0c7"], done: ["seal", "#34c759"], screenshots: ["copy", "#5e5ce6"],
   };
   const section = $derived(report?.sections.find((s) => s.name === pick) ?? null);
   const dirty = $derived(Object.keys(draft).length);
@@ -366,6 +368,11 @@
       <span class="badge" style="--c:#5e5ce6"><Icon name="grid" size={13} weight={2.2} /></span>
       <span class="t">Extensions</span>
     </button>
+    <!-- Yours, not the project's: ~/.config/speccoder/config.toml. -->
+    <button class:on={pick === "editor"} onclick={() => (pick = "editor")}>
+      <span class="badge" style="--c:#0a84ff"><Icon name="openin" size={13} weight={2.2} /></span>
+      <span class="t">Your Editor</span>
+    </button>
   </nav>
 
   <div class="pane">
@@ -377,7 +384,7 @@
         </div>
         <button class="btn primary" disabled={saving || !report.valid || !!app.job?.running} onclick={commit}>Commit</button>
       </div>
-      {#if report.diff}<Diff patch={report.diff} />{/if}
+      {#if report.diff}<Diff patch={report.diff} feature={null} />{/if}
     {/if}
     {#if report?.error}
       <p class="bad"><Icon name="exclaim" size={14} weight={2} /> {report.error}</p>
@@ -388,6 +395,13 @@
         <div><h2>Extensions</h2><p>Folders of gates, views, skills and MCP servers; nothing of one runs before you trusted it.</p></div>
       </header>
       <Extensions />
+    {/if}
+    {#if pick === "editor"}
+      <header>
+        <span class="badge big" style="--c:#0a84ff"><Icon name="openin" size={20} weight={2} /></span>
+        <div><h2>Your Editor</h2><p>Files, hunks, lines and findings open there at their line. Your setting, not the project's: <code>[ui] editor</code> in <code>~/.config/speccoder/config.toml</code>, used by the terminal too.</p></div>
+      </header>
+      <ChooseEditor inline />
     {/if}
     {#if section}
       <header>

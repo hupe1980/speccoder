@@ -210,6 +210,7 @@ pub const SUBCOMMANDS: &[&str] = &[
     "inspect",
     "issue",
     "new",
+    "open",
     "pr",
     "preset",
     "propose",
@@ -782,6 +783,8 @@ fn speccoder(argv: &[String], constant: bool) -> How {
         (Some("report"), _) => view(View::Report, None),
         // The definition of done stands on the feature's Pull Request card.
         (Some("done"), _) => view(View::Report, None),
+        // Opening in the editor is the open buttons' job; Settings chooses.
+        (Some("open"), _) => view(View::Settings, None),
         (Some("tui"), _) => view(View::Live, None),
         (Some("ui" | "inbox" | "approvals"), _) if !has(a, "-C") => view(View::Approvals, None),
         (Some("explain"), Some(code)) if !code.starts_with('-') => view(View::Explain, Some(code)),

@@ -666,6 +666,22 @@ pub const CATALOG: &[Entry] = &[
         ["speccoder trust", "speccoder trust --all"]
     ),
     entry!(
+        "OPEN-REFUSED",
+        E,
+        S::UsageError,
+        "that path cannot be opened",
+        "Only a file inside the project opens — the feature's worktree, else your checkout — named relative to it.",
+        ["speccoder open <path>[:line]"]
+    ),
+    entry!(
+        "EDITOR-NOT-FOUND",
+        P,
+        S::NeedsHuman,
+        "no editor to open it in",
+        "Files open in your own editor: `[ui] editor` in your settings, else the one `$VISUAL` or `$EDITOR` names. A terminal editor opens only from the terminal.",
+        ["speccoder open --choose <editor>", "export VISUAL=code"]
+    ),
+    entry!(
         "DONE-NOT-DONE",
         P,
         S::NeedsHuman,

@@ -6,6 +6,8 @@
   import { askable } from "../lib/ask.svelte";
   import Icon from "./Icon.svelte";
   import Source from "./Source.svelte";
+  import OpenIn from "./OpenIn.svelte";
+  import { openIn } from "../lib/editor.svelte";
   import { language } from "../lib/highlight";
   /** `only`: show this file alone (the Code view picks one). */
   /** `comment`: a line comment of the Code view — the gutter
@@ -18,6 +20,7 @@
     header = true,
     comment = null,
     frozen = new Set<string>(),
+    feature = undefined,
   }: {
     patch: string;
     loading?: boolean;
@@ -25,9 +28,13 @@
     header?: boolean;
     comment?: ((c: { path: string; line: number; quote: string }) => void) | null;
     frozen?: Set<string>;
+    /** Whose version opens in the editor: the feature's branch (default:
+     *  the current feature), or `null` for the checkout. */
+    feature?: string | null;
   } = $props();
 
-  interface Line { kind: "add" | "del" | "ctx" | "hunk" | "note"; text: string; old: number | null; new: number | null }
+  /** `at`: a hunk's first line on the new side. */
+  interface Line { kind: "add" | "del" | "ctx" | "hunk" | "note"; text: string; old: number | null; new: number | null; at?: number }
   interface File { name: string; status: string; lines: Line[]; add: number; del: number }
 
   let wrap = $state(false);
@@ -57,7 +64,7 @@
         const m = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)/);
         o = m ? Number(m[1]) : 0;
         n = m ? Number(m[2]) : 0;
-        cur.lines.push({ kind: "hunk", text: m?.[3]?.trim() ?? "", old: null, new: null });
+        cur.lines.push({ kind: "hunk", text: m?.[3]?.trim() ?? "", old: null, new: null, at: n });
       } else if (line.startsWith("+")) { cur.lines.push({ kind: "add", text: line.slice(1), old: null, new: n++ }); cur.add++; }
       else if (line.startsWith("-")) { cur.lines.push({ kind: "del", text: line.slice(1), old: o++, new: null }); cur.del++; }
       else if (line.startsWith("\\")) cur.lines.push({ kind: "note", text: line.slice(2), old: null, new: null });
@@ -101,6 +108,7 @@
     </div>
     {#each only ? parsed.files.filter((f) => f.name === only) : parsed.files as f (f.name)}
       <section class="file" {...askable("file_range", { path: f.name }, f.name)}>
+        <div class="fbar">
         <button class="fhead" onclick={() => (folded = { ...folded, [f.name]: !folded[f.name] })} aria-expanded={!folded[f.name]}>
           <Icon name={folded[f.name] ? "chevron" : "down"} size={12} weight={2.2} />
           <FileIcon path={f.name} size={15} />
@@ -110,19 +118,21 @@
             <span class="blocks" aria-hidden="true">{#each Array(5) as _, i}<i class:ga={i < blocks(f)} class:gd={i >= blocks(f) && i < (f.del ? 5 : blocks(f))}></i>{/each}</span>
           </span>
         </button>
+        {#if f.status !== "deleted"}<span class="fopen"><OpenIn path={f.name} line={f.lines.find((l) => l.new != null)?.new ?? null} {feature} /></span>{/if}
+        </div>
         {#if !folded[f.name]}
           <div class="code" class:wrap>
             <table>
               <tbody>
                 {#each f.lines as l}
                   {#if l.kind === "hunk"}
-                    <tr class="hunk"><td colspan="3"><span class:named={!!l.text}>{l.text}</span></td></tr>
+                    <tr class="hunk"><td colspan="3"><span class:named={!!l.text}>{l.text}</span>{#if f.status !== "deleted" && l.at}<OpenIn path={f.name} line={l.at} {feature} />{/if}</td></tr>
                   {:else if l.kind === "note"}
                     <tr class="note"><td colspan="3">{l.text}</td></tr>
                   {:else}
                     <tr class={l.kind}>
                       <td class="ln">{l.old ?? ""}</td>
-                      <td class="ln">{#if comment && l.new != null}<button class="plus" aria-label={frozen.has(f.name) ? `${f.name} is a frozen test` : `Comment on line ${l.new} of ${f.name}`} title={frozen.has(f.name) ? "This is a frozen test. Comment on it in Review › Tests" : "Comment on this line"} onclick={() => comment?.({ path: f.name, line: l.new ?? 0, quote: l.text })}>+</button>{/if}{l.new ?? ""}</td>
+                      <td class="ln">{#if comment && l.new != null}<button class="plus" aria-label={frozen.has(f.name) ? `${f.name} is a frozen test` : `Comment on line ${l.new} of ${f.name}`} title={frozen.has(f.name) ? "This is a frozen test. Comment on it in Review › Tests" : "Comment on this line"} onclick={() => comment?.({ path: f.name, line: l.new ?? 0, quote: l.text })}>+</button>{/if}{#if l.new != null}<button class="lno" tabindex="-1" aria-label={`Open line ${l.new} of ${f.name} in your editor`} title={`Open line ${l.new} in your editor`} onclick={() => openIn({ path: f.name, line: l.new, feature })}>{l.new}</button>{/if}</td>
                       <td class="src"><span class="sign">{l.kind === "add" ? "+" : l.kind === "del" ? "−" : " "}</span><Source line={l.text} lang={language(f.name)} /></td>
                     </tr>
                   {/if}
@@ -181,6 +191,14 @@
   tr.del { background: var(--del-bg); }
   tr.del .sign, tr.del .ln { color: var(--del); }
   tr.hunk td { padding: 0.25rem 0.75rem; background: var(--accent-soft); color: var(--accent-ink); font-size: 0.74rem; }
+  tr.hunk td :global(.open-in) { margin-left: 0.4rem; opacity: 0; transition: opacity 120ms; }
+  tr.hunk:hover td :global(.open-in), tr.hunk td :global(.open-in:focus-visible) { opacity: 1; }
+  .fbar { display: flex; align-items: center; }
+  .fbar .fhead { flex: 1; min-width: 0; }
+  .fopen { padding-right: 0.5rem; }
+  .lno { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+  .lno:hover, .lno:focus-visible { color: var(--accent-ink); text-decoration: underline; }
+  @media (max-width: 600px) { .lno { pointer-events: none; } }
   tr.hunk span::before { content: "⋯"; opacity: 0.6; }
   tr.hunk span.named::before { content: "⋯  "; }
   tr.note td { padding: 0 0.75rem; color: var(--muted); font-style: italic; }

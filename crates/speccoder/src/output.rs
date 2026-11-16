@@ -410,6 +410,12 @@ fn human_body(
             }
             writeln!(out, "{}", result.message())
         }
+        (_, Some(CommandData::Editors(r))) => {
+            for line in crate::human::editors(r) {
+                writeln!(out, "{line}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (_, Some(CommandData::Done(r))) => {
             let look = crate::style::out();
             for line in crate::human::done(r, &look) {

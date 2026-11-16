@@ -27,6 +27,8 @@
   import ConfirmSheet from "./components/ConfirmSheet.svelte";
   import ExplainSheet from "./components/ExplainSheet.svelte";
   import TrustSheet from "./components/TrustSheet.svelte";
+  import ChooseEditor from "./components/ChooseEditor.svelte";
+  import { editor } from "./lib/editor.svelte";
   import Projects from "./components/Projects.svelte";
   import RemedyCard from "./components/RemedyCard.svelte";
   import Composer from "./components/Composer.svelte";
@@ -331,6 +333,7 @@
 {#if app.confirming}<ConfirmSheet />{/if}
 {#if app.explain}<ExplainSheet />{/if}
 {#if app.trustSheet}<TrustSheet />{/if}
+{#if editor.choosing}<ChooseEditor />{/if}
 {#if app.remedy}<RemedyCard />{/if}
 {#if app.palette}<Palette />{/if}
 {#if app.context}<ContextMenu />{/if}

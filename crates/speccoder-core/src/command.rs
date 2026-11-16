@@ -205,6 +205,10 @@ pub enum CommandData {
     Trust(Box<crate::agent_files::TrustReport>),
     /// `done`: the definition of done, line by line.
     Done(Box<crate::done::DoneReport>),
+    /// The person's editors and their choice.
+    Editors(Box<crate::editor::EditorsReport>),
+    /// `open`: what was opened in the person's editor.
+    Opened(Box<crate::editor::Opened>),
     /// `extensions`: every extension, what it contributes and its trust.
     Extensions(Box<crate::extensions::ExtensionsReport>),
     /// The views an extension places on a feature or the project.
@@ -1099,6 +1103,8 @@ impl CommandData {
             Self::Feedback(_) => "feedback",
             Self::Trust(_) => "trust",
             Self::Done(_) => "done",
+            Self::Editors(_) => "editors",
+            Self::Opened(_) => "opened",
             Self::Extensions(_) => "extensions",
             Self::ExtensionViews(_) => "extension_views",
             Self::Shape(_) => "shape",
@@ -1165,6 +1171,8 @@ pub const PAYLOADS: &[&str] = &[
     "feedback",
     "trust",
     "done",
+    "editors",
+    "opened",
     "shape",
     "ask",
     "ask_conversations",

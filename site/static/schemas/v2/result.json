@@ -2689,6 +2689,14 @@
           "$ref": "#/$defs/DoneReport"
         },
         {
+          "description": "The person's editors and their choice.",
+          "$ref": "#/$defs/EditorsReport"
+        },
+        {
+          "description": "`open`: what was opened in the person's editor.",
+          "$ref": "#/$defs/Opened"
+        },
+        {
           "description": "`extensions`: every extension, what it contributes and its trust.",
           "$ref": "#/$defs/ExtensionsReport"
         },
@@ -13394,6 +13402,124 @@
         "by",
         "via",
         "at"
+      ]
+    },
+    "EditorsReport": {
+      "description": "Result of the editors listing: the known editors and the person's\nchoice.",
+      "type": "object",
+      "properties": {
+        "chosen": {
+          "description": "`[ui] editor`: an id, or `custom` for a command of the person's own.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detected": {
+          "description": "The editor `$VISUAL` or `$EDITOR` names, when it is a known one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "editors": {
+          "description": "Every known editor; window editors first, found ones first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EditorEntry"
+          }
+        }
+      },
+      "required": [
+        "chosen",
+        "detected",
+        "editors"
+      ]
+    },
+    "EditorEntry": {
+      "description": "An editor speccoder can open a file in.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`code`, `cursor`, `zed`, `idea`, …",
+          "type": "string"
+        },
+        "name": {
+          "description": "`Visual Studio Code`.",
+          "type": "string"
+        },
+        "terminal": {
+          "description": "It runs in a terminal (vim, nvim, …): the terminal only.",
+          "type": "boolean"
+        },
+        "found": {
+          "description": "Its launcher on this machine; none: not found.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "terminal"
+      ]
+    },
+    "Opened": {
+      "description": "Result of `speccoder open`: what was opened, where, in which editor.",
+      "type": "object",
+      "properties": {
+        "editor": {
+          "description": "The editor's name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The file, project-relative.",
+          "type": "string"
+        },
+        "line": {
+          "description": "The line, 1-based.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "column": {
+          "description": "The column, 1-based.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "where": {
+          "description": "Whose copy of the file.",
+          "$ref": "#/$defs/OpenedIn"
+        }
+      },
+      "required": [
+        "editor",
+        "path",
+        "where"
+      ]
+    },
+    "OpenedIn": {
+      "description": "Where an opened file lives.",
+      "oneOf": [
+        {
+          "description": "The feature's worktree: the branch's version.",
+          "type": "string",
+          "const": "worktree"
+        },
+        {
+          "description": "The person's checkout.",
+          "type": "string",
+          "const": "checkout"
+        }
       ]
     },
     "ExtensionsReport": {
