@@ -694,6 +694,10 @@ const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
         "runs the person's chosen window editor's launcher on a project file they clicked, path checked inside, no shell (spec 128)",
     ),
     (
+        "check",
+        "a merge forecast at the person's click (spec 129): fetches, merges in git's object store, runs frozen oracle tests in sandboxed scratch worktrees; writes only its state file",
+    ),
+    (
         "trust_files",
         "records a person's trust in the agent files they saw, bound to each file's digest, in speccoder's state (as `hook_trust` does)",
     ),

@@ -1317,6 +1317,7 @@ impl Bench {
                 config: &ctx.worktree,
                 runner: &runner,
                 state: Some(&ctx.state),
+                shared_caches: true,
             })
             .map_err(|f| {
                 Box::new(

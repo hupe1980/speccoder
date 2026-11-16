@@ -21,6 +21,16 @@ adheres to [Semantic Versioning](https://semver.org/).
   saved as `[ui] editor` and shared with `speccoder open src/lib.rs:42`
   ([docs](https://hupe1980.github.io/speccoder/docs/web/#your-editor)).
 
+- **Merge before merge**: `speccoder forecast` pairs the feature's branch
+  with every other open branch and makes each merge without touching your
+  checkout: conflicting files, and your frozen oracle run on the merged
+  code — a scenario that passes on its branch and fails on the merge is
+  named with its contract and how to see it (`FORECAST-CONFLICT`). Results
+  are kept per tree, so a second look runs nothing. The Pull Request card
+  shows it with **Check Open Branches**; the Overview's feature card says
+  *Conflicts with N branches*
+  ([docs](https://hupe1980.github.io/speccoder/docs/forecast/)).
+
 ### Changed
 
 - `speccoder pr` checks the definition of done on the branch before it

@@ -690,6 +690,30 @@ pub const CATALOG: &[Entry] = &[
         ["speccoder done", "speccoder pr --force"]
     ),
     entry!(
+        "FORECAST-CONFLICT",
+        P,
+        S::NeedsHuman,
+        "another open branch conflicts with this one",
+        "The merge forecast paired this branch with each other open branch: a merge that cannot be made, or one on which a scenario that passes on its own branch fails. Talk to the branch's author or merge it now, while it is small; each problem says how to see it.",
+        ["speccoder forecast"]
+    ),
+    entry!(
+        "FORECAST-NO-BRANCH",
+        E,
+        S::NotFound,
+        "the feature has no branch to forecast yet",
+        "A forecast pairs the feature's branch with the others; the branch is made by its first run.",
+        ["speccoder run"]
+    ),
+    entry!(
+        "FORECAST-BUSY",
+        E,
+        S::UsageError,
+        "a forecast is already running here",
+        "One forecast runs at a time: its tests run one after another in the sandbox. Look again when it ends.",
+        ["speccoder forecast"]
+    ),
+    entry!(
         "RETURN-BLOCKED",
         P,
         S::NeedsHuman,

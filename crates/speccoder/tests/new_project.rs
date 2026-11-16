@@ -988,6 +988,7 @@ fn with_the_real_tools_a_new_node_or_uv_project_needs_no_setup_for_its_first_tas
             config: &prepare::Config::default(),
             runner: &runner,
             state: Some(m.state.path()),
+            shared_caches: true,
         })
         .unwrap_or_else(|f| panic!("{stack}: {f:?}"))
         .unwrap();

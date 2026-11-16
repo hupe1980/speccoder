@@ -3,7 +3,8 @@
   // or open or merged, the review, the checks' rollup — beside speccoder's
   // own evidence, never instead of it. Open Draft PR / Update confirm first.
   // Above them, the definition of done on the branch (spec 127): what is
-  // still open and how to close it; a stop at it offers Open Anyway.
+  // still open and how to close it; a stop at it offers Open Anyway. Then
+  // the merge forecast (spec 129): how the branch fares against the others.
   import { app } from "../lib/app.svelte";
   import { get, latest, q } from "../lib/api";
   import type { Action, DoneReport, GitHubState, Reply } from "../lib/types";
@@ -11,6 +12,7 @@
   import Icon from "./Icon.svelte";
   import Code from "./Code.svelte";
   import OpenIn from "./OpenIn.svelte";
+  import Forecast from "./Forecast.svelte";
 
   const action = $derived(app.actions.find((a) => a.run?.kind === "pull_request") ?? null);
   let gh = $state<GitHubState | null>(null);
@@ -71,6 +73,7 @@
       {/if}
     </div>
   {/if}
+  {#if app.report?.data?.branch}<Forecast />{/if}
   {#if !gh}
     <p class="muted">Asking GitHub…</p>
   {:else if !gh.status.ready}

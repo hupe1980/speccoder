@@ -1491,3 +1491,37 @@ fn ui_opens_only_at_a_place_it_knows() {
         String::from_utf8_lossy(&out.stderr).to_string() + &String::from_utf8_lossy(&out.stdout);
     assert!(err.contains("--at board:../x"), "{err}");
 }
+
+#[test]
+fn forecast_needs_the_feature_branch_then_pairs_it_with_nothing_here() {
+    let project = committed_project(false);
+    let state = tempfile::tempdir().unwrap();
+    let run = || {
+        speccoder()
+            .args(["--json", "forecast", "--no-fetch"])
+            .arg("-C")
+            .arg(project.path())
+            .env("SPECCODER_STATE_DIR", state.path())
+            .assert()
+            .get_output()
+            .clone()
+    };
+    let none = run();
+    assert!(!none.status.success());
+    assert!(
+        String::from_utf8_lossy(&none.stdout).contains("FORECAST-NO-BRANCH"),
+        "{}",
+        String::from_utf8_lossy(&none.stdout)
+    );
+    git(project.path(), &["branch", "speccoder/001-user-auth"]);
+    let out = run();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let v: serde_json::Value = support::result(&out.stdout);
+    assert_eq!(v["data"]["branch"], "speccoder/001-user-auth");
+    assert_eq!(v["data"]["pairs"], serde_json::json!([]));
+    assert_eq!(v["data"]["fetch"]["state"], "skipped");
+}

@@ -205,6 +205,8 @@ pub enum CommandData {
     Trust(Box<crate::agent_files::TrustReport>),
     /// `done`: the definition of done, line by line.
     Done(Box<crate::done::DoneReport>),
+    /// `forecast`: the branch paired with each other open branch.
+    Forecast(Box<crate::forecast::ForecastReport>),
     /// The person's editors and their choice.
     Editors(Box<crate::editor::EditorsReport>),
     /// `open`: what was opened in the person's editor.
@@ -1103,6 +1105,7 @@ impl CommandData {
             Self::Feedback(_) => "feedback",
             Self::Trust(_) => "trust",
             Self::Done(_) => "done",
+            Self::Forecast(_) => "forecast",
             Self::Editors(_) => "editors",
             Self::Opened(_) => "opened",
             Self::Extensions(_) => "extensions",
@@ -1171,6 +1174,7 @@ pub const PAYLOADS: &[&str] = &[
     "feedback",
     "trust",
     "done",
+    "forecast",
     "editors",
     "opened",
     "shape",

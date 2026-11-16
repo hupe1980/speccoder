@@ -21,6 +21,7 @@ pub mod evidence;
 pub mod explore;
 pub mod extensions;
 pub mod feedback;
+pub mod forecast;
 pub mod graph;
 pub mod hooks;
 pub mod inbox;

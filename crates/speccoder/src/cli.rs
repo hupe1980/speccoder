@@ -404,6 +404,15 @@ pub enum Command {
         #[arg(long, conflicts_with = "location")]
         choose: Option<String>,
     },
+    /// Will this branch still work when it meets the others? Pairs the feature's branch with each other open branch: conflicting files, and the frozen oracles run on the merged tree.
+    #[command(hide = true)]
+    Forecast {
+        /// Check only these branches (default: every other open branch, newest first, at most 20).
+        branches: Vec<String>,
+        /// Use the branches as last fetched.
+        #[arg(long)]
+        no_fetch: bool,
+    },
     /// What this project asks of the projects it depends on (`[upstream.<name>]`), where each item stands, and what others ask of it.
     #[command(hide = true)]
     Feedback,

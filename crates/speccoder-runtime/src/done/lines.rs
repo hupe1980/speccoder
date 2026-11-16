@@ -359,11 +359,11 @@ pub fn screenshots(shots: &[Shot]) -> Option<DoneLine> {
             DonePart::Screenshots,
             DoneState::NotDone,
             format!(
-                "{} of {} {} older than what {} show",
+                "{} of {} {} older than what {}",
                 found.len(),
                 shots.len(),
                 plural(shots.len(), "screenshot", "screenshots"),
-                plural(found.len(), "it", "they")
+                plural(found.len(), "it shows", "they show")
             ),
         )
         .with_findings(found)

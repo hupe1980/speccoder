@@ -79,6 +79,9 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`OPEN-REFUSED`](#open-refused) | error | 2 | that path cannot be opened |
 | [`EDITOR-NOT-FOUND`](#editor-not-found) | stop | 23 | no editor to open it in |
 | [`DONE-NOT-DONE`](#done-not-done) | stop | 23 | the definition of done has an open line |
+| [`FORECAST-CONFLICT`](#forecast-conflict) | stop | 23 | another open branch conflicts with this one |
+| [`FORECAST-NO-BRANCH`](#forecast-no-branch) | error | 15 | the feature has no branch to forecast yet |
+| [`FORECAST-BUSY`](#forecast-busy) | error | 2 | a forecast is already running here |
 | [`RETURN-BLOCKED`](#return-blocked) | stop | 23 | the in-place run cannot switch back to your branch |
 | [`NOT-FOUND`](#not-found) | error | 15 | nothing by that name exists |
 | [`NOT-FOUND-SCHEMA`](#not-found-schema) | error | 15 | there is no schema by that name |
@@ -749,6 +752,30 @@ Before a pull request leaves the machine, speccoder checks the definition of don
 
 - `speccoder done`
 - `speccoder pr --force`
+
+### FORECAST-CONFLICT
+
+Another open branch conflicts with this one.
+
+The merge forecast paired this branch with each other open branch: a merge that cannot be made, or one on which a scenario that passes on its own branch fails. Talk to the branch's author or merge it now, while it is small; each problem says how to see it.
+
+- `speccoder forecast`
+
+### FORECAST-NO-BRANCH
+
+The feature has no branch to forecast yet.
+
+A forecast pairs the feature's branch with the others; the branch is made by its first run.
+
+- `speccoder run`
+
+### FORECAST-BUSY
+
+A forecast is already running here.
+
+One forecast runs at a time: its tests run one after another in the sandbox. Look again when it ends.
+
+- `speccoder forecast`
 
 ### RETURN-BLOCKED
 

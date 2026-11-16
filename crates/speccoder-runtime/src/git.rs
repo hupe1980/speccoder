@@ -181,6 +181,14 @@ impl Git {
         Ok(self.exec(args, &[], None)?.code)
     }
 
+    /// The exit code, stdout and trimmed stderr of `git <args>`, whatever
+    /// the code (`merge-tree` says "conflicts" with 1); errors only if git
+    /// can't run.
+    pub fn outcome(&self, args: &[&str]) -> Result<(Option<i32>, Vec<u8>, String), GitError> {
+        let out = self.exec(args, &[], None)?;
+        Ok((out.code, out.stdout, out.stderr))
+    }
+
     /// Runs `git <args>` with `env` set as well, returning stdout, or the
     /// trimmed stderr alone as the error.
     pub fn quiet(&self, args: &[&str], env: &[(&str, &OsStr)]) -> Result<Vec<u8>, GitError> {

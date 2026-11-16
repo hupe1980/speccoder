@@ -4,7 +4,7 @@
   // proven by evidence, and what it waits for. A card opens its board.
   import { app } from "../lib/app.svelte";
   import { get, q } from "../lib/api";
-  import type { CostReport, Reply, Report } from "../lib/types";
+  import type { CostReport, ForecastReport, Reply, Report } from "../lib/types";
   import Ring from "./Ring.svelte";
   import Icon from "./Icon.svelte";
   import GitHub from "./GitHub.svelte";
@@ -13,6 +13,8 @@
   const features = $derived(app.project?.features?.features ?? []);
   let reports = $state<Record<string, Report | null>>({});
   let costs = $state<Record<string, CostReport | null>>({});
+  // Each feature's last merge forecast: how many branches conflict with it.
+  let clashes = $state<Record<string, number>>({});
 
   $effect(() => {
     void app.report; // refresh with the page
@@ -23,6 +25,9 @@
       void get<Reply<CostReport>>(`/api/cost${q({ feature: f.name })}`)
         .then((r) => (costs = { ...costs, [f.name]: r.data ?? null }))
         .catch(() => (costs = { ...costs, [f.name]: null }));
+      void get<Reply<ForecastReport>>(`/api/forecast${q({ feature: f.name })}`)
+        .then((r) => (clashes = { ...clashes, [f.name]: (r.data?.pairs ?? []).filter((p) => p.verdict === "conflicts" || p.verdict === "breaks").length }))
+        .catch(() => (clashes = { ...clashes, [f.name]: 0 }));
     }
   });
 
@@ -93,6 +98,7 @@
                 <span title="{t.input_tokens.toLocaleString()} in · {t.output_tokens.toLocaleString()} out">{#if t.usd != null}<b>${t.usd.toFixed(2)}</b> spent{:else}<b>{tokens(t.input_tokens + t.output_tokens)}</b> tokens{/if}</span>
               {/if}
               {#if pending}<span class="attn"><Icon name="hand" size={11} weight={2.2} />{pending} waiting</span>{/if}
+              {#if clashes[f.name]}<span class="clash" title="From the last merge forecast"><Icon name="branch" size={11} weight={2.2} />Conflicts with {clashes[f.name]} {clashes[f.name] === 1 ? "branch" : "branches"}</span>{/if}
               {#if !f.tasks}<span>{f.artifacts.join(" · ") || "empty"}</span>{/if}
             </span>
           </div>
@@ -132,6 +138,7 @@
   .facts b { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
   .facts .good b { color: var(--verified); }
   .attn { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--attention); font-weight: 600; }
+  .clash { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--danger); font-weight: 600; }
   .go { color: var(--faint); }
   .empty { display: grid; justify-items: center; gap: 0.2rem; padding: 3.5rem 1rem; color: var(--muted); }
   .empty p { margin: 0; }

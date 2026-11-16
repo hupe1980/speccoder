@@ -630,6 +630,22 @@ export interface BranchTotals {
   skipped: number;
 }
 
+/** A scenario that holds on its own branch and fails on the merge. */
+export interface BrokenScenario {
+  /** Whose oracle: the unit. */
+  unit: string;
+  /** The forecast's own unit's oracle. */
+  mine: boolean;
+  /** The scenario (`US1-2`). */
+  scenario: string;
+  /** `given → must hold`, as the oracle commit states it. */
+  contract?: string | null;
+  /** The failing test's file. */
+  test: string;
+  /** The end of its output on the merge. */
+  output: string;
+}
+
 /** The bug's home, as the format adapter chose it. */
 export interface BugHome {
   /** Which structure. */
@@ -984,7 +1000,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | FeedbackReport | TrustReport | DoneReport | EditorsReport | Opened | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | FeedbackReport | TrustReport | DoneReport | ForecastReport | EditorsReport | Opened | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -2799,6 +2815,27 @@ export interface FeedbackReport {
   requests: Request[];
 }
 
+/** What became of the fetch before the forecast. */
+export type FetchState =
+  /** Every remote was fetched. */
+  | {
+    state: "fetched";
+  }
+  /** `--no-fetch`: branches as last fetched. */
+  | {
+    state: "skipped";
+  }
+  /** The repository has no remote. */
+  | {
+    state: "no_remote";
+  }
+  /** The fetch failed: branches as last fetched. */
+  | {
+    state: "failed";
+    /** git's reason, one line. */
+    why: string;
+  };
+
 /** One judged test file. */
 export interface FileCollection {
   /** Workspace-relative path. */
@@ -2841,6 +2878,34 @@ export interface Finding {
   reason: string;
   /** What to write instead. */
   fix: string;
+}
+
+/** `speccoder forecast`. */
+export interface ForecastReport {
+  /** The unit. */
+  feature: string;
+  /** Its branch. */
+  branch: string;
+  /** Its tip. */
+  commit: string;
+  /** What siblings are measured from. */
+  base?: string | null;
+  /** The fetch. */
+  fetch: FetchState;
+  /** The oracles on this branch. */
+  oracle: OracleFacts;
+  /** Problems first. */
+  pairs: PairForecast[];
+  /** Siblings past the limit, newest first. */
+  unchecked?: string[];
+  /** What limited the forecast (no sandbox, …). */
+  notices?: string[];
+  /** Test commands run this time. */
+  ran: number;
+  /** Test results reused from earlier forecasts. */
+  reused: number;
+  /** When (Unix seconds). */
+  at: number;
 }
 
 /** A spec-driven format. */
@@ -3782,6 +3847,18 @@ export interface OracleDiscarded {
   why: string;
 }
 
+/** The oracles the forecast judged with, on the forecast's branch. */
+export interface OracleFacts {
+  /** Stories with a frozen oracle here. */
+  stories: string[];
+  /** Their scenarios. */
+  scenarios: number;
+  /** Their tests. */
+  tests: number;
+  /** Scenarios passing on the forecast's branch: the ones a merge can break. */
+  green: number;
+}
+
 /** Where a story's oracle was written, and who froze it. */
 export interface OracleMark {
   /** The `Oracle:` commit (short). */
@@ -3876,6 +3953,44 @@ export type Origin = "yours" | "added" | "dropped";
 
 /** What a candidate run showed. */
 export type Outcome = "rejected" | "survived" | "timeout" | "unviable";
+
+/** One sibling paired with the forecast's branch. */
+export interface PairForecast {
+  /** The sibling as git names it (`origin/dana/csv`). */
+  branch: string;
+  /** Its tip. */
+  commit: string;
+  /** Its last commit's author. */
+  author: string;
+  /** Its last commit's time (Unix seconds). */
+  updated: number;
+  /** How the pair comes out. */
+  verdict: PairVerdict;
+  /** Conflicting files. */
+  files?: string[];
+  /** BrokenScenario scenarios. */
+  broken?: BrokenScenario[];
+  /** Frozen oracle tests the merge changes. */
+  rewritten?: string[];
+  /**
+   * The merge does not set up here (its dependencies do not install, its
+   * lockfile disagrees): what the install said.
+   */
+  setup?: string | null;
+  /** Tests that failed once on the merge, then passed: named, not counted. */
+  flaky?: string[];
+  /** Scenarios that passed on the merge. */
+  held: number;
+  /** Why the oracles did not judge it. */
+  why?: string | null;
+  /** The sibling's own oracle ran too. */
+  their_oracle: boolean;
+  /** One per problem. */
+  fixes?: string[];
+}
+
+/** How a pair comes out. */
+export type PairVerdict = "conflicts" | "breaks" | "not_judged" | "no_conflict_observed";
 
 /** A parsed `tasks.md`. */
 export interface ParsedTasks {

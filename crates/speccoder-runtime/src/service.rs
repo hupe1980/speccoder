@@ -50,6 +50,11 @@ pub mod editor {
     pub use crate::editor::{choose, open, report};
 }
 
+/// The merge forecast (spec 129).
+pub mod forecast {
+    pub use crate::forecast::{Options, last, run};
+}
+
 /// The definition of done (spec 127).
 pub mod done {
     pub use crate::done::{for_feature, report};

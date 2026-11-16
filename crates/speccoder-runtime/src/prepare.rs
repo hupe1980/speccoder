@@ -497,6 +497,10 @@ pub struct Prepare<'a> {
     /// speccoder's state directory: the cache `speccoder new`'s steps
     /// filled is tried after the person's own.
     pub state: Option<&'a Path>,
+    /// The install may fill the shared caches (`~/.npm`, `~/.cargo/registry`):
+    /// `false` for code nobody here chose to run (another person's branch in
+    /// a merge forecast) — it installs from them read-only, or not at all.
+    pub shared_caches: bool,
 }
 
 /// What preparing did.
@@ -746,9 +750,14 @@ fn install(p: &Prepare<'_>, root: &Root) -> Result<String, Failure> {
     let ok = |o: &Outcome| o.exit_code == Some(0) && !o.timed_out && o.spawn_error.is_none();
     let began = std::time::Instant::now();
     // What fills the shared caches may write them; nothing else of a run may.
-    let fetching = p.runner.clone().fetching();
+    let fetching = if p.shared_caches {
+        p.runner.clone().fetching()
+    } else {
+        p.runner.clone()
+    };
     let mut out = run(&fetching, env.clone());
     if !ok(&out)
+        && p.shared_caches
         && out.spawn_error.is_none()
         && let Some((cache, vars)) = p.state.and_then(|s| {
             crate::new_project::steps::filled_cache(s, argv.first().map_or("", String::as_str))
@@ -954,6 +963,7 @@ mod tests {
             config: &Config::default(),
             runner: &Runner::Plain,
             state: None,
+            shared_caches: true,
         };
         for _ in 0..2 {
             store(
@@ -1021,6 +1031,7 @@ mod tests {
                 config: &Config::default(),
                 runner: &Runner::Plain,
                 state: None,
+                shared_caches: true,
             },
             &roots(wt.path())[0],
             &wt.path().join("node_modules"),

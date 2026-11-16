@@ -3047,6 +3047,160 @@ pub fn done(r: &speccoder_core::done::DoneReport, look: &crate::style::Look) -> 
     out
 }
 
+/// How long ago, in one short word: `now`, `5m`, `3h`, `2d`.
+fn ago(then: u64, now: u64) -> String {
+    let s = now.saturating_sub(then);
+    match s {
+        0..60 => "now".to_owned(),
+        60..3600 => format!("{}m ago", s / 60),
+        3600..86_400 => format!("{}h ago", s / 3600),
+        _ => format!("{}d ago", s / 86_400),
+    }
+}
+
+/// `speccoder forecast`: one line per sibling, problems first.
+pub fn forecast(
+    r: &speccoder_core::forecast::ForecastReport,
+    look: &crate::style::Look,
+    now: u64,
+) -> Vec<String> {
+    use crate::style::{Glyph, Token};
+    use speccoder_core::forecast::{FetchState, PairVerdict};
+    let fetched = match &r.fetch {
+        FetchState::Fetched => ", fetched".to_owned(),
+        FetchState::Skipped => ", as last fetched".to_owned(),
+        FetchState::NoRemote => String::new(),
+        FetchState::Failed { why } => format!(", not fetched: {why}"),
+    };
+    let n = r.pairs.len();
+    let mut out = vec![format!(
+        "Merge forecast for {} ({n} {}{fetched})",
+        r.branch,
+        if n == 1 { "branch" } else { "branches" }
+    )];
+    if r.oracle.tests > 0 {
+        out.push(look.paint(
+            Token::Muted,
+            &format!(
+                "  your oracle: {} of {} scenarios pass on your branch",
+                r.oracle.green, r.oracle.scenarios
+            ),
+        ));
+    }
+    let width = r
+        .pairs
+        .iter()
+        .map(|p| p.branch.chars().count())
+        .max()
+        .unwrap_or(0);
+    let who_of = |p: &speccoder_core::forecast::PairForecast| {
+        let at = ago(p.updated, now);
+        if p.author.is_empty() {
+            at
+        } else {
+            format!("{} · {at}", p.author)
+        }
+    };
+    let who_width = r
+        .pairs
+        .iter()
+        .map(|p| who_of(p).chars().count())
+        .max()
+        .unwrap_or(0);
+    for p in &r.pairs {
+        let (glyph, what) = match p.verdict {
+            PairVerdict::Conflicts => (
+                Glyph::Failed,
+                format!("conflicts in {}", p.files.join(", ")),
+            ),
+            PairVerdict::Breaks => {
+                let mut parts: Vec<String> = p
+                    .broken
+                    .iter()
+                    .map(|b| {
+                        let whose = if b.mine {
+                            String::new()
+                        } else {
+                            format!("{}'s ", b.unit)
+                        };
+                        match &b.contract {
+                            Some(c) => format!("breaks {whose}{} ({c})", b.scenario),
+                            None => format!("breaks {whose}{}", b.scenario),
+                        }
+                    })
+                    .collect();
+                if !p.rewritten.is_empty() {
+                    parts.push(format!("rewrites oracle tests {}", p.rewritten.join(", ")));
+                }
+                (Glyph::Failed, parts.join("; "))
+            }
+            PairVerdict::NotJudged => (
+                Glyph::Ready,
+                format!("not judged — {}", p.why.as_deref().unwrap_or("no reason")),
+            ),
+            PairVerdict::NoConflictObserved => (
+                Glyph::Verified,
+                format!(
+                    "no conflict observed ({} {} held)",
+                    p.held,
+                    if p.held == 1 { "scenario" } else { "scenarios" }
+                ),
+            ),
+        };
+        let who = format!("{:<who_width$}", who_of(p));
+        out.push(format!(
+            "  {} {:<width$}  {}  {what}",
+            look.cell(glyph),
+            p.branch,
+            look.paint(Token::Muted, &who),
+        ));
+        for b in &p.broken {
+            out.push(look.paint(
+                Token::Muted,
+                &format!(
+                    "      {} fails on the merge, passes on its own branch",
+                    b.test
+                ),
+            ));
+        }
+        if let Some(why) = &p.setup {
+            out.push(look.paint(
+                Token::Muted,
+                &format!("      {}", why.lines().last().unwrap_or(why)),
+            ));
+        }
+        if !p.flaky.is_empty() {
+            out.push(look.paint(
+                Token::Muted,
+                &format!("      flaky, not counted: {}", p.flaky.join(", ")),
+            ));
+        }
+    }
+    if !r.unchecked.is_empty() {
+        out.push(format!(
+            "  {} older {} not checked: name {} to check {}",
+            r.unchecked.len(),
+            if r.unchecked.len() == 1 {
+                "branch"
+            } else {
+                "branches"
+            },
+            if r.unchecked.len() == 1 { "it" } else { "them" },
+            if r.unchecked.len() == 1 { "it" } else { "them" },
+        ));
+    }
+    for n in &r.notices {
+        out.push(format!("  ! {n}"));
+    }
+    if r.ran + r.reused > 0 {
+        out.push(look.paint(
+            Token::Muted,
+            &format!("  {} test runs, {} reused", r.ran, r.reused),
+        ));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

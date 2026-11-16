@@ -1293,6 +1293,14 @@ struct Written {
     untestable: BTreeMap<String, String>,
 }
 
+/// Each scenario's contract (`given → must hold`) as the latest
+/// `Oracle: <story>` commit reachable from `rev` states it.
+pub(crate) fn contracts_at(repo: &Path, rev: &str, story: &str) -> BTreeMap<String, String> {
+    written(repo, rev, story)
+        .map(|w| w.contracts)
+        .unwrap_or_default()
+}
+
 fn written(repo: &Path, rev: &str, story: &str) -> Option<Written> {
     let out = crate::git::Git::at(repo)
         .line(&[

@@ -8,6 +8,7 @@ mod done;
 mod editor;
 mod feedback;
 pub mod fixes;
+mod forecast;
 pub mod jobs;
 mod projects;
 pub mod security;
@@ -1463,6 +1464,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/projects", get(projects::list))
         .route("/api/trust", get(trust::list).post(trust::trust_files))
         .route("/api/done", get(done::report))
+        .route("/api/forecast", get(forecast::last).post(forecast::check))
         .route("/api/editor", get(editor::list).post(editor::choose))
         .route("/api/editor/open", post(editor::open))
         .route("/api/feedback", get(feedback::list))

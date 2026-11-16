@@ -1201,6 +1201,20 @@ fn main() {
             (None, None) => speccoder_runtime::service::editor::report(),
         },
         Command::Done { base } => speccoder_runtime::done::report(path, base.as_deref(), true),
+        Command::Forecast { branches, no_fetch } => {
+            let say = |line: &str| eprintln!("{line}");
+            speccoder_runtime::service::forecast::run(
+                path,
+                &speccoder_runtime::service::forecast::Options {
+                    feature: cli.feature.as_deref(),
+                    fetch: !*no_fetch,
+                    named: branches,
+                    state: None,
+                    progress: (!cli.json && std::io::IsTerminal::is_terminal(&std::io::stderr()))
+                        .then_some(&say as &(dyn Fn(&str) + Sync)),
+                },
+            )
+        }
         Command::Trust { all, paths } => match speccoder_runtime::worktree::state_dir() {
             Some(state) => speccoder_runtime::agent_files::command(path, &state, *all, paths),
             None => no_state("trust"),
@@ -2726,6 +2740,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Mcp => "mcp",
             C::Trust { .. } => "trust",
             C::Done { .. } => "done",
+            C::Forecast { .. } => "forecast",
             C::Open { .. } => "open",
             C::Extensions { .. } => "extensions",
             C::Fix { .. } => "fix",

@@ -506,6 +506,7 @@ fn prepare_in(
         config: &prepare::Config::default(),
         runner,
         state: None,
+        shared_caches: true,
     })
 }
 

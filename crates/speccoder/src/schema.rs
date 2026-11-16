@@ -115,6 +115,9 @@ const fn describe(payload: &str) -> &'static str {
         }
         b"trust" => "trust: the checkout's agent files and your trust in each",
         b"done" => "done: the definition of done, line by line, with fixes",
+        b"forecast" => {
+            "forecast: the branch paired with each other open branch, textual and by the oracles"
+        }
         b"editors" => "editors: the editors found here and the one you chose",
         b"opened" => "opened: a file opened in your editor, at its line",
         b"extensions" => {
@@ -222,6 +225,7 @@ published! {
     "feedback", "FeedbackReport" => core::feedback::FeedbackReport,
     "trust", "TrustReport" => core::agent_files::TrustReport,
     "done", "DoneReport" => core::done::DoneReport,
+    "forecast", "ForecastReport" => core::forecast::ForecastReport,
     "editors", "EditorsReport" => core::editor::EditorsReport,
     "opened", "Opened" => core::editor::Opened,
     "extension_views", "ViewsReport" => core::extensions::ViewsReport,

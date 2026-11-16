@@ -138,6 +138,7 @@ pub(super) fn make(
             config: worktree_config,
             runner,
             state: Some(state),
+            shared_caches: true,
         });
         match prepared {
             Ok(None) => {}

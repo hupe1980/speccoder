@@ -114,6 +114,12 @@ pub struct Scratch {
 
 /// A scratch worktree of `checkout`'s `HEAD` under `under`.
 pub fn scratch(checkout: &Path, under: &Path) -> Result<Scratch, GitError> {
+    scratch_at(checkout, under, "HEAD")
+}
+
+/// A scratch worktree of `checkout`'s repository at `rev`, detached, under
+/// `under`.
+pub fn scratch_at(checkout: &Path, under: &Path, rev: &str) -> Result<Scratch, GitError> {
     let git = Git::at(checkout);
     let top = git
         .toplevel()?
@@ -124,7 +130,7 @@ pub fn scratch(checkout: &Path, under: &Path) -> Result<Scratch, GitError> {
         .map_or(0, |d| d.as_nanos());
     let path = under.join(format!("scratch-{}-{nanos}", std::process::id()));
     let path_str = path.display().to_string();
-    Git::at(&top).run(&["worktree", "add", "--quiet", "--detach", &path_str, "HEAD"])?;
+    Git::at(&top).run(&["worktree", "add", "--quiet", "--detach", &path_str, rev])?;
     Ok(Scratch { repo: top, path })
 }
 

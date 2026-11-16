@@ -632,6 +632,7 @@ pub(super) fn run(
                     config: worktree_config,
                     runner,
                     state: Some(state),
+                    shared_caches: true,
                 }) {
                     Ok(done) if done.is_empty() => {}
                     Ok(done) => {

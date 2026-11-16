@@ -36,6 +36,7 @@ pub mod explore;
 pub mod extensions;
 pub mod external;
 pub mod feedback;
+pub mod forecast;
 pub mod format;
 pub mod git;
 pub mod github;

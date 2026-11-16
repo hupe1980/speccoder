@@ -4938,6 +4938,10 @@
           "$ref": "#/$defs/DoneReport"
         },
         {
+          "description": "`forecast`: the branch paired with each other open branch.",
+          "$ref": "#/$defs/ForecastReport"
+        },
+        {
           "description": "The person's editors and their choice.",
           "$ref": "#/$defs/EditorsReport"
         },
@@ -15354,6 +15358,349 @@
         "by",
         "via",
         "at"
+      ]
+    },
+    "ForecastReport": {
+      "description": "`speccoder forecast`.",
+      "type": "object",
+      "properties": {
+        "feature": {
+          "description": "The unit.",
+          "type": "string"
+        },
+        "branch": {
+          "description": "Its branch.",
+          "type": "string"
+        },
+        "commit": {
+          "description": "Its tip.",
+          "type": "string"
+        },
+        "base": {
+          "description": "What siblings are measured from.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fetch": {
+          "description": "The fetch.",
+          "$ref": "#/$defs/FetchState"
+        },
+        "oracle": {
+          "description": "The oracles on this branch.",
+          "$ref": "#/$defs/OracleFacts"
+        },
+        "pairs": {
+          "description": "Problems first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PairForecast"
+          }
+        },
+        "unchecked": {
+          "description": "Siblings past the limit, newest first.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notices": {
+          "description": "What limited the forecast (no sandbox, …).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ran": {
+          "description": "Test commands run this time.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "reused": {
+          "description": "Test results reused from earlier forecasts.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "at": {
+          "description": "When (Unix seconds).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "feature",
+        "branch",
+        "commit",
+        "fetch",
+        "oracle",
+        "pairs",
+        "ran",
+        "reused",
+        "at"
+      ]
+    },
+    "FetchState": {
+      "description": "What became of the fetch before the forecast.",
+      "oneOf": [
+        {
+          "description": "Every remote was fetched.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "fetched"
+            }
+          },
+          "required": [
+            "state"
+          ]
+        },
+        {
+          "description": "`--no-fetch`: branches as last fetched.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "skipped"
+            }
+          },
+          "required": [
+            "state"
+          ]
+        },
+        {
+          "description": "The repository has no remote.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "no_remote"
+            }
+          },
+          "required": [
+            "state"
+          ]
+        },
+        {
+          "description": "The fetch failed: branches as last fetched.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "failed"
+            },
+            "why": {
+              "description": "git's reason, one line.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "state",
+            "why"
+          ]
+        }
+      ]
+    },
+    "OracleFacts": {
+      "description": "The oracles the forecast judged with, on the forecast's branch.",
+      "type": "object",
+      "properties": {
+        "stories": {
+          "description": "Stories with a frozen oracle here.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scenarios": {
+          "description": "Their scenarios.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "tests": {
+          "description": "Their tests.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "green": {
+          "description": "Scenarios passing on the forecast's branch: the ones a merge can break.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "stories",
+        "scenarios",
+        "tests",
+        "green"
+      ]
+    },
+    "PairForecast": {
+      "description": "One sibling paired with the forecast's branch.",
+      "type": "object",
+      "properties": {
+        "branch": {
+          "description": "The sibling as git names it (`origin/dana/csv`).",
+          "type": "string"
+        },
+        "commit": {
+          "description": "Its tip.",
+          "type": "string"
+        },
+        "author": {
+          "description": "Its last commit's author.",
+          "type": "string"
+        },
+        "updated": {
+          "description": "Its last commit's time (Unix seconds).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "verdict": {
+          "description": "How the pair comes out.",
+          "$ref": "#/$defs/PairVerdict"
+        },
+        "files": {
+          "description": "Conflicting files.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "broken": {
+          "description": "BrokenScenario scenarios.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BrokenScenario"
+          }
+        },
+        "rewritten": {
+          "description": "Frozen oracle tests the merge changes.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "setup": {
+          "description": "The merge does not set up here (its dependencies do not install, its\nlockfile disagrees): what the install said.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "flaky": {
+          "description": "Tests that failed once on the merge, then passed: named, not counted.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "held": {
+          "description": "Scenarios that passed on the merge.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "why": {
+          "description": "Why the oracles did not judge it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "their_oracle": {
+          "description": "The sibling's own oracle ran too.",
+          "type": "boolean"
+        },
+        "fixes": {
+          "description": "One per problem.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "branch",
+        "commit",
+        "author",
+        "updated",
+        "verdict",
+        "held",
+        "their_oracle"
+      ]
+    },
+    "PairVerdict": {
+      "description": "How a pair comes out.",
+      "oneOf": [
+        {
+          "description": "The merge cannot be made: files edited on both sides.",
+          "type": "string",
+          "const": "conflicts"
+        },
+        {
+          "description": "The merge is made and breaks a scenario, or rewrites an oracle's tests.",
+          "type": "string",
+          "const": "breaks"
+        },
+        {
+          "description": "Not judged by the oracles (`why` says why); the textual check passed.",
+          "type": "string",
+          "const": "not_judged"
+        },
+        {
+          "description": "The merge is made and every scenario that held still holds.",
+          "type": "string",
+          "const": "no_conflict_observed"
+        }
+      ]
+    },
+    "BrokenScenario": {
+      "description": "A scenario that holds on its own branch and fails on the merge.",
+      "type": "object",
+      "properties": {
+        "unit": {
+          "description": "Whose oracle: the unit.",
+          "type": "string"
+        },
+        "mine": {
+          "description": "The forecast's own unit's oracle.",
+          "type": "boolean"
+        },
+        "scenario": {
+          "description": "The scenario (`US1-2`).",
+          "type": "string"
+        },
+        "contract": {
+          "description": "`given → must hold`, as the oracle commit states it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "test": {
+          "description": "The failing test's file.",
+          "type": "string"
+        },
+        "output": {
+          "description": "The end of its output on the merge.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "unit",
+        "mine",
+        "scenario",
+        "test",
+        "output"
       ]
     },
     "EditorsReport": {

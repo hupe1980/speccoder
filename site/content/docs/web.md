@@ -92,7 +92,7 @@ A task that stopped because of another project offers **Report to…**: pick the
 
 <figure class="shot"><img class="shot-light" src="../../screenshots/overview-light.webp" alt="Overview: every feature with its progress and next step" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/overview-dark.webp" alt="Overview: every feature with its progress and next step" width="1440" height="900" loading="lazy" decoding="async"></figure>
 
-Per feature: its ring of verdicts, stage, tasks done, requirements proven, spend and calls waiting; a card opens its board. Below, the open [GitHub issues](@/docs/github.md#a-feature-from-an-issue), each with **Start Feature** (and **Fix as Bug** when labelled `bug`); an issue a spec already names shows that feature and **Comment**. Not signed in, the card offers **Sign In**.
+Per feature: its ring of verdicts, stage, tasks done, requirements proven, spend and calls waiting, and *Conflicts with N branches* from its last [merge forecast](@/docs/forecast.md); a card opens its board. Below, the open [GitHub issues](@/docs/github.md#a-feature-from-an-issue), each with **Start Feature** (and **Fix as Bug** when labelled `bug`); an issue a spec already names shows that feature and **Comment**. Not signed in, the card offers **Sign In**.
 
 ### Board
 
@@ -144,7 +144,7 @@ Anchor a comment to a passage (select it, press `c`), a test line (`+`), an open
 
 - The verdicts; calls waiting, with **Approve** and **Reject…**; stale ticks with **Re-check Against the Spec** ([when the spec changes](@/docs/evidence.md#when-the-spec-changes)).
 - Every requirement with the tasks that prove it, and those no task cites; when tasks.md cites none, **Find the gaps** runs the analysis skill.
-- **Pull Request**: its state on GitHub, [the definition of done](@/docs/done.md#at-a-pull-request) on the branch (*2 of 3*, each open line with its fix), and **Open Draft PR** or **Update** after a confirmation of what is pushed where ([its pull request](@/docs/github.md#its-pull-request)). After a stop at the definition of done, **Open Anyway**.
+- **Pull Request**: its state on GitHub, [the definition of done](@/docs/done.md#at-a-pull-request) on the branch (*2 of 3*, each open line with its fix), and **Open Draft PR** or **Update** after a confirmation of what is pushed where ([its pull request](@/docs/github.md#its-pull-request)). After a stop at the definition of done, **Open Anyway**. Then the [merge forecast](@/docs/forecast.md#in-the-web-app): **Check Open Branches** pairs the branch with every other open branch and runs your oracle on each merge; conflicts and broken scenarios come first, each with **Open in Editor** and how to see it.
 - **Spend**: tokens, the cached share, attempts and, with prices set, money.
 
 ### The live capsule and the status bar
