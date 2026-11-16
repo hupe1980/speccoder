@@ -388,6 +388,13 @@ pub enum Command {
         #[arg(long)]
         check: bool,
     },
+    /// Can this ship? The definition of done line by line: changelog, docs links and tone, screenshots, versions, CI — each with its fix.
+    #[command(hide = true)]
+    Done {
+        /// Compare with this branch, tag or commit (default: the remote's default branch, else the last release tag).
+        #[arg(long)]
+        base: Option<String>,
+    },
     /// What this project asks of the projects it depends on (`[upstream.<name>]`), where each item stands, and what others ask of it.
     #[command(hide = true)]
     Feedback,

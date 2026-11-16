@@ -76,6 +76,17 @@
       "items": {
         "$ref": "#/$defs/GateRecord"
       }
+    },
+    "done": {
+      "description": "The definition of done on the branch, CI aside (it runs after the\npush).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DoneReport"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [
@@ -217,6 +228,160 @@
         "rule",
         "level",
         "message"
+      ]
+    },
+    "DoneReport": {
+      "description": "Result of `speccoder done`.",
+      "type": "object",
+      "properties": {
+        "base": {
+          "description": "What it compared with: a branch, tag or commit; none found.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lines": {
+          "description": "One line per part with something to judge, in [`DonePart`] order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DoneLine"
+          }
+        },
+        "done": {
+          "description": "No line is not done.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "base",
+        "lines",
+        "done"
+      ]
+    },
+    "DoneLine": {
+      "description": "One part of the definition of done.",
+      "type": "object",
+      "properties": {
+        "part": {
+          "description": "Which part.",
+          "$ref": "#/$defs/DonePart"
+        },
+        "state": {
+          "description": "How it stands.",
+          "$ref": "#/$defs/DoneState"
+        },
+        "summary": {
+          "description": "What it saw, in one line.",
+          "type": "string"
+        },
+        "findings": {
+          "description": "The first findings.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DoneFinding"
+          }
+        },
+        "more": {
+          "description": "Findings beyond those shown.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "fixes": {
+          "description": "What to do, commands as typed.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "part",
+        "state",
+        "summary"
+      ]
+    },
+    "DonePart": {
+      "description": "A part of the definition of done, in the order they are shown.",
+      "oneOf": [
+        {
+          "description": "`[Unreleased]` has an entry when something user-facing changed.",
+          "type": "string",
+          "const": "changelog"
+        },
+        {
+          "description": "Every relative and site-internal link in the docs resolves.",
+          "type": "string",
+          "const": "links"
+        },
+        {
+          "description": "No screenshot is older than what it shows.",
+          "type": "string",
+          "const": "screenshots"
+        },
+        {
+          "description": "Docs describe what is there: no history, dates or backlog.",
+          "type": "string",
+          "const": "tone"
+        },
+        {
+          "description": "No docs page names the last release's version after a bump.",
+          "type": "string",
+          "const": "versions"
+        },
+        {
+          "description": "GitHub's checks for this commit.",
+          "type": "string",
+          "const": "ci"
+        }
+      ]
+    },
+    "DoneState": {
+      "description": "How a part stands.",
+      "oneOf": [
+        {
+          "description": "Done, by evidence.",
+          "type": "string",
+          "const": "done"
+        },
+        {
+          "description": "Not done: its fixes say what to do.",
+          "type": "string",
+          "const": "not_done"
+        },
+        {
+          "description": "The evidence is not there (not pushed, no access, no base).",
+          "type": "string",
+          "const": "cant_tell"
+        }
+      ]
+    },
+    "DoneFinding": {
+      "description": "One thing a line found.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Repository-relative path.",
+          "type": "string"
+        },
+        "line": {
+          "description": "1-based line, when it has one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "what": {
+          "description": "What it is: the phrase, the missing target, the newer source.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "what"
       ]
     }
   },

@@ -1184,6 +1184,7 @@ fn main() {
             Some(state) => speccoder_runtime::service::feedback::report(&state, path),
             None => no_state("feedback"),
         },
+        Command::Done { base } => speccoder_runtime::done::report(path, base.as_deref(), true),
         Command::Trust { all, paths } => match speccoder_runtime::worktree::state_dir() {
             Some(state) => speccoder_runtime::agent_files::command(path, &state, *all, paths),
             None => no_state("trust"),
@@ -2708,6 +2709,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Feedback => "feedback",
             C::Mcp => "mcp",
             C::Trust { .. } => "trust",
+            C::Done { .. } => "done",
             C::Extensions { .. } => "extensions",
             C::Fix { .. } => "fix",
             C::Spec { .. } => "spec",

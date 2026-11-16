@@ -472,17 +472,10 @@ pub fn pr_in(ctx: &Ctx, r: &Repo, branch: &str) -> Result<Option<Pull>, String> 
     let (mut ok, mut bad, mut running) = (0, 0, 0);
     let contexts = &p["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["nodes"];
     for c in contexts.as_array().into_iter().flatten() {
-        // Check runs have `status`/`conclusion`; status contexts have `state`.
-        let conclusion = c["conclusion"]
-            .as_str()
-            .or_else(|| c["state"].as_str())
-            .unwrap_or("");
-        let status = c["status"].as_str().unwrap_or("COMPLETED");
-        match (status, conclusion) {
-            (s, _) if s != "COMPLETED" => running += 1,
-            (_, "SUCCESS" | "NEUTRAL" | "SKIPPED") => ok += 1,
-            (_, "PENDING" | "EXPECTED") => running += 1,
-            _ => bad += 1,
+        match CheckState::of(c) {
+            CheckState::Passed => ok += 1,
+            CheckState::Failed => bad += 1,
+            CheckState::Running => running += 1,
         }
     }
     Ok(Some(Pull {
@@ -497,6 +490,89 @@ pub fn pr_in(ctx: &Ctx, r: &Repo, branch: &str) -> Result<Option<Pull>, String> 
             .map(str::to_owned),
         checks: (ok, bad, running),
     }))
+}
+
+/// How one check on a commit stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckState {
+    /// Passed, neutral or skipped.
+    Passed,
+    /// Failed, cancelled, timed out, or an error.
+    Failed,
+    /// Queued, running, or a status still pending.
+    Running,
+}
+
+impl CheckState {
+    /// A rollup context: a check run (`status`, `conclusion`) or a status
+    /// context (`state`).
+    #[must_use]
+    pub fn of(c: &Value) -> Self {
+        let conclusion = c["conclusion"]
+            .as_str()
+            .or_else(|| c["state"].as_str())
+            .unwrap_or("");
+        match (c["status"].as_str().unwrap_or("COMPLETED"), conclusion) {
+            (s, _) if s != "COMPLETED" => Self::Running,
+            (_, "SUCCESS" | "NEUTRAL" | "SKIPPED") => Self::Passed,
+            (_, "PENDING" | "EXPECTED") => Self::Running,
+            _ => Self::Failed,
+        }
+    }
+}
+
+const CHECKS_OF: &str = "query($owner:String!,$name:String!,$oid:GitObjectID!){repository(owner:$owner,name:$name){object(oid:$oid){... on Commit{statusCheckRollup{state contexts(first:100){totalCount nodes{__typename ... on CheckRun{name status conclusion} ... on StatusContext{context state}}}}}}}}";
+
+/// The checks GitHub reports for commit `sha`: each one's name and state.
+///
+/// # Errors
+///
+/// Not signed in, or GitHub's refusal.
+pub fn commit_checks(ctx: &Ctx, r: &Repo, sha: &str) -> Result<Vec<(String, CheckState)>, String> {
+    let api = ctx.signed_in(&r.host)?;
+    let data = api.graphql(
+        CHECKS_OF,
+        json!({ "owner": r.owner, "name": r.name, "oid": sha }),
+    )?;
+    Ok(checks_from(&data))
+}
+
+/// [`commit_checks`]' reading of GitHub's answer. Checks beyond the
+/// first 100 are one entry, as the rollup's overall state has them.
+#[must_use]
+pub fn checks_from(data: &Value) -> Vec<(String, CheckState)> {
+    let rollup = &data["repository"]["object"]["statusCheckRollup"];
+    let nodes = rollup["contexts"]["nodes"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let mut out: Vec<(String, CheckState)> = nodes
+        .iter()
+        .map(|c| {
+            let name = c["name"]
+                .as_str()
+                .or_else(|| c["context"].as_str())
+                .unwrap_or("a check")
+                .to_owned();
+            (name, CheckState::of(c))
+        })
+        .collect();
+    let total = rollup["contexts"]["totalCount"].as_u64().unwrap_or(0);
+    let rest = usize::try_from(total)
+        .unwrap_or(usize::MAX)
+        .saturating_sub(nodes.len());
+    if rest > 0 {
+        let state = match rollup["state"].as_str().unwrap_or("") {
+            "SUCCESS" => CheckState::Passed,
+            "PENDING" | "EXPECTED" => CheckState::Running,
+            _ => CheckState::Failed,
+        };
+        out.push((
+            format!("{rest} more checks (GitHub's overall state)"),
+            state,
+        ));
+    }
+    out
 }
 
 /// Opens a draft pull request from `head` into `base`: its number and

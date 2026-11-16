@@ -221,7 +221,7 @@
   .inspector {
     position: fixed; top: 64px; right: 10px; bottom: var(--panel-bottom); width: min(500px, calc(100vw - 20px)); z-index: 12;
     border-radius: var(--radius-lg); background: var(--glass-strong); box-shadow: var(--shadow-lg), var(--glass-edge);
-    overflow: auto; padding: 1.1rem 1.15rem 1.25rem; display: grid; align-content: start; gap: 1rem;
+    overflow: auto; padding: 1.1rem 1.15rem 1.25rem; display: grid; align-content: start; grid-auto-rows: max-content; gap: 1rem;
     animation: slide 380ms var(--spring);
   }
   @keyframes slide { from { transform: translateX(28px); opacity: 0; } }

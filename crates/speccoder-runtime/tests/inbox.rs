@@ -122,7 +122,7 @@ fn finished_features_wait_to_be_handed_off() {
         "{message}"
     );
     let a = &i.items[0].actions[0];
-    assert_eq!(a.run, Some(Runnable::PullRequest));
+    assert_eq!(a.run, Some(Runnable::PullRequest { force: false }));
     assert!(
         a.confirm.is_some(),
         "it leaves the machine: confirmed first"

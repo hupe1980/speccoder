@@ -4,6 +4,7 @@
 //! holds no logic of its own: what it shows and offers comes from the
 //! runtime, as for the CLI.
 
+mod done;
 mod feedback;
 pub mod fixes;
 pub mod jobs;
@@ -294,8 +295,8 @@ async fn asset(uri: axum::http::Uri) -> Response {
 }
 
 #[derive(Debug, Deserialize)]
-struct FeatureQuery {
-    feature: Option<String>,
+pub(crate) struct FeatureQuery {
+    pub(crate) feature: Option<String>,
     task: Option<String>,
     commit: Option<String>,
     /// An attempt ref (`refs/speccoder/attempts/…`): a failed or held
@@ -1460,6 +1461,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/recent/forget", post(welcome::forget))
         .route("/api/projects", get(projects::list))
         .route("/api/trust", get(trust::list).post(trust::trust_files))
+        .route("/api/done", get(done::report))
         .route("/api/feedback", get(feedback::list))
         .route("/api/feedback/decide", post(feedback::decide))
         .route("/api/feedback/prepared", get(feedback::prepared))

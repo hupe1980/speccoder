@@ -80,7 +80,12 @@ pub fn signer(repo: &Path, attest: &AttestConfig) -> Result<Signer, String> {
             Some("x509") => Err("x509 signing keys are not supported".to_owned()),
             _ => {
                 let key = config(repo, "user.signingKey").unwrap_or_default();
-                if key.is_empty() && config(repo, "commit.gpgSign").is_none() {
+                // `commit.gpgSign = false` is no wish to sign: git's own
+                // reading of the value, not whether it is set.
+                let sign_commits = Git::at(repo)
+                    .line(&["config", "--type=bool", "commit.gpgSign"])
+                    .is_ok_and(|v| v.trim() == "true");
+                if key.is_empty() && !sign_commits {
                     return Err("no signing key is configured in git (user.signingKey)".to_owned());
                 }
                 Ok(Signer::OpenPgp {

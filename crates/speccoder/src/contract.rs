@@ -230,6 +230,71 @@ fn the_codes_page_is_the_catalog_and_the_cli_reference_lists_every_status() {
     }
 }
 
+/// Every subcommand, visible or hidden, has a `speccoder …` row in the CLI
+/// reference, and every long flag appears there (spec 127).
+#[test]
+fn the_cli_reference_names_every_subcommand_and_flag() {
+    use clap::CommandFactory;
+    let cli = std::fs::read_to_string(site().join("content/docs/cli.md")).unwrap();
+    let mut missing = Vec::new();
+    fn walk(c: &clap::Command, path: &str, cli: &str, missing: &mut Vec<String>) {
+        for a in c.get_arguments() {
+            if let Some(long) = a.get_long()
+                && !matches!(long, "help" | "version")
+                && !cli.contains(&format!("--{long}"))
+            {
+                missing.push(format!("{path} --{long}"));
+            }
+        }
+        for sub in c.get_subcommands() {
+            let name = sub.get_name();
+            if name == "help" {
+                continue;
+            }
+            let full = format!("{path} {name}");
+            // A top-level command has its own row; a nested one is named
+            // in its parent's rows (`config get KEY` / `unset KEY`).
+            let named = cli.contains(&format!("`{full}"))
+                || (path != "speccoder"
+                    && cli.lines().any(|l| {
+                        l.contains(&format!("`{path}"))
+                            && l.split(|c: char| !c.is_ascii_alphanumeric() && c != '-')
+                                .any(|w| w == name)
+                    }));
+            if !named {
+                missing.push(full.clone());
+            }
+            walk(sub, &full, cli, missing);
+        }
+    }
+    walk(&crate::cli::Cli::command(), "speccoder", &cli, &mut missing);
+    assert!(missing.is_empty(), "cli.md does not name: {missing:#?}");
+}
+
+/// Every Needs You kind has a title in the web app, and the web app page
+/// describes it by that title (spec 127).
+#[test]
+fn the_web_page_describes_every_needs_you_kind() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    let kinds = std::fs::read_to_string(root.join("speccoder-web/ui/src/lib/kinds.ts")).unwrap();
+    let web = std::fs::read_to_string(site().join("content/docs/web.md")).unwrap();
+    let mut missing = Vec::new();
+    for name in speccoder_core::inbox::Kind::names() {
+        let Some(title) = kinds
+            .lines()
+            .find_map(|l| l.trim().strip_prefix(&format!("{name}: {{ title: \"")))
+            .and_then(|r| r.split('"').next())
+        else {
+            missing.push(format!("{name}: no title in kinds.ts"));
+            continue;
+        };
+        if !web.contains(&format!("**{title}**")) {
+            missing.push(format!("{name}: web.md has no **{title}**"));
+        }
+    }
+    assert!(missing.is_empty(), "{missing:#?}");
+}
+
 /// Every page that lists the model providers names Amazon Bedrock.
 #[test]
 fn every_page_listing_the_providers_names_bedrock() {

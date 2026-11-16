@@ -272,6 +272,23 @@ A project this one depends on and asks things of ([feedback between projects](@/
 | `repo` | — | Its GitHub repository, `owner/name` |
 | `outbox` | `.speccoder/outbox/<name>.md` | The file of open items: a path inside this project (no `..`, nothing absolute, no link out) |
 
+## `[done]`
+
+What [the definition of done](@/docs/done.md) reads as docs.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `docs` | `README.md`, `**/README.md`, `docs/**/*.md`, `site/content/**/*.md` | Globs of the docs pages whose links, tone and versions are checked; `*` stays in a folder, `**` crosses folders |
+
+## `[screenshots.<name>]`
+
+A screenshot and what it shows. It is stale when one of its sources changed after it.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `shot` | — | The shot's files, a glob (`site/static/screenshots/board-*.webp` for a light and a dark one) |
+| `sources` | — | Globs of the files it shows |
+
 ## Your settings
 
 How speccoder looks and notifies you is your setting, not the project's. It lives in `$XDG_CONFIG_HOME/speccoder/config.toml` (else `~/.config/speccoder/config.toml`); a `[ui]` table in `speccoder.toml` is refused (exit 13).

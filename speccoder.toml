@@ -27,3 +27,55 @@ provider = "openai"
 model = "gpt-5.4-mini"
 max_output_tokens = 4096
 cache_ttl = "5m"
+
+# speccoder holds itself to its definition of done (`speccoder done`, `just done`).
+[done]
+docs = ["README.md", "crates/*/README.md", "site/content/**/*.md"]
+
+[screenshots.board]
+shot = "site/static/screenshots/board-*.webp"
+sources = ["crates/speccoder-web/ui/src/components/Board.svelte"]
+
+[screenshots.code]
+shot = "site/static/screenshots/code-*.webp"
+sources = ["crates/speccoder-web/ui/src/components/CodeView.svelte"]
+
+[screenshots.drawer]
+shot = "site/static/screenshots/drawer-*.webp"
+sources = ["crates/speccoder-web/ui/src/components/Drawer.svelte"]
+
+[screenshots.explain]
+shot = "site/static/screenshots/explain-*.webp"
+sources = ["crates/speccoder-web/ui/src/components/ExplainSheet.svelte"]
+
+[screenshots.feedback]
+shot = "site/static/screenshots/feedback-*.webp"
+sources = ["crates/speccoder-web/ui/src/components/Feedback.svelte"]
+
+[screenshots.inbox]
+shot = "site/static/screenshots/inbox-*.webp"
+sources = ["crates/speccoder-web/ui/src/components/Inbox.svelte"]
+
+[screenshots.overview]
+shot = "site/static/screenshots/overview-*.webp"
+sources = ["crates/speccoder-web/ui/src/components/Overview.svelte"]
+
+[screenshots.projects]
+shot = "site/static/screenshots/projects-*.webp"
+sources = ["crates/speccoder-web/ui/src/components/Projects.svelte"]
+
+[screenshots.report]
+shot = "site/static/screenshots/report-*.webp"
+sources = ["crates/speccoder-web/ui/src/components/ReportView.svelte"]
+
+[screenshots.review]
+shot = "site/static/screenshots/review-*.webp"
+sources = ["crates/speccoder-web/ui/src/components/ReviewCards.svelte"]
+
+[screenshots.thread]
+shot = "site/static/screenshots/thread-*.webp"
+sources = ["crates/speccoder-web/ui/src/components/Thread.svelte"]
+
+[screenshots.trust]
+shot = "site/static/screenshots/trust-*.webp"
+sources = ["crates/speccoder-web/ui/src/components/TrustSheet.svelte"]

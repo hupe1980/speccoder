@@ -98,6 +98,10 @@ release-test:
     scripts/release/test.sh
     packaging/speccoder-verify-action/test.sh
 
+# The definition of done: changelog, docs, screenshots, versions, CI (`speccoder done`).
+done *args:
+    cargo run -q -p speccoder -- done {{args}}
+
 # Set the version; for a release also cut the CHANGELOG. Never commits.
 bump version:
     scripts/release/bump.sh {{version}}
@@ -124,6 +128,11 @@ record-journals:
 # Record the sample `speccoder sample` replays (needs a key, costs money, never CI).
 record-sample:
     scripts/record-sample.sh
+
+# Retake the docs' app screenshots from the showcase (mock model; needs NODE_PATH with playwright, cwebp; never CI).
+screenshots *names:
+    cargo build --quiet -p speccoder
+    node scripts/screenshots.cjs {{names}}
 
 # Check, test and rebuild the web interface (crates/speccoder-web/ui) into its committed bundle.
 ui:

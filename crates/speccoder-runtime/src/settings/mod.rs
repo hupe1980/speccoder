@@ -44,6 +44,7 @@ pub(super) fn validate_but_model(text: &str) -> Result<(), String> {
     crate::external::parse(text)?;
     crate::format::parse_config(text)?;
     crate::hooks::parse(text)?;
+    crate::done::parse(text)?;
     Ok(())
 }
 

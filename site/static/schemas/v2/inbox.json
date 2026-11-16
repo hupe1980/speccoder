@@ -770,6 +770,10 @@
             "kind": {
               "type": "string",
               "const": "pull_request"
+            },
+            "force": {
+              "description": "Hand off though the definition of done has open lines; the body\nlists them.",
+              "type": "boolean"
             }
           },
           "required": [

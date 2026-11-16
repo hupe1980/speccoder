@@ -197,6 +197,7 @@ pub const SUBCOMMANDS: &[&str] = &[
     "converge",
     "do",
     "doctor",
+    "done",
     "eval",
     "explain",
     "extensions",
@@ -779,6 +780,8 @@ fn speccoder(argv: &[String], constant: bool) -> How {
         (Some("report"), _) if has(a, "--approvals") => view(View::Approvals, None),
         (Some("report"), _) if has(a, "--live") => view(View::Live, None),
         (Some("report"), _) => view(View::Report, None),
+        // The definition of done stands on the feature's Pull Request card.
+        (Some("done"), _) => view(View::Report, None),
         (Some("tui"), _) => view(View::Live, None),
         (Some("ui" | "inbox" | "approvals"), _) if !has(a, "-C") => view(View::Approvals, None),
         (Some("explain"), Some(code)) if !code.starts_with('-') => view(View::Explain, Some(code)),
@@ -979,7 +982,13 @@ fn speccoder(argv: &[String], constant: bool) -> How {
         (Some("pr"), _) if flag(a, "--remote").is_some() => {
             words(Some("name the remote it pushes to"))
         }
-        (Some("pr"), _) => confirmed(Runnable::PullRequest, a, PR_CONFIRM),
+        (Some("pr"), _) => confirmed(
+            Runnable::PullRequest {
+                force: has(a, "--force"),
+            },
+            a,
+            PR_CONFIRM,
+        ),
         (Some("fix"), _) if a.len() == 1 => perform(Runnable::FixSetup, a),
         (Some("preset"), w) if w != Some("add") => words(None),
         (Some("preset"), _) => confirmed(
@@ -1218,7 +1227,7 @@ mod tests {
         assert_eq!(run_of("speccoder fix").0, Runnable::FixSetup);
         assert!(matches!(
             h("speccoder pr --yes"),
-            How::Perform { run, confirm: Some(_), .. } if *run == Runnable::PullRequest
+            How::Perform { run, confirm: Some(_), .. } if matches!(*run, Runnable::PullRequest { .. })
         ));
         assert!(matches!(
             h("speccoder task drop {task}"),

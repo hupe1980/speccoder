@@ -42,9 +42,41 @@ A project without `speccoder.toml` opens in the **setup assistant**: what was fo
 - Approvals of one tool can be ticked and decided together: **Approve 3** or **Reject 3…** (one reason, told to each); each is still its own decision on its own exact object.
 - A quick change or bug fix that grew is a *Worth a Spec* row naming what was measured: **Start a spec from it** opens the New feature sheet with its requirement and the conversations that suggested it ([promotion](@/docs/running.md#promotion)); **Not now** holds until another signal holds. The task's inspector shows the same offer.
 - A task outside a story that failed on its own test names it and offers **These tests are wrong** with a field for why; at a story's checkpoint, one per red scenario. The next run writes them again, your words told to their author. The inspector shows the same offer (*Its own test failed*).
-- *Agent files to trust*: the checkout's [agent files](@/docs/security.md#agent-files) that are new or changed. **Review…** shows each with its diff; **Trust N Files** trusts exactly what is shown.
+- **Agent Files to Trust**: the checkout's [agent files](@/docs/security.md#agent-files) that are new or changed. **Review…** shows each with its diff; **Trust N Files** trusts exactly what is shown.
 - Each row decides in place; **Open** shows it with its evidence (a bug's row opens the [Bug sheet](#bug-sheet)). A disabled button says why on hover.
 - The sidebar and Dock badges count only *Blocked on you*; a desktop notification comes when something new lands there. **Quick Change** (`q`) opens a sheet for a [quick change](@/docs/running.md#quick-changes). The terminal's equivalent is `speccoder inbox`.
+
+| Row | Why it waits |
+|---|---|
+| **Could Not Be Read** | Another speccoder holds the journal — calls may be waiting for you that cannot be listed now. |
+| **Waiting for Approval** | A run is paused until you decide. |
+| **Confirm a Bug's Reproduction** | It fails on the untouched code by an assertion — does it show the bug? Nothing is fixed before you say so. |
+| **Could Not Reproduce** | No test of every expected behaviour failed on an assertion; nothing was fixed. Bring a test, reword, or try again. |
+| **Unchanged Does Not Hold** | A statement of what must keep working is not true today. |
+| **Reproduction Too Weak** | A fix that only recognises the reproduction's input passes it. |
+| **Already Fixed** | Every reproduction passes: keep one as a regression test, or drop it. |
+| **Calls Waiting Together** | The run used its approval budget: further calls wait here, decided together — each once. |
+| **Rule on the Tests** | The tests reject an alternative the spec may allow. |
+| **Suspected Shortcuts** | The monitor saw what looks like gaming the tests. |
+| **Little Was Verified** | Most ticks rest on the regression checks alone — why, by reason, and what changes it. |
+| **The Spec Changed** | Evidence proves an earlier wording. |
+| **Read Two Ways** | Two test authors read a requirement differently — say which reading is meant, or reword it. Approve and Run waits. |
+| **Open Questions** | The spec leaves these undecided — answer before it is built on. |
+| **Review the Spec** | The result will be judged against these words. |
+| **Change Requests** | Revise the spec as you asked, then review it again. |
+| **Yours to Do** | A step only you can take — do it, give the agent a hint, or skip it. |
+| **Refused on Autopilot** | Calls the autopilot run would have asked you about were refused, not asked: look at each, and allow one when you run again. |
+| **Blocked by a Gate** | Your gate did not let the tick through — its own words say why. Fix that, then run again. |
+| **Gates to Trust** | A gate runs only after you trusted exactly what it runs; until then it blocks every tick. |
+| **Extensions to Trust** | Nothing of an extension runs before you trusted one digest over every file it holds. |
+| **Agent Files to Trust** | What a checkout tells agents can steer them; agents read only the agent files you trusted, as you saw them. |
+| **Did Not Pass** | Decide: run again, leave a note, skip or accept. |
+| **Changes Set Aside** | Found in the worktree when a run started — keep them on the branch, or let them go. |
+| **Plans to Commit** | A run reads committed files only. |
+| **Worth a Spec** | Measured, not guessed: it touched more than one requirement's worth. Start a spec from it — its tick is inherited, not verified — or not now. |
+| **Asked of This Project** | Another project you depend on is asked for something — take it up, record it as a bug, or decline it. |
+| **Feedback Answered** | A project you asked something of fixed or declined it. |
+| **Ready to Hand Off** | Every task is done — review the branch. |
 
 ### Projects
 
@@ -112,7 +144,7 @@ Anchor a comment to a passage (select it, press `c`), a test line (`+`), an open
 
 - The verdicts; calls waiting, with **Approve** and **Reject…**; stale ticks with **Re-check Against the Spec** ([when the spec changes](@/docs/evidence.md#when-the-spec-changes)).
 - Every requirement with the tasks that prove it, and those no task cites; when tasks.md cites none, **Find the gaps** runs the analysis skill.
-- **Pull Request**: its state on GitHub, and **Open Draft PR** or **Update** after a confirmation of what is pushed where ([its pull request](@/docs/github.md#its-pull-request)).
+- **Pull Request**: its state on GitHub, [the definition of done](@/docs/done.md#at-a-pull-request) on the branch (*2 of 3*, each open line with its fix), and **Open Draft PR** or **Update** after a confirmation of what is pushed where ([its pull request](@/docs/github.md#its-pull-request)). After a stop at the definition of done, **Open Anyway**.
 - **Spend**: tokens, the cached share, attempts and, with prices set, money.
 
 ### The live capsule and the status bar

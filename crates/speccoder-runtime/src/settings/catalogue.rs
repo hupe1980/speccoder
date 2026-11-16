@@ -765,6 +765,32 @@ pub const CATALOGUE: &[Section] = &[
         ],
     },
     Section {
+        name: "done",
+        title: "Definition of done",
+        about: "What speccoder done and pr judge: the docs pages whose links, tone and versions are checked.",
+        named: false,
+        keys: &[k(
+            "docs",
+            Kind::StrList,
+            None,
+            "Globs of the docs pages; unset: README files, docs/ and site/content/",
+        )],
+    },
+    Section {
+        name: "screenshots",
+        title: "Screenshots",
+        about: "Each screenshot and what it shows: a shot older than its sources is stale in speccoder done.",
+        named: true,
+        keys: &[
+            req(
+                "shot",
+                Kind::Str,
+                "The shot's files, a glob (light and dark: name-*.webp)",
+            ),
+            req("sources", Kind::StrList, "Globs of the files it shows"),
+        ],
+    },
+    Section {
         name: "hooks",
         title: "Hooks",
         about: "Your own commands around a run: a gate (at) stops a tick or a pull request unless it exits 0; an observer (on) hears ticks and stops. Each runs only after you trusted its exact bytes.",

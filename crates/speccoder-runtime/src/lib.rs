@@ -27,6 +27,7 @@ pub mod copy;
 pub mod current;
 pub mod doctor;
 pub mod documents;
+pub mod done;
 mod drift;
 pub mod eval;
 pub mod evidence;

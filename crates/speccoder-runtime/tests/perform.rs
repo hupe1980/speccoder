@@ -462,7 +462,11 @@ fn cases() -> Vec<Case> {
             },
             None,
         ),
-        case("pull-request-no-remote", Runnable::PullRequest, None),
+        case(
+            "pull-request-no-remote",
+            Runnable::PullRequest { force: false },
+            None,
+        ),
         case(
             "bug-fix-empty",
             Runnable::BugFix {

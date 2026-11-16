@@ -410,6 +410,13 @@ fn human_body(
             }
             writeln!(out, "{}", result.message())
         }
+        (_, Some(CommandData::Done(r))) => {
+            let look = crate::style::out();
+            for line in crate::human::done(r, &look) {
+                writeln!(out, "{line}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (_, Some(CommandData::Trust(r))) => {
             for line in crate::human::trust(r) {
                 writeln!(out, "{line}")?;

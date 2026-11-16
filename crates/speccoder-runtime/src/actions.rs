@@ -458,7 +458,7 @@ pub fn available_with(
         "push the branch and its evidence; open (or update) the draft",
         "speccoder pr --yes",
     );
-    pr = pr.with_run(Runnable::PullRequest);
+    pr = pr.with_run(Runnable::PullRequest { force: false });
     pr.confirm = Some(
         "Push the feature's speccoder branch and its attestation notes to `origin`, and open (or update) its draft pull request on GitHub, as you (your token).".to_owned(),
     );
@@ -1395,14 +1395,14 @@ pub fn perform_in(
         },
         // The interface has confirmed it (the action's `confirm`): push
         // and open.
-        Runnable::PullRequest => crate::handoff::pr(
+        Runnable::PullRequest { force } => crate::handoff::pr(
             root,
             feature,
             &crate::handoff::PrOptions {
                 remote: "origin",
                 base: None,
                 open: true,
-                force: false,
+                force: *force,
                 github: &crate::github::Ctx::from_env(),
             },
         ),

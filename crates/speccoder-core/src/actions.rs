@@ -161,7 +161,12 @@ pub enum Runnable {
     /// Pick the current feature.
     Feature,
     /// Push the feature's branch and open (or update) its draft pull request.
-    PullRequest,
+    PullRequest {
+        /// Hand off though the definition of done has open lines; the body
+        /// lists them.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        force: bool,
+    },
     /// Record a bug in the person's words (`speccoder bug`) and, when
     /// `run`, reproduce it.
     BugFix {
@@ -877,7 +882,7 @@ impl ActionKind {
             Self::DropSetAside => Runnable::DropSetAside { task: task() },
             Self::FixSetup => Runnable::FixSetup,
             Self::Feature => Runnable::Feature,
-            Self::PullRequest => Runnable::PullRequest,
+            Self::PullRequest => Runnable::PullRequest { force: false },
             Self::BugFix => Runnable::BugFix {
                 symptom: "saving an empty title crashes".to_owned(),
                 expected: vec!["an empty title is refused".to_owned()],
@@ -1041,7 +1046,7 @@ impl Runnable {
             Self::DropSetAside { .. } => ActionKind::DropSetAside,
             Self::FixSetup => ActionKind::FixSetup,
             Self::Feature => ActionKind::Feature,
-            Self::PullRequest => ActionKind::PullRequest,
+            Self::PullRequest { .. } => ActionKind::PullRequest,
             Self::BugFix { .. } => ActionKind::BugFix,
             Self::BugConfirm { .. } => ActionKind::BugConfirm,
             Self::BugRun { .. } => ActionKind::BugRun,
@@ -1163,7 +1168,7 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         | Runnable::QuickChange { .. }
         | Runnable::FixSetup
         | Runnable::Feature
-        | Runnable::PullRequest
+        | Runnable::PullRequest { .. }
         | Runnable::PresetAdd { .. }
         | Runnable::CommentsSend { .. } => None,
     };

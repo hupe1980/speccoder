@@ -76,6 +76,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`GIT-CHANGED`](#git-changed) | stop | 23 | git's configuration, hooks or refs changed during the run |
 | [`GIT-REDIRECTED`](#git-redirected) | error | 14 | a worktree's .git points at another git directory |
 | [`CHECKOUT-UNTRUSTED`](#checkout-untrusted) | stop | 23 | an executor would load agent files you have not trusted |
+| [`DONE-NOT-DONE`](#done-not-done) | stop | 23 | the definition of done has an open line |
 | [`RETURN-BLOCKED`](#return-blocked) | stop | 23 | the in-place run cannot switch back to your branch |
 | [`NOT-FOUND`](#not-found) | error | 15 | nothing by that name exists |
 | [`NOT-FOUND-SCHEMA`](#not-found-schema) | error | 15 | there is no schema by that name |
@@ -720,6 +721,15 @@ An external agent reads its own files from the checkout — instructions, settin
 
 - `speccoder trust`
 - `speccoder trust --all`
+
+### DONE-NOT-DONE
+
+The definition of done has an open line.
+
+Before a pull request leaves the machine, speccoder checks the definition of done on the branch: a changelog entry, docs whose links resolve and that describe what is there, current screenshots, no stale version. Each open line says what to do.
+
+- `speccoder done`
+- `speccoder pr --force`
 
 ### RETURN-BLOCKED
 

@@ -67,7 +67,7 @@ speccoder pr --yes --base main  # without asking
 
 The description is the evidence: the totals and a table of every task (verdict, mutation results, attestation, commit); tokens and convergence rounds; `Closes` for every issue the spec names; `Fixes #N` for every issue a [bug fix](@/docs/bugs.md) on the branch came from, while its task is `verified` or `attested`; how to verify the attestations; each ticked task's [evidence tour](@/docs/verifier.md#the-evidence-tour), collapsed, within GitHub's 65 536 characters (dropped last-first, counted); and what `verified` does not mean.
 
-`pr` refuses, pushing nothing, when the branch's full-tier checks failed (`--force` hands off anyway and says so in the description), when the branch has nothing the base lacks ([`NOTHING-TO-HAND-OFF`](@/docs/codes.md#nothing-to-hand-off)), or when there is no such remote, it names no GitHub repository, or nobody is signed in.
+`pr` refuses, pushing nothing, when [the definition of done](@/docs/done.md#at-a-pull-request) has an open line (`DONE-NOT-DONE`), when the branch's full-tier checks failed (`--force` hands off anyway in both cases and says so in the description), when the branch has nothing the base lacks ([`NOTHING-TO-HAND-OFF`](@/docs/codes.md#nothing-to-hand-off)), or when there is no such remote, it names no GitHub repository, or nobody is signed in.
 
 ## Evidence check
 

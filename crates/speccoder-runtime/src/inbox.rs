@@ -1093,7 +1093,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             "push the branch and its evidence; open (or update) the draft",
             flag("speccoder pr --yes".to_owned()),
         );
-        pr = pr.with_run(Runnable::PullRequest);
+        pr = pr.with_run(Runnable::PullRequest { force: false });
         pr.confirm = Some(
             "Push the feature's speccoder branch and its attestation notes to `origin`, and open (or update) its draft pull request on GitHub, as you (your token).".to_owned(),
         );

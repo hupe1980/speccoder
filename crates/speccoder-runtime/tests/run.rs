@@ -3289,6 +3289,109 @@ fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
     );
 }
 
+/// A pull request opens only when the definition of done holds on the
+/// branch; `--force` hands off with the open lines in the body (spec 127).
+#[test]
+fn pr_stops_until_the_definition_of_done_holds() {
+    use speccoder_runtime::handoff::{PrOptions, pr};
+    let r = repo("");
+    std::fs::write(
+        r.path().join("CHANGELOG.md"),
+        "# Changelog\n\n## [Unreleased]\n\n## [0.1.0] - 2026-01-01\n\n- first\n",
+    )
+    .unwrap();
+    git(r.path(), &["add", "CHANGELOG.md"]);
+    git(r.path(), &["commit", "-qm", "changelog"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    login_attempt(&f);
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let remote = tempfile::tempdir().unwrap();
+    git(remote.path(), &["init", "-q", "--bare"]);
+    git(
+        r.path(),
+        &["remote", "add", "origin", "https://github.com/o/r.git"],
+    );
+    git(
+        r.path(),
+        &[
+            "remote",
+            "set-url",
+            "--push",
+            "origin",
+            &remote.path().display().to_string(),
+        ],
+    );
+    let api = fake_github::serve(vec![
+        (
+            "POST /graphql",
+            200,
+            r#"{"data":{"repository":{"pullRequests":{"nodes":[]}}}}"#.to_owned(),
+        ),
+        (
+            "POST /repos/o/r/pulls",
+            201,
+            r#"{"number":1,"html_url":"https://github.com/o/r/pull/1"}"#.to_owned(),
+        ),
+    ]);
+    let ctx = speccoder_runtime::github::Ctx::fixed(&api.url, Some("t"));
+    let mut o = PrOptions {
+        remote: "origin",
+        base: Some("main"),
+        open: false,
+        force: false,
+        github: &ctx,
+    };
+    // The dry run says where opening will stop.
+    let dry = pr(r.path(), None, &o);
+    assert!(
+        dry.message().contains("Changelog not done"),
+        "{}",
+        dry.message()
+    );
+    let Some(CommandData::Pr(p)) = dry.data() else {
+        panic!("{}", dry.message())
+    };
+    assert!(!p.done.as_ref().unwrap().done);
+
+    o.open = true;
+    let stopped = pr(r.path(), None, &o);
+    assert_eq!(
+        stopped.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        stopped.message()
+    );
+    assert_eq!(stopped.code().map(|c| c.name), Some("DONE-NOT-DONE"));
+    assert!(
+        stopped.fix().iter().any(|f| f.contains("## [Unreleased]")),
+        "{:?}",
+        stopped.fix()
+    );
+    assert!(
+        git_out(remote.path(), &["branch", "--list"])
+            .trim()
+            .is_empty(),
+        "pushed while not done"
+    );
+
+    o.force = true;
+    let forced = pr(r.path(), None, &o);
+    assert_eq!(forced.status(), CommandStatus::Ok, "{}", forced.message());
+    let Some(CommandData::Pr(p)) = forced.data() else {
+        panic!()
+    };
+    assert!(p.body.contains("### Definition of done"), "{}", p.body);
+    assert!(
+        p.body.contains("- [ ] Changelog — [Unreleased] is empty")
+            && p.body.contains("(handed off anyway)"),
+        "{}",
+        p.body
+    );
+    assert!(git_out(remote.path(), &["branch", "--list"]).contains("speccoder/001-graph"));
+}
+
 /// the issues a feature's spec names are closed by its pull request,
 /// and a branch whose pull request is open is updated, never opened twice.
 #[test]

@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **The definition of done**: `speccoder done` says whether a change can
+  ship — a changelog entry, docs whose links resolve and that describe what
+  is there, current screenshots, no stale version, green CI — each line
+  with its fix ([docs](https://hupe1980.github.io/speccoder/docs/done/)).
+  `[done]` and `[screenshots.<name>]` in `speccoder.toml`.
+
+### Changed
+
+- `speccoder pr` checks the definition of done on the branch before it
+  pushes (`DONE-NOT-DONE`); `--force` hands off with the open lines in the
+  description, which now lists every line. The Pull Request card shows them
+  above **Open Draft PR**, with **Open Anyway** after a stop.
+
+### Fixed
+
+- `commit.gpgSign = false` no longer turns attestation signing on.
+- A task's evidence rows no longer vanish from the inspector beside a long
+  thread.
+- A short command in a card no longer breaks after its hyphen.
+
 ## [0.18.0] - 2026-11-16
 
 ### Added

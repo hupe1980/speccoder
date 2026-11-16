@@ -340,7 +340,7 @@ mod tests {
     fn a_step_the_terminal_does_not_take_is_refused_before_it_runs() {
         let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
         let mut a = commit();
-        a.run = Some(Runnable::PullRequest);
+        a.run = Some(Runnable::PullRequest { force: false });
         let r = take(dir.path(), None, &a, crate::progress::Verbosity::Normal);
         assert_eq!(
             (r.command(), r.status(), r.message()),
@@ -355,7 +355,7 @@ mod tests {
     #[test]
     fn a_fix_the_terminal_does_not_apply_is_not_applied() {
         let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
-        assert!(apply(dir.path(), None, &Runnable::PullRequest).is_none());
+        assert!(apply(dir.path(), None, &Runnable::PullRequest { force: false }).is_none());
         assert!(apply(dir.path(), None, &Runnable::FixSetup).is_some());
     }
 

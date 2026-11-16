@@ -45,6 +45,11 @@ pub mod agent_files {
     pub use crate::agent_files::{Refused, command, report, trust_as_person};
 }
 
+/// The definition of done (spec 127).
+pub mod done {
+    pub use crate::done::{for_feature, report};
+}
+
 /// Feedback between projects (spec 125).
 pub mod feedback {
     pub use crate::feedback::{

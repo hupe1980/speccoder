@@ -401,7 +401,54 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
             ),
         );
     }
+    // The definition of done on the branch as it will be pushed; CI is
+    // not judged (it runs after the push).
+    let tip = repo
+        .line(&["rev-parse", "--verify", &format!("{branch}^{{commit}}")])
+        .unwrap_or_default();
+    let done = match crate::done::evaluate(
+        &repo_root,
+        path,
+        &crate::done::Source::Commit(tip.clone()),
+        Some(&base),
+        false,
+    ) {
+        Ok(d) => Some(d),
+        // A definition of done that cannot be read is not passed.
+        Err((status, e)) if options.open && !options.force => {
+            return refuse(
+                status,
+                &format!("the definition of done cannot be checked: {e}; nothing was pushed"),
+            )
+            .with_fix(vec![
+                "speccoder config".to_owned(),
+                "speccoder pr --force".to_owned(),
+            ]);
+        }
+        Err(_) => None,
+    };
+    if options.open
+        && !options.force
+        && let Some(open) = done.as_ref().and_then(|d| d.open().next())
+    {
+        let mut fix = open.fixes.clone();
+        fix.push(format!("speccoder done --base {base}"));
+        fix.push("speccoder pr --force".to_owned());
+        return refuse(
+            CommandStatus::NeedsHuman,
+            &format!(
+                "the definition of done is not met on {branch}: {} — {}; nothing was pushed",
+                open.part.title(),
+                open.summary
+            ),
+        )
+        .with_code("DONE-NOT-DONE")
+        .with_fix(fix);
+    }
     let mut body = body(report, &trailers(&repo, &base, &branch));
+    if let Some(d) = &done {
+        body.push_str(&d.markdown(options.force));
+    }
     if let Some(t) = &full {
         body.push_str(&format!(
             "\n> **Full-tier checks failed** on this branch: {}. Handed off with `--force`.\n",
@@ -439,9 +486,6 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
         body.push_str(&section);
     }
     // Each closed task's tour, from its signed statements and commit.
-    let tip = repo
-        .line(&["rev-parse", "--verify", &format!("{branch}^{{commit}}")])
-        .unwrap_or_default();
     if let Ok(recorded) = crate::attest::branch::recorded(&repo_root, &tip, &report.feature) {
         let room = BODY_LIMIT.saturating_sub(body.chars().count());
         body.push_str(&tours(&crate::tour::markdown_all(&recorded), room));
@@ -501,11 +545,21 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
         }
         .to_owned(),
         gates: Vec::new(),
+        done: done.clone(),
     };
     if !options.open {
         let mut message =
             "dry run: nothing was pushed (confirm, or pass --yes, to push and open the draft)"
                 .to_owned();
+        if let Some(d) = &done {
+            let open: Vec<&str> = d.open().map(|l| l.part.title()).collect();
+            if !open.is_empty() {
+                message.push_str(&format!(
+                    "\ndefinition of done: {} not done — opening stops there (see `speccoder done --base {base}`)",
+                    open.join(", ")
+                ));
+            }
+        }
         message.push_str(&match &evidence {
             Some(w) => format!("\nevidence check: {w} runs the evidence check"),
             None => format!("\nevidence check: none — see {EVIDENCE_CHECK_DOCS}"),

@@ -1339,6 +1339,57 @@
           "tables": []
         },
         {
+          "name": "done",
+          "title": "Definition of done",
+          "about": "What speccoder done and pr judge: the docs pages whose links, tone and versions are checked.",
+          "named": false,
+          "keys": [
+            {
+              "key": "docs",
+              "kind": "string_list",
+              "about": "Globs of the docs pages; unset: README files, docs/ and site/content/",
+              "default": null,
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": false
+            }
+          ],
+          "tables": []
+        },
+        {
+          "name": "screenshots",
+          "title": "Screenshots",
+          "about": "Each screenshot and what it shows: a shot older than its sources is stale in speccoder done.",
+          "named": true,
+          "keys": [
+            {
+              "key": "shot",
+              "kind": "string",
+              "about": "The shot's files, a glob (light and dark: name-*.webp)",
+              "default": null,
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": true
+            },
+            {
+              "key": "sources",
+              "kind": "string_list",
+              "about": "Globs of the files it shows",
+              "default": null,
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": true
+            }
+          ],
+          "tables": []
+        },
+        {
           "name": "hooks",
           "title": "Hooks",
           "about": "Your own commands around a run: a gate (at) stops a tick or a pull request unless it exits 0; an observer (on) hears ticks and stops. Each runs only after you trusted its exact bytes.",

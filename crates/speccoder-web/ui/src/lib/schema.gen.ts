@@ -984,7 +984,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | FeedbackReport | TrustReport | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | HooksReport | Thread | Explanation | ProjectsReport | FeedbackReport | TrustReport | DoneReport | ExtensionsReport | ViewsReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -1621,6 +1621,48 @@ export interface DoctorReport {
    */
   agents?: AgentCard[];
 }
+
+/** One thing a line found. */
+export interface DoneFinding {
+  /** Repository-relative path. */
+  path: string;
+  /** 1-based line, when it has one. */
+  line?: number | null;
+  /** What it is: the phrase, the missing target, the newer source. */
+  what: string;
+}
+
+/** One part of the definition of done. */
+export interface DoneLine {
+  /** Which part. */
+  part: DonePart;
+  /** How it stands. */
+  state: DoneState;
+  /** What it saw, in one line. */
+  summary: string;
+  /** The first findings. */
+  findings?: DoneFinding[];
+  /** Findings beyond those shown. */
+  more?: number;
+  /** What to do, commands as typed. */
+  fixes?: string[];
+}
+
+/** A part of the definition of done, in the order they are shown. */
+export type DonePart = "changelog" | "links" | "screenshots" | "tone" | "versions" | "ci";
+
+/** Result of `speccoder done`. */
+export interface DoneReport {
+  /** What it compared with: a branch, tag or commit; none found. */
+  base: string | null;
+  /** One line per part with something to judge, in [`DonePart`] order. */
+  lines: DoneLine[];
+  /** No line is not done. */
+  done: boolean;
+}
+
+/** How a part stands. */
+export type DoneState = "done" | "not_done" | "cant_tell";
 
 /** Where a draft comment is. */
 export type DraftState = "draft" | "outdated" | "sent";
@@ -4111,6 +4153,11 @@ export interface PrReport {
   evidence_check: string;
   /** The gates that stood before the push (spec 095). */
   gates?: GateRecord[];
+  /**
+   * The definition of done on the branch, CI aside (it runs after the
+   * push).
+   */
+  done?: DoneReport | null;
 }
 
 /** Where the confirmed reproductions are kept, as recorded with the fix. */
@@ -5409,6 +5456,11 @@ export type Runnable =
   /** Push the feature's branch and open (or update) its draft pull request. */
   | {
     kind: "pull_request";
+    /**
+     * Hand off though the definition of done has open lines; the body
+     * lists them.
+     */
+    force?: boolean;
   }
   /**
    * Record a bug in the person's words (`speccoder bug`) and, when

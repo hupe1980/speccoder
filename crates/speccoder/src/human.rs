@@ -2983,6 +2983,45 @@ pub fn feedback(r: &speccoder_core::feedback::FeedbackReport) -> Vec<String> {
     out
 }
 
+/// `speccoder done`: one row per line, its findings and fixes under it.
+#[must_use]
+pub fn done(r: &speccoder_core::done::DoneReport, look: &crate::style::Look) -> Vec<String> {
+    use crate::style::{Glyph, Token};
+    use speccoder_core::done::DoneState;
+    let mut out = vec![match &r.base {
+        Some(b) => format!("Definition of done (since {b})"),
+        None => "Definition of done".to_owned(),
+    }];
+    for l in &r.lines {
+        let glyph = match l.state {
+            DoneState::Done => Glyph::Verified,
+            DoneState::NotDone => Glyph::Failed,
+            DoneState::CantTell => Glyph::TickMissing,
+        };
+        out.push(format!(
+            "  {} {:<12} {}",
+            look.cell(glyph),
+            l.part.title(),
+            l.summary
+        ));
+        for f in &l.findings {
+            let at = f
+                .line
+                .map_or_else(|| f.path.clone(), |n| format!("{}:{n}", f.path));
+            out.push(look.paint(Token::Muted, &format!("      {at}  {}", f.what)));
+        }
+        if l.more > 0 {
+            out.push(format!("      {} more", l.more));
+        }
+        if l.state != DoneState::Done {
+            for fix in &l.fixes {
+                out.push(format!("      → {fix}"));
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

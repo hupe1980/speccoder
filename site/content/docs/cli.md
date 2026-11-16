@@ -64,7 +64,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder shape [TEXT] [--field F] [--from FILE] [--check]` | [Shape](@/docs/planning.md#shape-help-with-the-words) rough words into a requirement (`--field requirement`, `feature`, `quick`, `bug-symptom`, `bug-expected`, `bug-unchanged`, `answer`, `note`): the proposal, its assumptions, what it added and dropped, and the writing check (`--check`: that alone, no model). Writes nothing (payload `shape`) |
 | `speccoder review clear ID…` | Remove the decision |
 | `speccoder review tests REQ [--write \| --reject P --reason R \| --again P --comment C \| --edit P --from F \| --reading A\|B SCENARIO]` | [Write and shape a requirement's tests](@/docs/planning.md#review-the-tests) |
-| `speccoder review comments [add TEXT \| delete ID \| keep ID \| send \| undo]` | [Comments](@/docs/planning.md#comments), sent as one revision |
+| `speccoder review comments [add TEXT \| delete ID \| keep ID \| send \| undo]` | [Comments](@/docs/planning.md#comments), sent as one revision; `add` on a passage (`--path P --lines 40-42`), a test line (`--test US1:PATH:LINE`) or a finding (`--finding analyze:A1`) |
 | `speccoder issue [list]` | The repository's open GitHub issues |
 | `speccoder issue start N [--through T] [--no-prompt] [--comment \| --no-comment] [--assign]` | Specify a feature from an issue: its description verbatim, the unit's origin recorded once |
 | `speccoder issue comment N [--assign]` | Tell the issue the current feature is specified from it |
@@ -102,6 +102,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 
 | Command | What it does |
 |---|---|
+| `speccoder done [--base REF]` | [The definition of done](@/docs/done.md): changelog, docs links and tone, screenshots, versions, CI — each line done, not done or can't tell, with its fix. Exit 23 while a line is not done (`DONE-NOT-DONE`). Payload `done` |
 | `speccoder feedback` | What this project asks of the projects it depends on, with where each item stands, and what others ask of it ([feedback](@/docs/feedback.md); payload `feedback`) |
 | `speccoder mcp` | The feedback tools for your coding agent over MCP (stdio): report, list, withdraw, requests, resolve |
 | `speccoder projects [forget NAME]` | Your projects by where they stand, with what waits in each (`?` when it could not be read, never 0); `forget` drops one from the list and touches nothing (payload `projects`) |
@@ -130,7 +131,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder approvals batch RUN approve\|reject --digest D [--call ID]… [--reason R] [--resume-asking]` | Decide the [calls waiting together](@/docs/approvals.md#the-asking-budget) |
 | `speccoder fix [--dry-run]` | Commit the setup that stops a run (`SETUP-INCOMPLETE`) in your checkout |
 | `speccoder attest verify [REV\|RANGE] [--allowed-signers FILE] [--certificate-identity I --certificate-oidc-issuer O] [--require-signed]` | [Check the attestations](@/docs/attestations.md#checking-them) (exit 26 when one fails) |
-| `speccoder attest verify --branch [REV] [--base B \| --all] [--allowed-signers-rev REV:PATH] [--require-signed=false] [--github-check FILE]` | [Check every tick of a branch](@/docs/verifier.md) from git objects, with your trust (exit 0 / 26 failure / 15 neutral) |
+| `speccoder attest verify --branch [REV] [--base B \| --all] [--allowed-signers-rev REV:PATH] [--require-signed=false] [--require-verified] [--github-check FILE] [--check-name N] [--allow-neutral] [--github-annotations]` | [Check every tick of a branch](@/docs/verifier.md) from git objects, with your trust (exit 0 / 26 failure / 15 neutral). `--require-verified`: `regression_only` and `attested` ticks fail too; `--allow-neutral` publishes a neutral outcome as passing; `--github-annotations` writes annotations and the step summary where no check can be published |
 | `speccoder attest tour TASK [REV] --feature F` | One tick's [evidence tour](@/docs/verifier.md#the-evidence-tour) (payload `evidence_tour`) |
 | `speccoder attest badge [REV] [--svg FILE] [--endpoint FILE]` | The [evidence badge](@/docs/verifier.md#the-badge) |
 | `speccoder attest sign [REV\|RANGE]` | Sign the statements left unsigned |

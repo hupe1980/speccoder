@@ -666,6 +666,14 @@ pub const CATALOG: &[Entry] = &[
         ["speccoder trust", "speccoder trust --all"]
     ),
     entry!(
+        "DONE-NOT-DONE",
+        P,
+        S::NeedsHuman,
+        "the definition of done has an open line",
+        "Before a pull request leaves the machine, speccoder checks the definition of done on the branch: a changelog entry, docs whose links resolve and that describe what is there, current screenshots, no stale version. Each open line says what to do.",
+        ["speccoder done", "speccoder pr --force"]
+    ),
+    entry!(
         "RETURN-BLOCKED",
         P,
         S::NeedsHuman,

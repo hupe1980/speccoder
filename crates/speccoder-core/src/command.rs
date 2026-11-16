@@ -203,6 +203,8 @@ pub enum CommandData {
     Feedback(Box<crate::feedback::FeedbackReport>),
     /// `trust`: the checkout's agent files and whether each is trusted.
     Trust(Box<crate::agent_files::TrustReport>),
+    /// `done`: the definition of done, line by line.
+    Done(Box<crate::done::DoneReport>),
     /// `extensions`: every extension, what it contributes and its trust.
     Extensions(Box<crate::extensions::ExtensionsReport>),
     /// The views an extension places on a feature or the project.
@@ -1096,6 +1098,7 @@ impl CommandData {
             Self::Projects(_) => "projects",
             Self::Feedback(_) => "feedback",
             Self::Trust(_) => "trust",
+            Self::Done(_) => "done",
             Self::Extensions(_) => "extensions",
             Self::ExtensionViews(_) => "extension_views",
             Self::Shape(_) => "shape",
@@ -1161,6 +1164,7 @@ pub const PAYLOADS: &[&str] = &[
     "projects",
     "feedback",
     "trust",
+    "done",
     "shape",
     "ask",
     "ask_conversations",
@@ -2651,6 +2655,10 @@ pub struct PrReport {
     /// The gates that stood before the push (spec 095).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gates: Vec<crate::hooks::GateRecord>,
+    /// The definition of done on the branch, CI aside (it runs after the
+    /// push).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub done: Option<crate::done::DoneReport>,
 }
 
 /// Result of `speccoder converge`.

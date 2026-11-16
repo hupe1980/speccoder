@@ -111,7 +111,7 @@ mod tests {
             "push the branch",
             "speccoder pr --yes",
         )
-        .with_run(Runnable::PullRequest);
+        .with_run(Runnable::PullRequest { force: false });
         pr.confirm = Some("Push it?".to_owned());
         ActionsReport {
             actions: vec![run, pr],
