@@ -82,6 +82,11 @@ pub fn discover_with(root: &Path, planning: &Planning) -> Vec<Skill> {
             continue;
         };
         for e in entries.flatten() {
+            // One copy in `.agents/skills/`, linked from a tool's own
+            // folder (OpenSpec 2, `npx skills`): read where it lives.
+            if links_to_shared(root, &e.path()) {
+                continue;
+            }
             let file = e.path().join("SKILL.md");
             let Ok(text) = std::fs::read_to_string(&file) else {
                 continue;
@@ -107,6 +112,18 @@ pub fn discover_with(root: &Path, planning: &Planning) -> Vec<Skill> {
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out
+}
+
+/// Whether `entry` is a link to a skill folder in this repository's
+/// `.agents/skills/`. Any other link is listed, and refused.
+fn links_to_shared(root: &Path, entry: &Path) -> bool {
+    if !std::fs::symlink_metadata(entry).is_ok_and(|m| m.file_type().is_symlink()) {
+        return false;
+    }
+    match (entry.canonicalize(), root.join(DIRS[1]).canonicalize()) {
+        (Ok(target), Ok(shared)) => target.parent() == Some(shared.as_path()),
+        _ => false,
+    }
 }
 
 /// [`discover_with`] with the project's extensions, as trusted in the

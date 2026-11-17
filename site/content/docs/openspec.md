@@ -70,7 +70,7 @@ When `openspec` is on your PATH, `speccoder run` also runs `openspec validate --
 | `new change` | refused | allowed |
 | `archive`, `sync`, `init`, `update`, `config`, `store`, `schema` | refused | refused |
 
-Every command in an OpenSpec project runs with `OPENSPEC_TELEMETRY=0`, `DO_NOT_TRACK=1` and `OPENSPEC_NO_UPDATE_CHECK=1`. Writes under `openspec/` are refused during implementation; a command that changes them fails the verdict. OpenSpec's per-tool commands and skills (`.claude/commands/opsx/`, `.claude/skills/openspec-*/`, …) are [agent configuration](@/docs/security.md#the-policy), protected like any other.
+Every command in an OpenSpec project runs with `OPENSPEC_TELEMETRY=0`, `DO_NOT_TRACK=1` and `OPENSPEC_NO_UPDATE_CHECK=1`. Writes under `openspec/` are refused during implementation; a command that changes them fails the verdict. OpenSpec's per-tool commands and skills (`.agents/skills/openspec-*/` and the links to them, `.claude/skills/openspec-*/`, `.claude/commands/opsx/`, …) are [agent configuration](@/docs/security.md#the-policy), protected like any other.
 
 ## Planning
 

@@ -66,8 +66,9 @@ fn deltas_text(c: &speccoder_openspec::Change) -> String {
 
 impl Adapter for OpenSpec {
     fn init_steps(&self, choices: &crate::format::FormatInit) -> Vec<crate::format::InitStep> {
-        // `--tools claude`: the skills speccoder hosts live under
-        // `.claude/skills/`; without a tool OpenSpec asks, which no step can.
+        // `--tools claude`: without a tool OpenSpec asks, which no step
+        // can. Its skills land in `.agents/skills/` (OpenSpec 2, linked
+        // from `.claude/skills/`) or `.claude/skills/` (before 2).
         vec![crate::format::InitStep {
             argv: [
                 "openspec",
@@ -80,7 +81,8 @@ impl Adapter for OpenSpec {
             .map(str::to_owned)
             .to_vec(),
             hosts: Vec::new(),
-            writes: "openspec/, .claude/skills/openspec-*/, .claude/commands/opsx/".to_owned(),
+            writes: "openspec/ and its skills (.agents/skills/, .claude/skills/openspec-*/)"
+                .to_owned(),
             // OpenSpec keeps a settings file in the config directory: it
             // goes to speccoder's private cache, not the person's.
             env: vec![(

@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- OpenSpec 2 projects: a skill kept once in `.agents/skills/` and linked
+  from `.claude/skills/` (OpenSpec 2, `npx skills`) is hosted where it
+  lives instead of being refused as a link. A link to anywhere else is
+  still refused.
+
 ## [0.19.0] - 2026-11-16
 
 ### Added

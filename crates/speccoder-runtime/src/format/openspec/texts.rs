@@ -126,7 +126,7 @@ pub static MESSAGES: Messages = Messages {
     no_project: "not an OpenSpec project (no openspec/ found)",
     no_project_in_worktree: "the worktree has no OpenSpec project",
     not_in_git: "the OpenSpec project is not inside a git repository",
-    no_skills: "no skills installed (OpenSpec installs them with `openspec init`, under .claude/skills/)",
+    no_skills: "no skills installed (OpenSpec installs them with `openspec init`, under .agents/skills/ or .claude/skills/)",
     checklists,
     unit: "change",
     no_current: "OpenSpec has no current change: name one with --change",

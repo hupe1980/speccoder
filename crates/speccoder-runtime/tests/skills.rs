@@ -137,6 +137,54 @@ fn skills_are_listed_and_implement_is_refused() {
     assert!(f.asked().is_empty());
 }
 
+#[cfg(unix)]
+#[test]
+fn a_skill_linked_to_its_shared_copy_is_hosted_and_any_other_link_refused() {
+    use std::os::unix::fs::symlink;
+    let r = repo();
+    let p = r.path();
+    // OpenSpec 2 and `npx skills`: one copy in `.agents/skills/`, a
+    // relative link from `.claude/skills/`.
+    let shared = p.join(".agents/skills/openspec-propose");
+    fs::create_dir_all(&shared).unwrap();
+    fs::write(
+        shared.join("SKILL.md"),
+        "---\nname: openspec-propose\ndescription: Propose a change.\n---\nbody\n",
+    )
+    .unwrap();
+    symlink(
+        "../../.agents/skills/openspec-propose",
+        p.join(".claude/skills/openspec-propose"),
+    )
+    .unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(
+        outside.path().join("SKILL.md"),
+        "---\nname: elsewhere\ndescription: From outside.\n---\nbody\n",
+    )
+    .unwrap();
+    symlink(outside.path(), p.join(".claude/skills/elsewhere")).unwrap();
+    git(p, &["add", "-A"]);
+    git(p, &["commit", "-q", "-m", "skills"]);
+    let state = tempfile::tempdir().unwrap();
+    let _ = speccoder_runtime::agent_files::trust_all(p, state.path(), "t", "terminal");
+    let res = list_in(p, Some(state.path()));
+    let Some(CommandData::Skills(k)) = res.data() else {
+        panic!("{}", res.message())
+    };
+    let state_of = |n: &str| {
+        k.skills
+            .iter()
+            .find(|s| s.name == n)
+            .map(|s| (s.refused.is_some(), s.path.clone()))
+    };
+    assert_eq!(
+        state_of("openspec-propose"),
+        Some((false, ".agents/skills/openspec-propose/SKILL.md".to_owned()))
+    );
+    assert_eq!(state_of("elsewhere").map(|s| s.0), Some(true));
+}
+
 #[test]
 fn a_planning_skill_writes_the_spec_in_the_checkout_and_asks_when_it_can() {
     let r = repo();
