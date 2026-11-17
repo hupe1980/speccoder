@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-11-17
+
 ### Fixed
 
 - OpenSpec 2 projects: a skill kept once in `.agents/skills/` and linked
@@ -1181,7 +1183,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.19.1...HEAD
+[0.19.1]: https://github.com/hupe1980/speccoder/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/hupe1980/speccoder/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/hupe1980/speccoder/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/hupe1980/speccoder/compare/v0.16.0...v0.17.0
